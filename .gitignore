@@ -5,6 +5,9 @@ outputs/
 # Cached street network graphs
 *.graphml
 
+# OSMnx HTTP response cache (raw OpenStreetMap downloads)
+cache/
+
 # Python caches and compiled files
 __pycache__/
 *.pyc

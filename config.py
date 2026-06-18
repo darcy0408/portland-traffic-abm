@@ -27,9 +27,16 @@ for d in (NETWORK_DIR, RAW_DIR, PROCESSED_DIR, FIGURES_DIR):
     os.makedirs(d, exist_ok=True)
 
 # --- Study area ---
-# Powell Boulevard is the Plan B subsection. Swap in the full city later by
-# changing PLACE, and bump RUN_NAME so you do not overwrite earlier results.
-PLACE = "Southeast Powell Boulevard, Portland, Oregon, USA"
+# Defined by an explicit center point and radius, not a place-name string. A name
+# like "SE Powell Blvd" geocodes to a tiny wrong fragment (a single road segment),
+# so we anchor by coordinates instead. This is reproducible and lets you tune the
+# study-area size with one number, which is what the runtime benchmark needs.
+# Center sits on SE Powell Blvd by Cleveland High School (Powell & SE 26th).
+# Widen the radius toward the full city later, and bump RUN_NAME so you do not
+# overwrite earlier results.
+STUDY_AREA_LABEL = "SE Powell Blvd corridor (Cleveland HS center, 1.5 km radius)"
+STUDY_CENTER = (45.49854, -122.63862)   # (latitude, longitude)
+STUDY_RADIUS_M = 1500                    # meters from center; 1.5 km -> ~3 km square
 NETWORK_TYPE = "drive"
 
 # --- Simulation parameters ---
