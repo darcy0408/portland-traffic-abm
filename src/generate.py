@@ -33,7 +33,8 @@ def get_network():
     graph_file = os.path.join(config.NETWORK_DIR, "graph.graphml")
     if os.path.exists(graph_file):
         return ox.load_graphml(graph_file)
-    G = ox.graph_from_place(config.PLACE, network_type=config.NETWORK_TYPE)
+    G = ox.graph_from_point(config.STUDY_CENTER, dist=config.STUDY_RADIUS_M,
+                            network_type=config.NETWORK_TYPE)
     ox.save_graphml(G, graph_file)
     return G
 
