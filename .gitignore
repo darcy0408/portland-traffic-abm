@@ -14,3 +14,6 @@ __pycache__/
 
 # Secrets / local environment variables
 .env
+
+# Personal, machine-specific Claude Code settings (commands/ ARE shared, this is not)
+.claude/settings.local.json
