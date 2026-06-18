@@ -66,7 +66,10 @@ core, it is a stale early draft. This file is the current truth.
 
 ## Current phase
 
-Week 2 of the REU. The GitHub scaffold is in place. The next build step is the
+Week 2 of the REU. The GitHub scaffold is in place, the Python environment is
+installed, and the Powell street network downloads and caches correctly (978
+nodes, 2,838 edges at a 1.5 km radius). The study area is defined by an explicit
+center and radius in config.py, not a place name. The next build step is the
 car-following logic inside the marked stub in src/generate.py. Powell Boulevard
 is the starting subsection and the Plan B if full-city simulation is too slow.
 
