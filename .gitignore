@@ -17,3 +17,6 @@ __pycache__/
 
 # Personal, machine-specific Claude Code settings (commands/ ARE shared, this is not)
 .claude/settings.local.json
+
+# Private project notes — never commit
+CLAUDE.local.md

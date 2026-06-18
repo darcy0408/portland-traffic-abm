@@ -1,75 +1,92 @@
-# CLAUDE.md — project brief for Claude Code
+# Portland Traffic ABM
 
-This file is read automatically at the start of every session. It exists so any
-session (or a returning human) is instantly oriented. Keep it current.
+## What this project is
 
-## Who this is for
+An agent-based model (ABM) of interacting vehicles on Portland's OSMnx street
+network. Vehicles follow one another, queue at signals, and back up in
+congestion. From those interactions the model produces street-segment surfaces
+of traffic NO2 and noise. The contribution is that the agent simulation
+generates the predictors, which are then fed into the same statistical method a
+published baseline used, so the comparison isolates what source-based
+interaction modeling adds over static estimation.
 
-Darcy — an NSF REU student at Portland State (Teuscher Lab), new to research and
-to large coding projects. Default to **plain-language explanations**: say what
-each step does and why, not just that it's done. When a task says "STOP" or
-"wait for confirmation," genuinely pause. Teach as you go — this is a learning
-project as much as a research one.
+NSF REU "Computational Modeling Serving Portland," PSU Teuscher Lab. Mentor:
+Christof Teuscher. Sole student on this project.
 
-## What the project is
+## The spec (do not drift from this)
 
-An **agent-based model (ABM)** of vehicles driving on Portland's street network
-(downloaded with OSMnx). Vehicles interact — car-following, queueing at signals,
-congestion — and each one adds a noise and NO2 contribution to the street segment
-it's on. The simulation produces **per-segment noise and NO2 surfaces** for the city.
+- The method is an ABM with vehicles on an OSMnx network. It is not a
+  statistics-first or ML-first project. The vehicle interactions (car-following,
+  signal queueing, congestion) are what justify using an ABM at all.
+- Outputs are two surfaces, NO2 and noise, at street-segment resolution.
+- NO2 path: the agent simulation produces predictors that are fed into a random
+  forest, the same method Rao et al. used, and compared against Rao's
+  land-use-fed random forest. Per-vehicle NO2 emissions use HBEFA factors.
+- Noise path: modeled mechanistically with CNOSSOS and compared against the FHWA
+  Traffic Noise Model reference.
+- The comparison is model-to-model, not model-to-ground-truth. Portland lacks
+  dense sensor data, so success is a rigorous comparison between methods, not a
+  claim of absolute accuracy. This is framed honestly as a feature, not hidden.
+- Success is defined by doing the comparison rigorously, regardless of which
+  method wins. The research question is falsifiable: the agent-fed forest may
+  not beat the baseline, and that is still a valid result.
+- Numeric calibration gates are set with Christof after seeing data, not invented
+  in advance.
+- Build order: the core vehicle model comes first. Car-following before anything
+  else.
 
-**The research question:** do these *interacting agents* preserve sharp,
-block-to-block (near-road) pollution gradients better than standard statistical
-methods that predict pollution from static variables?
+## Out of scope (removed or deferred, do not add back)
 
-**What we compare against (baselines):**
-- NO2: a **Rao-style land-use random forest**. We feed our agent-generated
-  predictors into the *same* random-forest method — so any improvement isolates
-  what the ABM adds, not a different algorithm.
-- Noise: the **FHWA reference** model.
+- No pollen layer. It was removed from the project entirely.
+- No sensor ground-truth validation as the spine (no PurpleAir or DEQ validation
+  framing). The project compares models, not measurements.
+- No routing or "best route given exposure" feature as the core. Routing under
+  constraints is a solved engineering problem and is not the research.
+- No reservoir computing or ML-regression layer in the current scope. It is a
+  possible later extension to raise with Christof, not something to build now.
+- Heat and pollen reference layers are out. Noise and NO2 only.
 
-**Mechanistic models used inside the sim:** CNOSSOS (noise), HBEFA (NO2 emissions).
+If any planning document mentions pollen, sensor validation, or routing as the
+core, it is a stale early draft. This file is the current truth.
 
-**Honest limitation:** this compares models to models (Rao's surface and FHWA are
-themselves estimates; Portland lacks dense ground-truth sensors). It shows method
-*agreement*, not absolute accuracy.
+## Architecture conventions
 
-**Main risk:** city-scale simulation may be too slow for 8 weeks. **Plan B:** focus
-on the Powell Boulevard corridor (also a real planning case — noise walls are being
-added there).
+- Keep data generation and visualization in separate scripts. generate.py runs
+  the simulation, checkpoints, and writes results to disk, and does no plotting.
+  visualize.py reads those files and makes figures, and runs no simulation. This
+  lets figures be redrawn without rerunning the expensive simulation.
+- generate.py checkpoints so a crash or disconnect never loses more than a few
+  minutes of work, and resumes from the last checkpoint.
+- All parameters, paths, and the random seed live in config.py. The same config
+  reproduces the same numbers.
+- Do not commit generated data or figures. data/ and outputs/ are gitignored and
+  get archived separately at the end.
+- Cache the OSMnx graph once and reuse it, since downloads are slow.
+- Add comments as code is written, not in a later cleanup pass.
 
-## How the code is organized (and the one rule)
+## Current phase
 
-Generation and visualization are **separate stages**, on purpose:
-- `src/generate.py` — STAGE 1. Runs the ABM, checkpoints, saves result tables. **No plotting.**
-- `src/visualize.py` — STAGE 2. Reads saved tables, writes figures. **No simulation.**
-- `src/checkpoint.py` — save/restore simulation state (mandatory on Colab, where disk wipes on disconnect).
-- `config.py` — every parameter, path, and the random seed, in one place. Auto-detects Colab.
+Week 2 of the REU. The GitHub scaffold is in place. The next build step is the
+car-following logic inside the marked stub in src/generate.py. Powell Boulevard
+is the starting subsection and the Plan B if full-city simulation is too slow.
 
-Why: the sim is expensive; figures get remade often (papers, the Aug 14 symposium).
-Keeping them separate means you re-draw a map without re-running days of simulation.
+## Tech stack
 
-Layout: `data/` (network/raw/processed) and `outputs/figures/` are created on first
-run and are git-ignored.
+Python, OSMnx, NetworkX, NumPy, pandas, Matplotlib. Often run in Google Colab
+with Drive mounted; config.py detects Colab and routes data to Drive.
 
-## Where we are now
+## People
 
-Scaffold committed and pushed. **No simulation code written yet.** The next build
-step is **car-following vehicle movement** (Week 2 milestone), which goes inside the
-marked stub in `src/generate.py` `run_simulation()` (the `YOUR ABM STEP GOES HERE`
-block), feeding `segment_totals[edge] += contribution`.
+- Christof Teuscher: faculty mentor. Draws a hard line between research and
+  engineering, asks what tools were used, pushes models toward interesting
+  dynamics, wants plain-language explanations, frames work around the Heilmeier
+  questions.
+- Nik Anderson: grad-student mentor.
+- Fatima Asghar: Christof's other student.
 
-See `PROGRESS.md` for the running session-by-session log.
+## Deliverables
 
-## Timeline checkpoints (the "exams")
-
-- **W2:** vehicles move correctly through the network (sensible classes, speeds, time-of-day patterns).
-- **W4:** noise + NO2 surfaces generated; a random forest and a first comparison vs. Rao/FHWA (RMSE, MAE, correlation).
-- **W7:** agent-fed vs. Rao-style forests evaluated at held-out locations, including near-road gradients.
-- **Final (Aug 14, 2026):** pipeline, final maps, proceedings chapter, code+data archive, symposium presentation.
-
-## Working agreements
-
-- Put things on GitHub now, comment as you write (not in a cleanup pass that never comes).
-- Same config + same seed must reproduce the same numbers.
-- Commit at the end of a work session (`/close-session` does this); start with `/start-session`.
+Documented code and pipeline, street-segment maps of noise and NO2, the
+model-versus-baseline comparison, a sole-author proceedings chapter, and the
+August 14 symposium talk. Program policy: acknowledge AI assistance on
+deliverables.
