@@ -27,6 +27,51 @@ def set_seeds(seed):
     np.random.seed(seed)
 
 
+def idm_acceleration(v, gap, lead_v, v0,
+                     a_max=config.IDM_A_MAX, b_comf=config.IDM_B_COMF,
+                     T=config.IDM_T, s0=config.IDM_S0, delta=config.IDM_DELTA):
+    """Intelligent Driver Model: how hard one car accelerates or brakes right now.
+
+    This is the core of the whole simulation. It is a pure function: give it the
+    car's situation, it returns an acceleration in m/s^2 (positive = speed up,
+    negative = brake). It changes nothing and stores nothing, which makes it easy
+    to test by eye.
+
+    Arguments:
+        v       current speed of this car (m/s)
+        gap     clear distance to the back of the car ahead (m); use a large
+                number or float('inf') when there is no car ahead
+        lead_v  speed of the car ahead (m/s); ignored when there is no leader
+        v0      this car's desired speed, i.e. the segment speed limit (m/s)
+
+    The formula has two parts that pull against each other:
+
+      free road:   a_max * (1 - (v/v0)**delta)
+                   when v is well below v0 this is near a_max (accelerate);
+                   as v approaches v0 it fades to zero (stop speeding up).
+
+      interaction: -a_max * (s_star / gap)**2
+                   s_star is the gap the driver *wants* given current speed and
+                   how fast they are closing on the leader. If the real gap is
+                   smaller than the wanted gap, this term grows and brakes hard.
+    """
+    # Floor the gap so an exact overlap can't divide by zero; treat it as bumper
+    # contact, which the interaction term will then punish with heavy braking.
+    gap = max(gap, 1e-3)
+
+    # How fast we are closing on the leader (positive = catching up).
+    delta_v = v - lead_v
+
+    # The gap the driver *desires* right now: a standstill minimum (s0), plus a
+    # speed-dependent following distance (v*T), plus an extra cushion that grows
+    # when closing fast on the leader.
+    s_star = s0 + max(0.0, v * T + (v * delta_v) / (2.0 * (a_max * b_comf) ** 0.5))
+
+    free_term = 1.0 - (v / v0) ** delta
+    interaction_term = (s_star / gap) ** 2
+    return a_max * (free_term - interaction_term)
+
+
 def get_network():
     """Download the street graph once, then reuse the cached copy.
     OSMnx downloads are slow, so we save the graph and load it on later runs."""

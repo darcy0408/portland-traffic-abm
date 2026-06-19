@@ -29,6 +29,24 @@ def load_network():
     return ox.load_graphml(graph_file)
 
 
+def plot_network(G):
+    """Plain street-network map, no simulation data needed.
+    Use this to confirm the study area looks right before running the sim."""
+    fig, ax = ox.plot_graph(
+        G,
+        edge_color="#3a76c4",
+        edge_linewidth=0.7,
+        node_size=0,
+        bgcolor="white",
+        show=False,
+        close=False,
+    )
+    out = os.path.join(config.FIGURES_DIR, "network_map.png")
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved network map to {out}")
+
+
 def plot_segment_map(G, df):
     """Color each street segment by its simulated value."""
     value_by_edge = {(r.u, r.v, r.key): r.value for r in df.itertuples()}
@@ -50,5 +68,10 @@ def plot_segment_map(G, df):
 
 if __name__ == "__main__":
     G = load_network()
-    df = load_segments()
-    plot_segment_map(G, df)
+    # `python src/visualize.py network` draws just the street network.
+    # With no argument it draws the simulation segment map (needs sim output).
+    if len(sys.argv) > 1 and sys.argv[1] == "network":
+        plot_network(G)
+    else:
+        df = load_segments()
+        plot_segment_map(G, df)
