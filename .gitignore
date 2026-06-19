@@ -23,3 +23,8 @@ __pycache__/
 
 # Private project notes — never commit
 CLAUDE.local.md
+
+# Class/program reference notes: contain stipend amounts, emails, Zoom links, and
+# other students' names. Useful context for the assistant, not for a public repo.
+REU_reference.md
+reference/

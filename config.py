@@ -39,6 +39,17 @@ STUDY_CENTER = (45.49854, -122.63862)   # (latitude, longitude)
 STUDY_RADIUS_M = 1500                    # meters from center; 1.5 km -> ~3 km square
 NETWORK_TYPE = "drive"
 
+# --- Car-following (Intelligent Driver Model) ---
+# These shape how every vehicle accelerates and brakes. Values are the standard
+# IDM defaults from the traffic-flow literature; tune them later with Christof
+# once we can see the dynamics. Units are SI: meters, seconds, m/s, m/s^2.
+IDM_A_MAX  = 1.5    # comfortable acceleration when the road ahead is open
+IDM_B_COMF = 2.0    # comfortable braking when closing on a slower car
+IDM_T      = 1.5    # safe time headway: seconds of gap a driver wants to keep
+IDM_S0     = 2.0    # minimum bumper-to-bumper gap when fully stopped
+IDM_DELTA  = 4.0    # acceleration exponent; 4 is the conventional choice
+DT         = 1.0    # simulation time step in seconds (one step = one second)
+
 # --- Simulation parameters ---
 N_VEHICLES = 500
 N_STEPS = 3600                # example: one simulated hour at one-second steps
