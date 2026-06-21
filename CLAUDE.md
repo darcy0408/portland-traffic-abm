@@ -66,12 +66,16 @@ core, it is a stale early draft. This file is the current truth.
 
 ## Current phase
 
-Week 2 of the REU. The GitHub scaffold is in place, the Python environment is
-installed, and the Powell street network downloads and caches correctly (978
-nodes, 2,838 edges at a 1.5 km radius). The study area is defined by an explicit
-center and radius in config.py, not a place name. The next build step is the
-car-following logic inside the marked stub in src/generate.py. Powell Boulevard
-is the starting subsection and the Plan B if full-city simulation is too slow.
+End of week 2, about to start week 3 (Mon Jun 22). The GitHub scaffold,
+environment, and cached Powell network (978 nodes, 2,838 edges at 1.5 km radius)
+are all in place. The study area is set by an explicit center and radius in
+config.py. The IDM car-following decision rule is now built and sanity-checked in
+src/generate.py (its parameters live in config.py), but it is not yet wired into
+the simulation loop: no vehicles move on the network yet. A week-by-week schedule
+lives in ROADMAP.md. The week-3 build step is to put vehicles on the real network
+with routes and drive them with the IDM kernel. Powell Boulevard is the starting
+subsection and the Plan B if full-city simulation is too slow. Immediate
+non-code priority: the Jun 23 key-paper presentation on the Rao baseline.
 
 ## Tech stack
 
