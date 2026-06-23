@@ -44,6 +44,26 @@ not a scramble. If by the end of week 6 the NO2 path is not done, that is the
 signal to pull Plan B (Powell corridor only) so you do not enter your trip
 behind. Front-load weeks 3 to 6.
 
+## Week 3-4 additions from the Jun 22 check-in
+
+From Christof's Jun 22 cohort check-in. These apply to this project. (The separate
+synthetic-data-module advice in that same meeting was directed at Fatima, not here,
+so it is intentionally not on this list.)
+
+- **Parameterize the prototype.** Network size and vehicle count are config
+  variables, not hard-coded, so the model scales up without a rewrite. Christof
+  marked this "valid for both of you."
+- **Early computational-complexity read, this week.** Time small runs and watch how
+  runtime grows with vehicle count and network size. This front-loads part of the
+  Week 4 runtime benchmark so we learn early whether the approach is viable. Keep
+  scenarios small enough to run in seconds.
+- **Dataset hunt, ~30% of time.** Alongside coding, locate the critical public
+  datasets the project will need: traffic counts/AADT, emission factors, land cover,
+  signal locations. Research started Jun 22; findings collected in `DATASETS.md`.
+- **Framework decision (resolved).** Hand-roll the prototype on NetworkX now; switch
+  to RePast / Mesa / NetLogo later only if a real need appears. Christof endorsed
+  this directly.
+
 ## Program obligations (don't forget these)
 
 These are program duties on top of the build work. Source: the daily check-in

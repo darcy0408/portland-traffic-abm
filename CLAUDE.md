@@ -66,16 +66,27 @@ core, it is a stale early draft. This file is the current truth.
 
 ## Current phase
 
-End of week 2, about to start week 3 (Mon Jun 22). The GitHub scaffold,
-environment, and cached Powell network (978 nodes, 2,838 edges at 1.5 km radius)
-are all in place. The study area is set by an explicit center and radius in
-config.py. The IDM car-following decision rule is now built and sanity-checked in
-src/generate.py (its parameters live in config.py), but it is not yet wired into
-the simulation loop: no vehicles move on the network yet. A week-by-week schedule
-lives in ROADMAP.md. The week-3 build step is to put vehicles on the real network
-with routes and drive them with the IDM kernel. Powell Boulevard is the starting
-subsection and the Plan B if full-city simulation is too slow. Immediate
-non-code priority: the Jun 23 key-paper presentation on the Rao baseline.
+Week 3 (started Mon Jun 22), and ahead of schedule. The core ABM now runs end to
+end on the cached Powell network (978 nodes, 2,838 edges): vehicles get random
+origin/destination routes and drive segment by segment using the IDM kernel,
+following the car ahead. Week-4 work is already done too: 21 real OSM-tagged
+signalized intersections run a two-phase cycle, cars queue at red lights, and
+congestion emerges (mean speed drops and queues stack up), which is the
+interaction-driven behavior that justifies the ABM. Runtime scales linearly with
+vehicle count and is fast (~6-9 s for 500 vehicles over a simulated hour), so
+full-city is plausible; Powell stays the proof-of-concept and Plan B. Vehicle count
+and network size are config parameters (Christof's Jun 22 ask to make it scalable).
+A heat-map visualization is in visualize.py. Public-data sources are scouted in
+DATASETS.md (PORTAL and ODOT for volumes, NLCD for land-use predictors,
+SUMO-HBEFA3 for emissions, PBOT for signals); nothing is downloaded yet, synthetic
+demand is fine for now. The Jun 23 key-paper talk on the Rao baseline is built and
+ready (lives on Drive, outside the repo).
+
+Open simplifications: queues do not yet spill back across intersections; signal
+timing is an assumed uniform cycle; demand is random trips, not real counts; and
+per-segment totals are vehicle-seconds, the placeholder where per-vehicle NO2
+(HBEFA) plugs in. Next build step is the week-5 NO2 path: per-vehicle emissions via
+SUMO-HBEFA3 NOx(v,a) accumulated per segment, feeding toward the Rao comparison.
 
 ## Tech stack
 
