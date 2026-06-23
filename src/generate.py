@@ -131,6 +131,49 @@ def _default_kph(highway):
     return DEFAULT_KPH.get(highway, 40)
 
 
+# --- road closure -----------------------------------------------------------
+# A closure removes street segments from the graph before routing, so vehicles
+# reroute around the gap. This is Christof's Jun 23 idea: the case where the ABM
+# beats a static land-use model, because the land use is unchanged but the traffic
+# moves. See config.CLOSURE for the zone definition.
+
+
+def _haversine_m(lat1, lon1, lat2, lon2):
+    """Great-circle distance in meters between two lat/lon points.
+    Used to decide which edges fall inside a circular closure zone."""
+    R = 6_371_000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def closed_edges_in_zone(G, closure=None):
+    """List the (u, v, k) edge keys whose midpoint falls inside the closure zone,
+    without changing G. Both the simulation (to remove them) and the visualizer
+    (to draw them) use this, so they always agree on what is closed."""
+    closure = config.CLOSURE if closure is None else closure
+    lat0, lon0, radius_m = closure
+    closed = []
+    for u, v, k in G.edges(keys=True):
+        # midpoint of the segment from its two endpoints (x = lon, y = lat)
+        mid_lat = 0.5 * (float(G.nodes[u]["y"]) + float(G.nodes[v]["y"]))
+        mid_lon = 0.5 * (float(G.nodes[u]["x"]) + float(G.nodes[v]["x"]))
+        if _haversine_m(lat0, lon0, mid_lat, mid_lon) <= radius_m:
+            closed.append((u, v, k))
+    return closed
+
+
+def apply_closure(G, closure=None):
+    """Remove every street segment in the closure zone. Mutates G in place and
+    returns the list of removed (u, v, k) edge keys. Pass a copy of G if you need
+    the open network afterward."""
+    removed = closed_edges_in_zone(G, closure)
+    G.remove_edges_from(removed)
+    return removed
+
+
 def prepare_network(G):
     """Give every edge a desired speed in m/s ('v0_mps') and ensure a length.
     Each car uses its current segment's v0_mps as its target speed in the IDM."""
@@ -423,11 +466,58 @@ def save_results(segment_totals, segment_nox):
           f"(total NOx {df['nox_g'].sum():.1f} g)")
 
 
+def run_closure_experiment(G):
+    """Before/after closure experiment (Christof, Jun 23).
+
+    Runs the SAME demand on the network twice: once open, once with config.CLOSURE
+    applied, and saves both result files (RUN_NAME + '_open' and '_closed'). The
+    same random seed drives both, so the origin/destination draws match and any
+    difference in the surfaces comes from the closure forcing reroutes, not noise.
+    visualize.py then differences the two to show where NO2 moved.
+
+    Checkpointing is off here: each run is short (~10 s) and the two phases would
+    otherwise share a checkpoint name. We restore config.RUN_NAME at the end.
+    """
+    if config.CLOSURE is None:
+        raise SystemExit("Set config.CLOSURE to a (lat, lon, radius_m) zone first.")
+    base = config.RUN_NAME
+    try:
+        # open network: the baseline
+        config.RUN_NAME = f"{base}_open"
+        print(f"[open] {base} on the full network")
+        totals, nox = run_simulation(G, use_checkpoint=False)
+        save_results(totals, nox)
+        open_no2 = config.F_NO2 * sum(nox.values())
+
+        # closed network: same demand, segments in the zone removed
+        Gc = G.copy()
+        removed = apply_closure(Gc)
+        lat, lon, r = config.CLOSURE
+        print(f"[closed] removed {len(removed)} segments within {r:.0f} m "
+              f"of ({lat}, {lon})")
+        config.RUN_NAME = f"{base}_closed"
+        totals, nox = run_simulation(Gc, use_checkpoint=False)
+        save_results(totals, nox)
+        closed_no2 = config.F_NO2 * sum(nox.values())
+    finally:
+        config.RUN_NAME = base
+
+    delta = closed_no2 - open_no2
+    pct = 100 * delta / open_no2 if open_no2 else 0.0
+    print(f"\nClosure effect on total NO2: open {open_no2:.1f} g -> "
+          f"closed {closed_no2:.1f} g  ({pct:+.1f}%)")
+    print("Total can move only a little; the point is the spatial shift. "
+          "Draw it with: python src/visualize.py closure")
+
+
 if __name__ == "__main__":
     set_seeds(config.RANDOM_SEED)
     G = get_network()
-    if len(sys.argv) > 1 and sys.argv[1] == "benchmark":
+    mode = sys.argv[1] if len(sys.argv) > 1 else None
+    if mode == "benchmark":
         benchmark(G)
+    elif mode == "closure":
+        run_closure_experiment(G)
     else:
         totals, nox = run_simulation(G)
         save_results(totals, nox)
