@@ -66,27 +66,46 @@ core, it is a stale early draft. This file is the current truth.
 
 ## Current phase
 
-Week 3 (started Mon Jun 22), and ahead of schedule. The core ABM now runs end to
-end on the cached Powell network (978 nodes, 2,838 edges): vehicles get random
-origin/destination routes and drive segment by segment using the IDM kernel,
-following the car ahead. Week-4 work is already done too: 21 real OSM-tagged
-signalized intersections run a two-phase cycle, cars queue at red lights, and
-congestion emerges (mean speed drops and queues stack up), which is the
-interaction-driven behavior that justifies the ABM. Runtime scales linearly with
-vehicle count and is fast (~6-9 s for 500 vehicles over a simulated hour), so
-full-city is plausible; Powell stays the proof-of-concept and Plan B. Vehicle count
-and network size are config parameters (Christof's Jun 22 ask to make it scalable).
-A heat-map visualization is in visualize.py. Public-data sources are scouted in
-DATASETS.md (PORTAL and ODOT for volumes, NLCD for land-use predictors,
-SUMO-HBEFA3 for emissions, PBOT for signals); nothing is downloaded yet, synthetic
-demand is fine for now. The Jun 23 key-paper talk on the Rao baseline is built and
-ready (lives on Drive, outside the repo).
+Week 3 (started Mon Jun 22), and ahead of schedule (weeks 4 and 5 are already
+done). The core ABM runs end to end on the cached Powell network (978 nodes, 2,838
+edges): vehicles get random origin/destination routes and drive segment by segment
+using the IDM kernel, following the car ahead. Week-4 work is done: 21 real
+OSM-tagged signalized intersections run a two-phase cycle, cars queue at red
+lights, and queues now spill back across intersections (a car with no leader on its
+own segment brakes for a queue backed up on the next segment and holds at the stop
+line instead of overlapping into it). Congestion emerges (mean speed drops, queues
+stack), the interaction-driven behavior that justifies the ABM. Week-5 work is also
+done: the NO2 path. Per-vehicle NOx comes from SUMO's HBEFA3 NOx(v,a) polynomial
+(diesel Euro 4, PC_D_EU4; src/emissions.py), fed by each car's instantaneous speed
+and acceleration and accumulated as grams per segment. The sim stores NOx; the NO2
+surface is NO2 = F_NO2 * NOx, applied in visualization so the fraction (0.30,
+literature range 0.20-0.30) retunes without rerunning. visualize.py renders both an
+activity map and an NO2 map. Runtime stays fast and linear (~10 s for 500 vehicles
+over a simulated hour). Vehicle count and network size are config parameters
+(Christof's Jun 22 ask). Powell stays the proof-of-concept and Plan B. The Jun 23
+key-paper talk on the Rao baseline is built and ready (on Drive, outside the repo).
 
-Open simplifications: queues do not yet spill back across intersections; signal
-timing is an assumed uniform cycle; demand is random trips, not real counts; and
-per-segment totals are vehicle-seconds, the placeholder where per-vehicle NO2
-(HBEFA) plugs in. Next build step is the week-5 NO2 path: per-vehicle emissions via
-SUMO-HBEFA3 NOx(v,a) accumulated per segment, feeding toward the Rao comparison.
+Real public data is now partly pulled (DATASETS.md): a real PORTAL hourly
+volume+speed profile (nearest open station to Powell) and the verified ODOT AADT
+for Powell (34,900 in 2018 at SE 26th). src/demand_data.py turns the PORTAL sample
+into 24 normalized hourly demand fractions, but it is not wired into the sim yet
+(time-of-day spawning changes the experiment, and demand calibration is set with
+Christof). NLCD land-use predictors and the Rao comparison are still ahead (week 6).
+
+Open simplifications: signal timing is an assumed uniform cycle, not real per-signal
+plans; demand is still uniform random trips (the real time-of-day profile is pulled
+but not wired in); the emission fleet is a single PC_D_EU4 class. Calibration knobs
+flagged in config.py to set with Christof: F_NO2, the fleet class, signal timing.
+
+Noise path (week 8): Christof (Jun 23) could not find Powell-specific noise data
+from the city, which confirms the model-to-model framing (no clean noise ground
+truth) and Plan B. Two leads to chase for the noise comparison: the OSU / Multnomah
+County Portland noise study (Bozigar and Mowrer, OSU College of Health; a citywide
+10 m noise surface and a county interactive map are forthcoming) and a county
+PowerBI noise dashboard.
+
+Next build step: wire the PORTAL+ODOT demand into generate.py (the four-step plan is
+in demand_data.py), or move to week-6 predictors + the Rao random-forest comparison.
 
 ## Tech stack
 

@@ -8,8 +8,11 @@ Run it with:
     python src/generate.py            # full run from config.py
     python src/generate.py benchmark  # quick runtime read at several vehicle counts
 
-This is the week-3 build: real vehicles driving on the OSMnx network with routes,
-following each other via the IDM kernel. Signals/queueing come in week 4.
+The model: real vehicles drive the OSMnx network with routes, follow each other
+via the IDM kernel, queue at signals, and back up across intersections (spillback).
+Each vehicle's instantaneous speed and acceleration feed the HBEFA3 emission model,
+so the run accumulates NOx grams per segment (the NO2 path, week 5) alongside raw
+vehicle-seconds of activity.
 """
 import os
 import sys
@@ -28,6 +31,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
+import emissions
 from checkpoint import save_checkpoint, load_checkpoint
 
 
@@ -222,7 +226,8 @@ def make_vehicle(G, nodes, rng, vid):
     return None
 
 
-def step_vehicles(vehicles, dt, t, segment_totals, G, nodes, rng, signals):
+def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, nox_coeffs,
+                  G, nodes, rng, signals):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -230,15 +235,20 @@ def step_vehicles(vehicles, dt, t, segment_totals, G, nodes, rng, signals):
     update is what keeps the car-following honest (no car reacts to a neighbour
     that has already moved this step).
 
-    Two things slow a car: the car ahead on its own segment, and a red light at
-    the segment's far end. A red light acts as a stationary 'virtual leader' at
-    the stop line, so the IDM brakes for it smoothly; the car physically waits at
-    the line until the light turns green. Queues then build behind the line by the
-    ordinary car-following, and congestion emerges.
+    Three things slow a car: the car ahead on its own segment, a red light at the
+    segment's far end, and a queue spilling back from the next segment on its
+    route. A red light acts as a stationary 'virtual leader' at the stop line, so
+    the IDM brakes for it smoothly; the car physically waits at the line until the
+    light turns green. Queues then build behind the line by ordinary car-following,
+    and congestion emerges.
 
-    Simplification still in place: a car only sees the leader on its own segment,
-    so a queue longer than a block does not yet spill back through the upstream
-    intersection. That cross-edge spillback is the next refinement.
+    Cross-edge spillback: when a car has no leader on its own segment, it looks
+    across the downstream intersection to the next segment on its route. If cars
+    are backed up there, the rearmost one acts as a leader sitting past the end of
+    this segment, so the IDM brakes for it. A car is also held at the stop line
+    rather than crossing into a segment with no room at its entrance. Together these
+    let a jam longer than one block back up through the upstream intersection
+    instead of vanishing at the segment boundary.
     """
     # group cars by the segment they are on, and sort each group front-to-back
     by_edge = defaultdict(list)
@@ -258,9 +268,20 @@ def step_vehicles(vehicles, dt, t, segment_totals, G, nodes, rng, signals):
                 lead = group[i + 1]
                 gap = lead["pos"] - L - veh["pos"]
                 lead_v = lead["v"]
-            else:                                  # open road ahead
+            else:                                  # no car ahead on this edge
+                # look across the downstream intersection to the next segment on
+                # this car's route. If cars are backed up there, the rearmost one
+                # is our leader, sitting (edge_remaining + its pos) ahead of us.
+                # This is cross-edge spillback: a jam now backs up through the
+                # intersection instead of disappearing at the segment boundary.
                 gap = 1e6
                 lead_v = veh["v"]
+                if veh["idx"] + 1 < len(veh["route"]):
+                    next_group = by_edge.get(veh["route"][veh["idx"] + 1][:3])
+                    if next_group:
+                        rear = next_group[0]       # smallest pos = rearmost car there
+                        gap = (edge[3] - veh["pos"]) + rear["pos"] - L
+                        lead_v = rear["v"]
 
             # a red light at the downstream node is a stopped leader at the line
             node_v = edge[1]
@@ -274,14 +295,23 @@ def step_vehicles(vehicles, dt, t, segment_totals, G, nodes, rng, signals):
 
     # 2) move everyone, credit the segment they travelled on, advance routes
     for veh in vehicles:
+        v_old = veh["v"]
         a = accel[veh["id"]]
-        v_new = max(0.0, veh["v"] + a * dt)
-        veh["pos"] += 0.5 * (veh["v"] + v_new) * dt   # trapezoidal step
+        v_new = max(0.0, v_old + a * dt)
+        v_avg = 0.5 * (v_old + v_new)
+        veh["pos"] += v_avg * dt                       # trapezoidal step
         veh["v"] = v_new
 
-        # credit this segment with one vehicle-second of activity (a stand-in for
-        # the per-vehicle emission/noise contribution that plugs in here later)
-        segment_totals[veh["route"][veh["idx"]][:3]] += dt
+        edge_key = veh["route"][veh["idx"]][:3]
+        # credit this segment with one vehicle-second of activity (a raw exposure
+        # measure, kept alongside the emission total)
+        segment_totals[edge_key] += dt
+        # and with this vehicle's NOx for the step: the HBEFA3 rate at the step's
+        # average speed and its realized acceleration, integrated over dt. NOx is
+        # turned into NO2 downstream (NO2 = F_NO2 * NOx), so the fraction stays a
+        # tunable knob that does not require rerunning the sim.
+        a_real = (v_new - v_old) / dt
+        segment_nox[edge_key] += emissions.nox_g_per_s(v_avg, a_real, nox_coeffs) * dt
 
         # cross into the next segment(s) if we ran past the end of this one
         while veh["pos"] > veh["route"][veh["idx"]][3]:
@@ -292,6 +322,14 @@ def step_vehicles(vehicles, dt, t, segment_totals, G, nodes, rng, signals):
                     signals, node_v, signals["edge_phase"][edge[:3]], t):
                 veh["pos"], veh["v"] = edge[3], 0.0
                 break
+            # do not cross into a full downstream segment: if its rearmost car sits
+            # within a minimum gap of the entrance, hold at the stop line. This is
+            # the spillback counterpart to the red-light hold above.
+            if veh["idx"] + 1 < len(veh["route"]):
+                next_group = by_edge.get(veh["route"][veh["idx"] + 1][:3])
+                if next_group and next_group[0]["pos"] < L + config.IDM_S0:
+                    veh["pos"], veh["v"] = edge[3], 0.0
+                    break
             veh["pos"] -= edge[3]
             if veh["idx"] + 1 < len(veh["route"]):
                 veh["idx"] += 1
@@ -307,7 +345,8 @@ def step_vehicles(vehicles, dt, t, segment_totals, G, nodes, rng, signals):
 
 
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True):
-    """Drive n_vehicles for n_steps and return per-segment activity totals."""
+    """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
+    per-segment vehicle-seconds of activity, and per-segment NOx grams."""
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -318,25 +357,31 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         print(f"{len(signals['nodes'])} signalized intersections ({src})")
     nodes = list(G.nodes)
     rng = random.Random(config.RANDOM_SEED)   # own stream, so routes are reproducible
+    nox_coeffs = emissions.active_coeffs()    # HBEFA3 row for the configured class, fetched once
 
     state = load_checkpoint(config.RAW_DIR, config.RUN_NAME) if use_checkpoint else None
     if state is None:
         segment_totals = {edge: 0.0 for edge in G.edges(keys=True)}
+        segment_nox = {edge: 0.0 for edge in G.edges(keys=True)}
         vehicles = []
         for vid in range(n_vehicles):
             veh = make_vehicle(G, nodes, rng, vid)
             if veh is not None:
                 vehicles.append(veh)
-        state = {"step": 0, "segment_totals": segment_totals, "vehicles": vehicles}
+        state = {"step": 0, "segment_totals": segment_totals,
+                 "segment_nox": segment_nox, "vehicles": vehicles}
     else:
         print(f"Resuming from step {state['step']}")
         segment_totals = state["segment_totals"]
+        # older checkpoints predate the NOx accumulator; start it fresh if absent
+        segment_nox = state.get("segment_nox") or {edge: 0.0 for edge in G.edges(keys=True)}
+        state["segment_nox"] = segment_nox
         vehicles = state["vehicles"]
 
     t0 = time.perf_counter()
     for step in range(state["step"], n_steps):
         step_vehicles(vehicles, config.DT, step * config.DT,
-                      segment_totals, G, nodes, rng, signals)
+                      segment_totals, segment_nox, nox_coeffs, G, nodes, rng, signals)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -348,7 +393,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         rate = (max(len(vehicles), 1) * done) / elapsed if elapsed > 0 else float("inf")
         print(f"{len(vehicles):>5} vehicles x {n_steps} steps "
               f"in {elapsed:6.2f}s  ({rate:>10,.0f} vehicle-steps/s)")
-    return segment_totals
+    return segment_totals, segment_nox
 
 
 def benchmark(G):
@@ -361,16 +406,21 @@ def benchmark(G):
                        use_checkpoint=False, verbose=True)
 
 
-def save_results(segment_totals):
+def save_results(segment_totals, segment_nox):
     """Write final per-segment results as one tidy table.
     parquet keeps data types and stays compact. Switch to .to_csv if you ever
-    want a file you can open and read by eye."""
-    rows = [{"u": u, "v": v, "key": k, "value": val}
+    want a file you can open and read by eye.
+
+    Columns: value = vehicle-seconds of activity (raw exposure); nox_g = NOx grams
+    from HBEFA3. The NO2 surface is NO2 = config.F_NO2 * nox_g, applied at analysis
+    time so the fraction can be retuned without rerunning the simulation."""
+    rows = [{"u": u, "v": v, "key": k, "value": val, "nox_g": segment_nox[(u, v, k)]}
             for (u, v, k), val in segment_totals.items()]
     df = pd.DataFrame(rows)
     out = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_segments.parquet")
     df.to_parquet(out)
-    print(f"Saved {len(df)} segment results to {out}")
+    print(f"Saved {len(df)} segment results to {out} "
+          f"(total NOx {df['nox_g'].sum():.1f} g)")
 
 
 if __name__ == "__main__":
@@ -379,5 +429,5 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "benchmark":
         benchmark(G)
     else:
-        totals = run_simulation(G)
-        save_results(totals)
+        totals, nox = run_simulation(G)
+        save_results(totals, nox)

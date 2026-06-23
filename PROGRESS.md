@@ -6,6 +6,61 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-23 — Cross-edge spillback, the NO2 path (HBEFA3), and real demand data
+
+**Did:**
+- **Cross-edge spillback** in `src/generate.py`. A car with no leader on its own
+  segment now looks across the downstream intersection to the next segment on its
+  route. If cars are backed up there, the rearmost one acts as a leader sitting past
+  the boundary, so the IDM brakes for it; a car is also held at the stop line instead
+  of piling into a segment with no room. Verified on a dense run: mean speed ~4.8 m/s,
+  ~21% of cars stopped, and max overshoot past any segment end = 0.0000 m (no
+  overlaps). Jams now back up through intersections instead of vanishing at the block.
+- **NO2 path (week-5 milestone, brought forward).** New `src/emissions.py` implements
+  SUMO's HBEFA3 NOx(v, a) polynomial for a diesel Euro 4 passenger car (`PC_D_EU4`);
+  the formula and coefficients were pulled from the SUMO source and cross-checked by a
+  research agent against two release tags. `generate.py` now accumulates NOx grams per
+  segment from each car's instantaneous speed and acceleration, alongside the old
+  vehicle-seconds. `save_results` writes a `nox_g` column; `visualize.py` gained an NO2
+  surface map (`python src/visualize.py no2`). Verified: the emission function
+  reproduces the reference value exactly (6.140 mg/s cruising), no negative emissions,
+  and the NO2 map concentrates on Powell and the arterials. A useful emergent result:
+  the HBEFA3 idle term means a stopped car emits ~13 mg/s vs ~6 cruising, so congestion
+  raises NOx, which is exactly the interaction effect the ABM exists to show.
+- **Real demand data (option 3).** Pulled a real PORTAL hourly volume+speed profile
+  (station 3032 on NB I-5, the nearest open volume station to Powell, ~2.8 km; no
+  account needed) and verified the ODOT AADT for Powell (34,900 in 2018 at MP 2.09 by
+  SE 26th, from the published 2018 report). New `src/demand_data.py` turns the PORTAL
+  sample into 24 normalized hourly demand fractions (loads real data, sums to 1.0, AM
+  peak 08:00, PM bump 15:00). `DATASETS.md` updated with the PORTAL API recipe and the
+  verified AADT. The loader is NOT wired into the sim yet, on purpose.
+- **Christof email (Jun 23).** He could not find Powell-specific noise data from the
+  city, so that open request is effectively closed. This confirms Plan B and the
+  model-to-model framing (no clean noise ground truth). He flagged two noise leads for
+  the week-8 noise path: the OSU / Multnomah County Portland noise study (Bozigar and
+  Mowrer, OSU College of Health; field measurements Aug 2023 to Aug 2024; a citywide
+  10 m noise surface and a county interactive map are forthcoming) and a PowerBI
+  dashboard (app.powerbigov.us), likely that county noise map.
+
+**Decisions:**
+- Store NOx in the sim and apply the NO2 fraction downstream (`NO2 = F_NO2 * NOx`,
+  `F_NO2 = 0.30`), so the fraction is a tunable calibration knob that does not require
+  rerunning the expensive run. Literature range is 0.20 to 0.30 (EMEP/EEA; Carslaw).
+- Use HBEFA3 `PC_D_EU4` (diesel Euro 4) as the prototype fleet class. Both `F_NO2` and
+  the fleet class are flagged in `config.py` to set with Christof at the calibration gate.
+- Pulled demand data but did not wire time-of-day spawning into the sim this session:
+  that changes the experiment structure and demand calibration is a "set with Christof"
+  decision. New run renamed `RUN_NAME = "powell_no2"` so it keeps the earlier
+  `powell_signals` before/after intact.
+
+**Next step:**
+- Wire the PORTAL profile + ODOT AADT into `generate.py` so the spawn rate follows the
+  time of day (the four-step plan is in `demand_data.py`'s docstring), or move to the
+  week-6 predictors + Rao random-forest comparison. Either way, raise the `F_NO2` /
+  fleet-class calibration knobs and the two noise leads with Christof.
+
+---
+
 ## 2026-06-22 — Week 3 kickoff: Jun 22 check-in tasks + first vehicles on the network
 
 **Tasks/decisions from Christof's Jun 22 cohort check-in:**

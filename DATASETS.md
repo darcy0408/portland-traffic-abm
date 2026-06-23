@@ -30,12 +30,53 @@ These calibrate how many vehicles to spawn and how fast they should want to go.
   5 min / 1 hr / day. Free CSV/JSON download forms, no login. Use it for realistic
   time-of-day volume and speed profiles. https://new.portal.its.pdx.edu/downloads/
   (contact askportal@pdx.edu; acknowledge PORTAL/TREC).
-- **ODOT AADT** — annual average daily traffic on state routes, including Powell
-  (OR-8/US-26). Point counts at milepoints; covers arterials, not local streets.
+
+  **PULLED (Jun 23), real data, no account needed.** There is a public JSON/CSV API
+  with no token required (docs: https://adus.github.io/portal-documentation/ ).
+  - Freeway volume + speed endpoint:
+    `https://new.portal.its.pdx.edu/highways/api/freewaydata/`
+    params: `start_date`, `end_date`, `highway_id` (repeatable), `detector_id`,
+    `resolution` (e.g. `01:00:00`), `format=csv`.
+    GOTCHA: `end_date` is exclusive-style. `start_date=2024-05-14&end_date=2024-05-14`
+    returns only the 00:00 hour; ask for a 2-day window
+    (`end_date=2024-05-15`) and keep the first day to get all 24 hours. The
+    `detector_id` filter appeared to be ignored in testing; filter by `highway_id`
+    and then by station/detector in code instead.
+  - Metadata endpoints (also CSV, no auth):
+    `.../highways/api/stationmetadata/?format=csv` (has lat/lon `x_coord`/`y_coord`),
+    `.../highways/api/detectormetadata/?format=csv` (detector -> station -> lane).
+  - **Powell Blvd has no PORTAL volume loop.** PORTAL covers Powell only as
+    travel-time segments (Bluetooth/DCU travel time, not volume) and one classifier
+    entry "Powell (2R032) to SB I-205". For a clean hourly **volume + speed** curve
+    near the study center, the nearest freeway station is **station 3032, "Madison
+    (2DS042) @ NB I-5 MP300.8"** (detectors 100280/100281/100282, 3 lanes), about
+    2.8 km from Powell & SE 26th. Use its **time-of-day SHAPE** only, not its
+    absolute volume (the daily total comes from ODOT AADT below).
+  - Sample saved to `data/portal_powell_sample.csv` (Tue 2024-05-14, hourly,
+    volume+speed). Loader: `src/demand_data.py` turns it into 24 normalized hourly
+    fractions. Real-data weekday shape confirmed: light overnight, AM peak ~08:00,
+    sustained midday, PM peak ~15:00, evening taper.
+- **ODOT AADT** — annual average daily traffic on state routes, including Powell.
+  Point counts at milepoints; covers arterials, not local streets.
   Web portal (TCDS, CSV export per station) plus a Python-friendly spatial layer via
   ODOT TransGIS ArcGIS REST. Use as the daily-volume anchor on Powell.
   https://www.oregon.gov/odot/data/pages/traffic-counting.aspx ·
   https://gis.odot.state.or.us/transgis/
+
+  **FOUND (Jun 23), verified value.** Inner-SE Powell Blvd is ODOT's **Mt. Hood
+  Highway No. 26** (milepoint measured from OR-99W in Portland; this is the city
+  segment, not the rural US-26 mainline near Mt. Hood). From the published
+  "2018 Traffic Volumes on State Highways" report (TVT_2018.pdf):
+  - **AADT 34,900 (year 2018), MP 2.09, "0.02 mile east of SE 26th Avenue"** — this
+    point is essentially at our study center (Powell & SE 26th, Cleveland HS). Use
+    this as the daily-volume anchor.
+  - Corridor context within the 1.5 km radius (all 2018, Mt. Hood Hwy No. 26):
+    MP 1.79 SE 21st = 37,200; MP 1.83 = 35,200; MP 2.89 W of Cesar Chavez = 33,900;
+    MP 2.93 E of Cesar Chavez = 37,100; MP 3.23 E of SE 45th = 39,400. So the corridor
+    runs roughly **34,000-39,000 AADT**.
+  Source PDF: https://www.oregon.gov/odot/Data/Documents/TVT_2018.pdf (Mt. Hood
+  Highway No. 26 section). Newer single-station counts can be pulled from ODOT's
+  TCDS / TransGIS portals; 2018 is the published-report value verified here.
 - **PBOT Traffic Volume Counts** — 24 to 48 hr tube counts on city/local streets that
   ODOT misses. Point ADT values. GeoJSON/REST, reads straight into GeoPandas.
   https://gis-pdx.opendata.arcgis.com/datasets/traffic-volume-counts
