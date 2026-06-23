@@ -50,8 +50,21 @@ IDM_S0     = 2.0    # minimum bumper-to-bumper gap when fully stopped
 IDM_DELTA  = 4.0    # acceleration exponent; 4 is the conventional choice
 DT         = 1.0    # simulation time step in seconds (one step = one second)
 
+# --- Vehicle ---
+VEHICLE_LENGTH_M = 5.0   # bumper-to-bumper length; sets the minimum following gap
+
+# --- Traffic signals (week 4) ---
+# Signalized intersections run a simple two-phase cycle: one phase serves the
+# roughly east-west approaches, the other the north-south ones, so cross streets
+# alternate. Real OSM-tagged signal nodes are used when present. Timing here is a
+# documented assumption (per-signal timing plans are not open data; see DATASETS.md).
+SIGNAL_CYCLE_S = 60.0      # full cycle length in seconds (one green for each phase)
+SIGNAL_GREEN_SPLIT = 0.5   # fraction of the cycle the east-west phase holds green
+
 # --- Simulation parameters ---
+# N_VEHICLES and the network size are the two knobs to scale for the runtime
+# benchmark (Christof, Jun 22): turn them up and watch how wall time grows.
 N_VEHICLES = 500
 N_STEPS = 3600                # example: one simulated hour at one-second steps
 CHECKPOINT_EVERY = 300        # save state every 300 steps, so a crash loses at most this much work
-RUN_NAME = "powell_baseline"  # names the output files; change it for each new experiment
+RUN_NAME = "powell_signals"   # names the output files; change it for each new experiment
