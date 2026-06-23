@@ -61,10 +61,24 @@ VEHICLE_LENGTH_M = 5.0   # bumper-to-bumper length; sets the minimum following g
 SIGNAL_CYCLE_S = 60.0      # full cycle length in seconds (one green for each phase)
 SIGNAL_GREEN_SPLIT = 0.5   # fraction of the cycle the east-west phase holds green
 
+# --- Emissions (NO2 path, week 5) ---
+# Per-vehicle NOx comes from SUMO's HBEFA3 polynomial in instantaneous speed and
+# acceleration (the formula, coefficients, and source live in src/emissions.py).
+# We pick one representative passenger-car class for the prototype.
+EMISSION_CLASS = "PC_D_EU4"   # passenger car, diesel, Euro 4 (HBEFA3); diesel = the NOx-relevant case
+# Primary-NO2 fraction of NOx for this class. The simulation accumulates NOx grams
+# per segment; the NO2 surface is NO2 = F_NO2 * NOx, applied later in analysis and
+# visualization. Keeping it here (not baked into the sim) means it can be retuned
+# without rerunning the expensive run. Central literature value ~0.30; plausible
+# range 0.20-0.30 (EMEP/EEA Guidebook; Carslaw et al. 2016). Raise with Christof
+# when we set calibration gates.
+F_NO2 = 0.30
+
 # --- Simulation parameters ---
 # N_VEHICLES and the network size are the two knobs to scale for the runtime
 # benchmark (Christof, Jun 22): turn them up and watch how wall time grows.
 N_VEHICLES = 500
 N_STEPS = 3600                # example: one simulated hour at one-second steps
 CHECKPOINT_EVERY = 300        # save state every 300 steps, so a crash loses at most this much work
-RUN_NAME = "powell_signals"   # names the output files; change it for each new experiment
+RUN_NAME = "powell_no2"       # names the output files; change it for each new experiment
+                              # (this run: spillback + HBEFA3 NOx -> NO2 surface)

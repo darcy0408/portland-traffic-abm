@@ -50,22 +50,18 @@ def plot_network(G):
     print(f"Saved network map to {out}")
 
 
-def plot_segment_map(G, df):
-    """Heat map of simulated traffic activity per street segment.
+def _segment_heatmap(G, vals, cbar_label, title, out_suffix, cmap_name="inferno"):
+    """Shared heat-map renderer: color and thicken each segment by `vals`.
 
-    Each segment is colored and thickened by how much vehicle activity it carried.
-    Busy corridors light up; unused streets stay a dim grey. The activity values
-    are skewed (a few busy edges, many quiet ones), so we use a square-root color
-    scale and clip the very top so one or two edges don't wash out the rest.
+    The per-segment quantities are skewed (a few busy edges, many quiet ones), so
+    we use a square-root color scale and clip the very top (98th percentile) so one
+    or two edges don't wash out the rest. `vals` is one value per edge, aligned to
+    G.edges(keys=True). Used for both the activity surface and the NO2 surface.
     """
-    value_by_edge = {(r.u, r.v, r.key): r.value for r in df.itertuples()}
-    edges = list(G.edges(keys=True))
-    vals = np.array([value_by_edge.get(e, 0.0) for e in edges])
-
     positive = vals[vals > 0]
     vmax = float(np.percentile(positive, 98)) if positive.size else 1.0
     norm = mcolors.PowerNorm(gamma=0.5, vmin=0.0, vmax=vmax)   # sqrt-ish scale
-    cmap = mpl.colormaps["inferno"]
+    cmap = mpl.colormaps[cmap_name]
 
     colors, widths = [], []
     for v in vals:
@@ -86,27 +82,67 @@ def plot_segment_map(G, df):
     sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.01)
-    cbar.set_label("vehicle-seconds on segment", color="white")
+    cbar.set_label(cbar_label, color="white")
     cbar.ax.yaxis.set_tick_params(color="white")
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
-    ax.set_title(
-        f"Powell ABM: traffic activity per segment\n"
-        f"{config.N_VEHICLES} vehicles, {config.N_STEPS} steps",
-        color="white",
-    )
+    ax.set_title(title, color="white")
 
-    out = os.path.join(config.FIGURES_DIR, f"{config.RUN_NAME}_segment_map.png")
+    out = os.path.join(config.FIGURES_DIR, f"{config.RUN_NAME}_{out_suffix}.png")
     fig.savefig(out, dpi=200, bbox_inches="tight", facecolor=bg)
     plt.close(fig)
     print(f"Saved figure to {out}")
 
 
+def plot_segment_map(G, df):
+    """Heat map of simulated traffic activity (vehicle-seconds) per street segment.
+    Busy corridors light up; unused streets stay a dim grey."""
+    value_by_edge = {(r.u, r.v, r.key): r.value for r in df.itertuples()}
+    edges = list(G.edges(keys=True))
+    vals = np.array([value_by_edge.get(e, 0.0) for e in edges])
+    _segment_heatmap(
+        G, vals,
+        cbar_label="vehicle-seconds on segment",
+        title=(f"Powell ABM: traffic activity per segment\n"
+               f"{config.N_VEHICLES} vehicles, {config.N_STEPS} steps"),
+        out_suffix="segment_map",
+    )
+
+
+def plot_no2_map(G, df):
+    """Heat map of the modeled NO2 surface per street segment.
+
+    The simulation stores NOx grams per segment (HBEFA3). The NO2 surface is
+    NO2 = config.F_NO2 * NOx, applied here so the fraction can be retuned without
+    rerunning the sim. This is the week-5 NO2 deliverable: the agent simulation's
+    interaction dynamics (following, queueing, spillback) turned into emissions.
+    """
+    if "nox_g" not in df.columns:
+        raise SystemExit("This run has no nox_g column; rerun generate.py to "
+                         "produce the emission surface.")
+    nox_by_edge = {(r.u, r.v, r.key): r.nox_g for r in df.itertuples()}
+    edges = list(G.edges(keys=True))
+    vals = config.F_NO2 * np.array([nox_by_edge.get(e, 0.0) for e in edges])
+    _segment_heatmap(
+        G, vals,
+        cbar_label="NO2 (grams on segment)",
+        title=(f"Powell ABM: modeled NO2 surface\n"
+               f"{config.N_VEHICLES} vehicles, {config.N_STEPS} steps, "
+               f"{config.EMISSION_CLASS}, f_NO2={config.F_NO2}"),
+        out_suffix="no2_map",
+        cmap_name="viridis",
+    )
+
+
 if __name__ == "__main__":
     G = load_network()
     # `python src/visualize.py network` draws just the street network.
-    # With no argument it draws the simulation segment map (needs sim output).
-    if len(sys.argv) > 1 and sys.argv[1] == "network":
+    # `python src/visualize.py no2`     draws the modeled NO2 surface.
+    # With no argument it draws the traffic-activity segment map.
+    # The last two need simulation output on disk.
+    mode = sys.argv[1] if len(sys.argv) > 1 else "activity"
+    if mode == "network":
         plot_network(G)
+    elif mode == "no2":
+        plot_no2_map(G, load_segments())
     else:
-        df = load_segments()
-        plot_segment_map(G, df)
+        plot_segment_map(G, load_segments())
