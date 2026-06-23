@@ -40,7 +40,22 @@ what we did, any decisions made, and the single most important next step.
   the week-8 noise path: the OSU / Multnomah County Portland noise study (Bozigar and
   Mowrer, OSU College of Health; field measurements Aug 2023 to Aug 2024; a citywide
   10 m noise surface and a county interactive map are forthcoming) and a PowerBI
-  dashboard (app.powerbigov.us), likely that county noise map.
+  dashboard (app.powerbigov.us).
+- **Drafted the reply to Christof and verified every claim firsthand before sending.**
+  Confirmed the OSU study's specifics against the published paper (Bozigar et al.
+  2025, J. Expo. Sci. Environ. Epidemiol.: real Class 1 sound measurements, an
+  ML-based noise surface, metrics DNL/Lden/L10; traffic proximity the biggest driver).
+  Confirmed via screenshots that Christof's PowerBI link is the **City of Portland**
+  Noise Complaints Dashboard (Title 18 complaints + 311 requests), which is complaint
+  data, not measured levels, and is City of Portland, not Multnomah County. Corrected
+  the draft to drop an unsupported "traffic complaints along Powell" claim and the
+  county misattribution. Email is assembled and ready to send: it frames the OSU
+  surface as the noise analog of the Rao comparison (their statistical ML surface vs
+  the ABM's mechanistic one), with the ABM adding the rush-hour/queueing/time-of-day
+  dynamics their long-term-average surface misses.
+- **Added the OSU paper to `REFERENCES.md`** under a new "noise comparison (week 8)"
+  section, tagged to read at the week-8 noise layer (commit f1b2293). Also saved as a
+  memory (noise-data-leads) so `/start-session` resurfaces it.
 
 **Decisions:**
 - Store NOx in the sim and apply the NO2 fraction downstream (`NO2 = F_NO2 * NOx`,
