@@ -26,9 +26,9 @@ Do these steps in order:
    - <the single most important thing to do next session>
    ```
 
-4. If anything in the project changed meaningfully (current status, next build step,
-   a decision that changes direction), update the relevant part of `CLAUDE.md` too —
-   especially the "Where we are now" section.
+4. Check whether the `CLAUDE.md` status section still matches what the repo actually
+   does. If it doesn't, update it. Completing planned work counts, not just changes of
+   direction.
 5. Stage everything with `git add -A`, then show Darcy a one-paragraph summary of what
    the session accomplished and what the next step is.
 6. Commit with a clear message describing the session's work, and push to `origin main`.

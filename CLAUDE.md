@@ -79,11 +79,23 @@ done: the NO2 path. Per-vehicle NOx comes from SUMO's HBEFA3 NOx(v,a) polynomial
 (diesel Euro 4, PC_D_EU4; src/emissions.py), fed by each car's instantaneous speed
 and acceleration and accumulated as grams per segment. The sim stores NOx; the NO2
 surface is NO2 = F_NO2 * NOx, applied in visualization so the fraction (0.30,
-literature range 0.20-0.30) retunes without rerunning. visualize.py renders both an
-activity map and an NO2 map. Runtime stays fast and linear (~10 s for 500 vehicles
-over a simulated hour). Vehicle count and network size are config parameters
-(Christof's Jun 22 ask). Powell stays the proof-of-concept and Plan B. The Jun 23
-key-paper talk on the Rao baseline is built and ready (on Drive, outside the repo).
+literature range 0.20-0.30) retunes without rerunning. visualize.py renders an
+activity map, an NO2 map, and a before/after closure-difference map. Runtime stays
+fast and linear (~10 s for 500 vehicles over a simulated hour). Vehicle count and
+network size are config parameters (Christof's Jun 22 ask). Powell stays the
+proof-of-concept and Plan B. The Jun 23 key-paper talk on the Rao baseline is built
+and ready (on Drive, outside the repo).
+
+Closure experiment is built and run (Christof's Jun 23 idea, the case where the ABM
+beats a static land-use surface). config.CLOSURE defines a (lat, lon, radius) zone;
+generate.py runs the same demand twice (open, then with the zone's segments removed
+so vehicles reroute) and visualize.py differences the two NO2 surfaces (python
+src/generate.py closure, then python src/visualize.py closure). Result on Powell:
+closing a 150 m zone (24 segments) barely moves the network total (-0.4%) but
+redistributes NO2 onto the parallel routes the detour traffic picks up (SE Holgate
+about +96%, SE Division about +44%, with some low-baseline residential blocks rising
+several-fold). That redistribution, not the net change, is what Rao's static surface
+cannot produce.
 
 Real public data is now partly pulled (DATASETS.md): a real PORTAL hourly
 volume+speed profile (nearest open station to Powell) and the verified ODOT AADT
@@ -106,6 +118,8 @@ PowerBI noise dashboard.
 
 Next build step: wire the PORTAL+ODOT demand into generate.py (the four-step plan is
 in demand_data.py), or move to week-6 predictors + the Rao random-forest comparison.
+The closure experiment can also grow into a planned multi-scenario comparison once
+Christof weighs in.
 
 ## Tech stack
 

@@ -74,6 +74,21 @@ EMISSION_CLASS = "PC_D_EU4"   # passenger car, diesel, Euro 4 (HBEFA3); diesel =
 # when we set calibration gates.
 F_NO2 = 0.30
 
+# --- Road closure scenario (Christof, Jun 23) ---
+# A closure removes street segments from the network before routing, so vehicles
+# must find a different way around the gap. This is the experiment a static
+# land-use model cannot do: the land use is unchanged, but the traffic, and the
+# NO2 and noise surfaces, shift. (Christof's examples: a bridge maintenance
+# closure, the planned I-5 lane closure that pushes traffic onto I-205, marathon
+# street closures.)
+# CLOSURE is a (lat, lon, radius_m) zone; every street segment whose midpoint
+# falls inside the circle is closed. Set it to None for an ordinary single run.
+# The closure experiment (python src/generate.py closure) runs the network once
+# open and once closed and saves both, so visualize.py can difference them.
+# Default zone: ~a block of SE Powell at the study center (Powell & SE 26th), so
+# the main arterial is cut and traffic has to divert onto parallel streets.
+CLOSURE = (45.49854, -122.63862, 150.0)
+
 # --- Simulation parameters ---
 # N_VEHICLES and the network size are the two knobs to scale for the runtime
 # benchmark (Christof, Jun 22): turn them up and watch how wall time grows.

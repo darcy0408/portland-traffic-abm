@@ -28,3 +28,7 @@ CLAUDE.local.md
 # other students' names. Useful context for the assistant, not for a public repo.
 REU_reference.md
 reference/
+
+# Private work-ahead sandbox: exploratory prototypes not ready for the shared repo
+# (e.g. the weather second-surface work). Promote files into src/ when they are ready.
+sandbox/

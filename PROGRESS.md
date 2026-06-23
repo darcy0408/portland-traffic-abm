@@ -6,6 +6,61 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-23 — Closure experiment built and run, plus the validation/closure/weather email to Christof
+
+**Did:**
+- **Closure experiment (Christof's Jun 23 idea) is built and run.** New code in
+  `src/generate.py`: `config.CLOSURE` defines a (lat, lon, radius) zone,
+  `closed_edges_in_zone` and `apply_closure` remove those segments, and
+  `run_closure_experiment` runs the same demand twice (open, then closed) and saves
+  both result files. `src/visualize.py` gained `plot_closure_diff`, which differences
+  the two NO2 surfaces and colors each segment by the change (red = up, blue = down,
+  closed segments highlighted). Run with `python src/generate.py closure` then
+  `python src/visualize.py closure`.
+- **Verified the closure result firsthand from the saved files** (joined the open and
+  closed parquet files on segment id, then joined to the cached graph for street
+  names). Closing a 150 m zone (24 segments) on Powell moves the network NO2 total by
+  only -0.4% (4240.3 g -> 4222.4 g), but redistributes it onto the parallel detour
+  routes: SE Holgate about +96% (nearly double), SE Division about +44%, and some
+  low-baseline residential blocks (SE Gladstone, SE 22nd, SE 29th) rising several-fold.
+  The redistribution, not the net change, is the thing Rao's static surface cannot
+  produce. The before/after figure (`outputs/figures/powell_no2_closure_diff.png`)
+  renders with a title and labeled colorbar; checked it against the numbers and the
+  pattern agrees (blue along the closed Powell stretch, red on the parallel routes).
+- **Finalized the email to Christof** (the post-Rao-talk follow-up: closures,
+  validation, weather), ground-truthed every factual claim against the repo before
+  sending. Three corrections from the verification pass: (1) upgraded the closure
+  paragraph from "I think I can have a first version soon" to past tense with the real
+  numbers, since it is done; (2) kept the precise ODOT AADT (34,900, 2018, 0.02 mi E of
+  SE 26th) with its source, because DATASETS.md has full provenance; (3) corrected the
+  PORTAL claim, Powell has no PORTAL volume loop, so the email anchors daily volume on
+  ODOT AADT and uses the nearest freeway station only for the time-of-day shape. Email
+  is sendable with no attachment (the figure is offered, to walk through live).
+- **Saved a standing communication note.** Darcy strongly prefers email over in-person
+  or live conversation (panics and goes mute when put on the spot; the same validation
+  question that froze them in person got a sharp written answer). Recorded as a memory
+  (communication-prefers-email) and as a standing note in `/start-session` so future
+  sessions default to drafting emails rather than suggesting Darcy talk in person.
+- Tightened `/close-session` step 4 so it flags a stale `CLAUDE.md` status when planned
+  work gets *completed*, not only when direction changes (which is exactly what
+  happened with the closure experiment this session).
+
+**Decisions:**
+- Closure zone left at the Powell center, 150 m radius, in `config.py`. The experiment
+  can grow into a multi-scenario comparison later, but the scenario set is a "raise with
+  Christof" decision, not something to expand unilaterally.
+- Send the email with no attachment: the offer to show the closure figure live is a
+  stronger move than sending a map Christof has to decode alone, and it suits Darcy's
+  preference to communicate in writing and narrate the result when asked.
+
+**Next step:**
+- Send the email, then (unchanged from before) either wire the PORTAL+ODOT demand into
+  `generate.py` or move to the week-6 land-use predictors + Rao random-forest
+  comparison. Raise the closure experiment, the `F_NO2`/fleet-class calibration knobs,
+  and the two noise leads with Christof.
+
+---
+
 ## 2026-06-23 — Cross-edge spillback, the NO2 path (HBEFA3), and real demand data
 
 **Did:**

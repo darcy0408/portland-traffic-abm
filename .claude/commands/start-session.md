@@ -5,6 +5,11 @@ description: Orient at the start of a work session — read the brief, the log, 
 You are starting a new work session on the Portland Traffic ABM research project.
 Darcy is a student new to research, so explain things in plain language.
 
+Standing note: Darcy strongly prefers to communicate by email over in-person or live
+conversation, which is a real source of stress. When anything needs to reach Christof,
+Nik, or anyone else, default to helping draft an email rather than suggesting they talk
+in person.
+
 Do these steps, then stop and wait:
 
 1. Read `CLAUDE.md` (project brief), `ROADMAP.md` (the schedule), and

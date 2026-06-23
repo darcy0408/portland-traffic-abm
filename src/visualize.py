@@ -27,6 +27,16 @@ def load_segments():
     return pd.read_parquet(path)
 
 
+def load_segments_named(run_name):
+    """Load a specific run's results by name (used by the closure difference map,
+    which needs both the '_open' and '_closed' result files)."""
+    path = os.path.join(config.PROCESSED_DIR, f"{run_name}_segments.parquet")
+    if not os.path.exists(path):
+        raise SystemExit(f"No results at {path}; run the closure experiment first "
+                         f"(python src/generate.py closure).")
+    return pd.read_parquet(path)
+
+
 def load_network():
     graph_file = os.path.join(config.NETWORK_DIR, "graph.graphml")
     return ox.load_graphml(graph_file)
@@ -133,6 +143,73 @@ def plot_no2_map(G, df):
     )
 
 
+def plot_closure_diff(G):
+    """Before/after closure map (Christof, Jun 23): where did NO2 move when the
+    road closed? Differences the '_open' and '_closed' runs the closure experiment
+    saved and colors each segment by NO2_closed - NO2_open.
+
+      red  = NO2 went UP   (traffic diverted onto this street)
+      blue = NO2 went DOWN (this street lost traffic, or fed the closed stretch)
+      bright outline = the closed segments themselves
+
+    This is the figure that shows what a static land-use model cannot: identical
+    land use, but the pollution surface redistributes because the cars reroute.
+    """
+    from generate import closed_edges_in_zone   # shared so we agree on what's closed
+
+    base = config.RUN_NAME
+    open_df = load_segments_named(f"{base}_open")
+    closed_df = load_segments_named(f"{base}_closed")
+    open_nox = {(r.u, r.v, r.key): r.nox_g for r in open_df.itertuples()}
+    closed_nox = {(r.u, r.v, r.key): r.nox_g for r in closed_df.itertuples()}
+    closed_set = set(closed_edges_in_zone(G))
+
+    edges = list(G.edges(keys=True))
+    # NO2 change per segment; closed segments carry no through-traffic, so their
+    # closed-run NO2 is absent from closed_nox and reads as 0 here.
+    diffs = np.array([config.F_NO2 * (closed_nox.get(e, 0.0) - open_nox.get(e, 0.0))
+                      for e in edges])
+
+    # symmetric diverging scale, clipped at the 98th percentile of the change so a
+    # single segment does not wash out the rest
+    mag = np.abs(diffs[diffs != 0])
+    vmax = float(np.percentile(mag, 98)) if mag.size else 1.0
+    norm = mcolors.TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
+    cmap = mpl.colormaps["RdBu_r"]
+
+    colors, widths = [], []
+    for e, d in zip(edges, diffs):
+        if e in closed_set:
+            colors.append((1.0, 0.95, 0.3, 1.0))     # bright yellow: the closure
+            widths.append(2.6)
+        elif d == 0.0:
+            colors.append((0.16, 0.16, 0.20, 1.0))   # dim grey: unchanged
+            widths.append(0.4)
+        else:
+            colors.append(cmap(norm(np.clip(d, -vmax, vmax))))
+            widths.append(0.6 + 3.0 * abs(norm(np.clip(d, -vmax, vmax)) - 0.5) * 2)
+
+    bg = "#0e0e12"
+    fig, ax = ox.plot_graph(
+        G, edge_color=colors, edge_linewidth=widths, node_size=0,
+        bgcolor=bg, show=False, close=False,
+    )
+    sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.01)
+    cbar.set_label("NO2 change, closed - open (g)  red = up, blue = down", color="white")
+    cbar.ax.yaxis.set_tick_params(color="white")
+    plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
+    ax.set_title(f"Powell ABM: closure effect on NO2\n"
+                 f"{len(closed_set)} segments closed, traffic reroutes",
+                 color="white")
+
+    out = os.path.join(config.FIGURES_DIR, f"{base}_closure_diff.png")
+    fig.savefig(out, dpi=200, bbox_inches="tight", facecolor=bg)
+    plt.close(fig)
+    print(f"Saved figure to {out}")
+
+
 if __name__ == "__main__":
     G = load_network()
     # `python src/visualize.py network` draws just the street network.
@@ -144,5 +221,7 @@ if __name__ == "__main__":
         plot_network(G)
     elif mode == "no2":
         plot_no2_map(G, load_segments())
+    elif mode == "closure":
+        plot_closure_diff(G)
     else:
         plot_segment_map(G, load_segments())
