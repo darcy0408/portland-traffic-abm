@@ -42,6 +42,19 @@ structure. Ecography, 40(8), 913-929. doi:10.1111/ecog.02881
   model-to-model comparison honest, so it matters directly for the NO2 path in
   weeks 6 to 7.
 
+## The noise comparison (week 8)
+
+[5] Bozigar, M., Mowrer, C., Larkin, A., Hystad, P., et al. (2025). Systematic
+measurement and machine learning-based profile characterization of community
+noise in a medium-large city in the United States. Journal of Exposure Science
+and Environmental Epidemiology. doi:10.1038/s41370-025-00794-y
+- Role: the noise analog of the Rao baseline. Real Class 1 sound measurements
+  across Portland feed a machine-learning noise surface (DNL, Lden, L10). The
+  ABM's mechanistic noise surface is compared against this statistical one, the
+  same model-to-model setup Rao gives for NO2. Part one of two; the citywide 10 m
+  gridded surface is in a forthcoming second paper (Multnomah County is building
+  an interactive map from it). Read at the week-8 noise layer. Found Jun 23.
+
 ## Methods the project uses (citations to add as they are pulled in)
 
 - HBEFA emission factors (per-vehicle NO2).
