@@ -89,6 +89,16 @@ F_NO2 = 0.30
 # the main arterial is cut and traffic has to divert onto parallel streets.
 CLOSURE = (45.49854, -122.63862, 150.0)
 
+# --- Rao-style predictors (NO2 comparison, week 6) ---
+# Rao et al. describe every location by aggregating each predictor over circular
+# buffers of increasing radius around it, so a point "sees" its neighborhood and
+# not just the single segment it sits on. We reuse the same buffer radii for the
+# ABM traffic predictors, so the baseline (land-use) forest and the ABM forest are
+# built on identical spatial footing and the only difference is the predictor
+# source. Rao used 12 buffers from 100 to 1200 m; we start with a representative
+# subset and can widen it later.
+BUFFER_RADII_M = (100, 200, 400, 800, 1200)
+
 # --- Simulation parameters ---
 # N_VEHICLES and the network size are the two knobs to scale for the runtime
 # benchmark (Christof, Jun 22): turn them up and watch how wall time grows.
