@@ -210,18 +210,101 @@ def plot_closure_diff(G):
     print(f"Saved figure to {out}")
 
 
+def _load_scenario(name):
+    path = os.path.join(config.PROCESSED_DIR, f"scenario_{name}.parquet")
+    if not os.path.exists(path):
+        raise SystemExit(f"No trace at {path}; run the test-bench first "
+                         f"(python src/scenarios.py).")
+    return pd.read_parquet(path)
+
+
+def plot_scenarios():
+    """Turn the validation test-bench traces into one evidence sheet (Christof,
+    Jun 24): four panels, each a small scenario whose outcome you can check by eye.
+    This is the visual half of 'show me it works'; scenarios.py is the numeric half.
+
+    The dashed reference lines mirror the constants in scenarios.py: the 50 km/h
+    limit, the IDM desired gap, and the 0-30 s red phase.
+    """
+    one = _load_scenario("one_car")
+    two = _load_scenario("two_cars")
+    red = _load_scenario("red_light")
+
+    L = config.VEHICLE_LENGTH_M
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    fig.suptitle("ABM validation: four hand-checkable scenarios", fontsize=14, weight="bold")
+
+    # Panel A: one car accelerates to the limit and holds
+    ax = axes[0, 0]
+    v_limit = one["v"].max()                       # the car tops out exactly at v0
+    ax.plot(one["t"], one["v"], color="#1f77b4", lw=2)
+    ax.axhline(v_limit, ls="--", color="grey", lw=1)
+    ax.text(one["t"].iloc[-1], v_limit, " speed limit", va="bottom", ha="right",
+            color="grey", fontsize=9)
+    ax.set_title("1) One car: accelerates to the limit, no overshoot")
+    ax.set_xlabel("time (s)"); ax.set_ylabel("speed (m/s)")
+
+    # Panel B: two cars, the clear gap settles to the IDM desired headway
+    lead = two[two["id"] == 0].reset_index(drop=True)
+    foll = two[two["id"] == 1].reset_index(drop=True)
+    gap = lead["pos"].to_numpy() - L - foll["pos"].to_numpy()
+    want = config.IDM_S0 + lead["v"].iloc[-1] * config.IDM_T
+    ax = axes[0, 1]
+    ax.plot(foll["t"], gap, color="#2ca02c", lw=2)
+    ax.axhline(want, ls="--", color="grey", lw=1)
+    ax.axhline(0, ls=":", color="red", lw=1)
+    ax.text(foll["t"].iloc[-1], want, f" desired gap {want:.1f} m", va="bottom",
+            ha="right", color="grey", fontsize=9)
+    ax.set_title("2) Two cars: gap settles to the safe headway (never 0)")
+    ax.set_xlabel("time (s)"); ax.set_ylabel("clear gap to leader (m)")
+
+    # Panel C: two cars, the follower's speed converges to the leader's
+    ax = axes[1, 0]
+    ax.plot(lead["t"], lead["v"], color="#9467bd", lw=2, label="leader (slow)")
+    ax.plot(foll["t"], foll["v"], color="#1f77b4", lw=2, label="follower")
+    ax.set_title("3) Two cars: follower matches the leader's speed")
+    ax.set_xlabel("time (s)"); ax.set_ylabel("speed (m/s)")
+    ax.legend(loc="upper right", fontsize=9)
+
+    # Panel D: one car at a red light stops short of the line, departs on green
+    ax = axes[1, 1]
+    car = red[red["id"] == 0]
+    stop_line = car[car["idx"] == 0]["route_dist"].max() + config.IDM_S0   # halt point + s0
+    ax.axvspan(0, 30, color="red", alpha=0.08)                      # red phase 0-30 s
+    ax.text(15, car["route_dist"].max(), "red", color="red", ha="center", fontsize=9)
+    ax.plot(car["t"], car["route_dist"], color="#d62728", lw=2)
+    ax.axhline(stop_line, ls="--", color="grey", lw=1)
+    ax.text(car["t"].iloc[-1], stop_line, " stop line", va="bottom", ha="right",
+            color="grey", fontsize=9)
+    ax.set_title("4) Red light: waits at the line, goes on green")
+    ax.set_xlabel("time (s)"); ax.set_ylabel("distance along route (m)")
+
+    for ax in axes.flat:
+        ax.grid(True, alpha=0.25)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    out = os.path.join(config.FIGURES_DIR, "scenarios.png")
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved scenario evidence sheet to {out}")
+
+
 if __name__ == "__main__":
-    G = load_network()
-    # `python src/visualize.py network` draws just the street network.
-    # `python src/visualize.py no2`     draws the modeled NO2 surface.
+    # `python src/visualize.py network`   draws just the street network.
+    # `python src/visualize.py no2`       draws the modeled NO2 surface.
+    # `python src/visualize.py closure`   draws the before/after closure surface.
+    # `python src/visualize.py scenarios` draws the validation test-bench traces.
     # With no argument it draws the traffic-activity segment map.
-    # The last two need simulation output on disk.
+    # All but `network` and `scenarios` need simulation output on disk.
     mode = sys.argv[1] if len(sys.argv) > 1 else "activity"
-    if mode == "network":
-        plot_network(G)
-    elif mode == "no2":
-        plot_no2_map(G, load_segments())
-    elif mode == "closure":
-        plot_closure_diff(G)
+    if mode == "scenarios":
+        plot_scenarios()                # reads scenario traces, needs no network
     else:
-        plot_segment_map(G, load_segments())
+        G = load_network()
+        if mode == "network":
+            plot_network(G)
+        elif mode == "no2":
+            plot_no2_map(G, load_segments())
+        elif mode == "closure":
+            plot_closure_diff(G)
+        else:
+            plot_segment_map(G, load_segments())
