@@ -55,6 +55,15 @@ what we did, any decisions made, and the single most important next step.
   general grad-school session (no project feedback). The next small-group meeting
   (Darcy + Fatima + Christof) is Monday and is the venue for the prototype demo; the
   formal cohort presentation slot is July 7.
+- **Reading (the 30% paper time).** Read Roberts 2017 (spatial cross-validation) and
+  wrote independent reading notes in my own words (claim, method, relevance to the ABM,
+  citable lines with page/figure pointers, questions for Christof/Nik), then sharpened
+  them through feedback. Project takeaway: evaluate the ABM forest and the Rao baseline
+  with the SAME spatial block cross-validation, matched to the prediction goal, so the
+  comparison is not inflated by spatial autocorrelation (nearby segments are not
+  independent, so random CV would let a test segment lean on its training-set neighbor).
+  This is also deliberate practice at the paper-reading and notetaking skill itself, not
+  just the content. Michanowicz is next. Drafted the REUnite daily blurb.
 
 **Decisions:**
 - Pivot the near-term priority from the week-6 Rao forest to validation + the demo,
