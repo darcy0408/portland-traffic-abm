@@ -45,6 +45,16 @@ what we did, any decisions made, and the single most important next step.
 - **Git housekeeping.** Consolidated three feature branches onto `main` via a clean
   fast-forward and deleted the merged branches, so `main` is the single source of
   truth again.
+- **Weather second surface started privately** (gitignored `sandbox/`, not in the
+  repo). `sandbox/weather/fetch_weather.py` pulls real Portland hourly rain/wind from
+  the Open-Meteo API for the study coordinates; `sandbox/weather/rain.py` builds a
+  rain-adjusted NO2 surface driven by the real rainy-hour fraction (~10% in June 2024,
+  so the monthly-average NO2 is only ~3% lower). Scoped as future work per Christof,
+  kept out of the repo until ready to promote.
+- **Confirmed the meeting picture from transcripts.** The Jun 24 cohort meeting was a
+  general grad-school session (no project feedback). The next small-group meeting
+  (Darcy + Fatima + Christof) is Monday and is the venue for the prototype demo; the
+  formal cohort presentation slot is July 7.
 
 **Decisions:**
 - Pivot the near-term priority from the week-6 Rao forest to validation + the demo,
@@ -53,6 +63,13 @@ what we did, any decisions made, and the single most important next step.
 - Test scenarios must call the real simulation functions, never a reimplementation,
   or they prove nothing.
 - Do not re-hunt Rao's per-site data online; it is confirmed not public.
+- **Plan for not getting Rao's site data** (Christof thinks it unlikely). Fallbacks,
+  simplest first: (1) ask for Rao's modeled NO2 *surface* instead of raw sites, a
+  lower-friction ask that enables a surface-to-surface comparison; (2) lean on the
+  parts that need no external data (the closure result and the noise path) as the
+  headline contribution; (3) build the full forest pipeline as a validated method,
+  ready to run when any target appears. The Powell-only vs wider-network and raw-data
+  vs modeled-surface forks are explicitly Christof's call.
 
 **Next step:**
 - Assemble and rehearse the prototype demo for the next meeting (run `DEMO.md` end

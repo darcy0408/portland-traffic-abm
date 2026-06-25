@@ -95,7 +95,9 @@ all four pass with values predictable by hand. visualize.py gained a `scenarios`
 (a four-panel evidence sheet), and DEMO.md is a runbook mapping each of Christof's asks
 to one command and one talking point. This validation/demo work is now the near-term
 priority; the week-6 Rao forest is deferred behind it and behind getting Rao's
-sampler-site data.
+sampler-site data. The ABM-side predictors are already scaffolded (src/predictors.py:
+per-segment activity aggregated over config.BUFFER_RADII_M buffers, matching Rao's
+setup, with NOx excluded so the ABM's own NO2 answer cannot leak into the features).
 
 Closure experiment is built and run (Christof's Jun 23 idea, the case where the ABM
 beats a static land-use surface). config.CLOSURE defines a (lat, lon, radius) zone;
@@ -133,8 +135,14 @@ predictors (config.BUFFER_RADII_M). The Rao forest comparison needs Rao's NO2
 sampler-site coordinates and values as the shared target; these are confirmed not
 public (not in the paper supplement or the dissertation, only a site map), so they must
 come from Rao/George (request sent Jun 24; Christof thinks the data traces to a past
-student). Alternatives still open: wire the PORTAL+ODOT demand into generate.py, or grow
-the closure experiment into a planned multi-scenario comparison once Christof weighs in.
+student, so plan for not getting it). Fallbacks if the site data does not come,
+simplest first: (1) ask for Rao's modeled NO2 surface instead of raw sites and do a
+surface-to-surface comparison; (2) make the closure result and the noise path the
+headline contribution, since neither needs external data; (3) keep the forest pipeline
+ready to run when any target appears. The blocked cross-validation that makes the
+comparison fair (Roberts paper) waits on having a target. Alternatives still open: wire
+the PORTAL+ODOT demand into generate.py, or grow the closure experiment into a planned
+multi-scenario comparison once Christof weighs in.
 
 ## Tech stack
 
