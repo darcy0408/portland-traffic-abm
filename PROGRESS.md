@@ -6,6 +6,62 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-24 — Surprise-meeting redirect: validation test-bench, demo figures, week-6 predictor groundwork
+
+**Did:**
+- **Surprise Zoom with Christof (Jun 24).** He redirected the focus: forget the
+  rigid week-by-week plan and make progress day to day; the job now is to produce
+  EVIDENCE the model works via simple, human-checkable test scenarios, and to build
+  a prototype demo for the next meeting (ideally alongside Fatima). His framing:
+  treat Claude as a collaborator you supervise and verify, not a black box to read
+  line by line. He also addressed the imposter feeling directly: building checkable
+  scenarios is exactly what lets you own and vouch for the model.
+- **Validation test-bench (`src/scenarios.py`).** Runs four scenarios through the
+  REAL kernel (idm_acceleration + step_vehicles, never a reimplementation): one car
+  accelerating to the limit, two cars following without collision, one car stopping
+  at a red light, and 1,500-car saturation. All four pass, with numbers predictable
+  by hand: follower gap settles to 9.58 m vs 9.5 m by formula; the car stops exactly
+  s0 = 2 m short of the stop line; under load mean speed drops 9.3 -> 4.5 m/s and
+  ~31% of cars are stopped. Controlled runs save a per-second trace.
+- **Scenario evidence plots.** Added a `scenarios` mode to `visualize.py`: a
+  four-panel evidence sheet (speed-to-limit, gap settling, speed convergence,
+  stop-at-line). Fixed panel 4 to plot cumulative route distance so the line stays
+  monotonic across the segment crossing (pos alone resets to 0 on each new segment).
+- **Full demo figure set + runbook.** Rendered the activity, NO2, and before/after
+  closure figures, and wrote `DEMO.md`: each of Christof's asks mapped to one
+  command and one talking point, with a setup block so the whole demo runs live in
+  under a minute (figures also pre-saved as backup).
+- **Week-6 predictor groundwork (`src/predictors.py`).** Turns an ABM run's
+  per-segment output into Rao-style multi-buffer (100 to 1200 m) traffic predictors;
+  added `BUFFER_RADII_M` to `config.py`. This is the decision-independent machinery
+  both forests need, built ahead of the comparison itself.
+- **Rao data request sent.** Asked Christof for Rao et al.'s NO2 sampler site
+  coordinates and values (the shared target the forest comparison needs). Confirmed
+  firsthand (from the open-access paper) the buffer recipe is 100-1200 m in 100 m
+  steps, 174 summer / 82 winter Ogawa sites, authors Rao/George/Shandas/Rosenstiel.
+  The per-site coords+values are NOT public (not in the supplement or dissertation,
+  only a site map), so they must come from the authors; Christof thinks the data
+  traces to a past student.
+- **Git housekeeping.** Consolidated three feature branches onto `main` via a clean
+  fast-forward and deleted the merged branches, so `main` is the single source of
+  truth again.
+
+**Decisions:**
+- Pivot the near-term priority from the week-6 Rao forest to validation + the demo,
+  per Christof's redirect. The forest is deferred behind the demo and behind getting
+  Rao's site data.
+- Test scenarios must call the real simulation functions, never a reimplementation,
+  or they prove nothing.
+- Do not re-hunt Rao's per-site data online; it is confirmed not public.
+
+**Next step:**
+- Assemble and rehearse the prototype demo for the next meeting (run `DEMO.md` end
+  to end). Once Christof replies with Rao's site data (or an agreed substitute
+  target), resume the random-forest comparison using the predictor groundwork in
+  `src/predictors.py`.
+
+---
+
 ## 2026-06-23 — Closure experiment built and run, plus the validation/closure/weather email to Christof
 
 **Did:**

@@ -86,6 +86,17 @@ network size are config parameters (Christof's Jun 22 ask). Powell stays the
 proof-of-concept and Plan B. The Jun 23 key-paper talk on the Rao baseline is built
 and ready (on Drive, outside the repo).
 
+Jun 24 redirect (Christof, surprise meeting): forget the rigid week plan and focus on
+producing evidence the model works, via simple human-checkable test scenarios, plus a
+prototype demo for the next meeting. Built src/scenarios.py, a validation test-bench
+that runs four scenarios through the real kernel (one car to the speed limit, two cars
+following without collision, one car stopping at a red light, 1,500-car saturation);
+all four pass with values predictable by hand. visualize.py gained a `scenarios` mode
+(a four-panel evidence sheet), and DEMO.md is a runbook mapping each of Christof's asks
+to one command and one talking point. This validation/demo work is now the near-term
+priority; the week-6 Rao forest is deferred behind it and behind getting Rao's
+sampler-site data.
+
 Closure experiment is built and run (Christof's Jun 23 idea, the case where the ABM
 beats a static land-use surface). config.CLOSURE defines a (lat, lon, radius) zone;
 generate.py runs the same demand twice (open, then with the zone's segments removed
@@ -116,10 +127,14 @@ County Portland noise study (Bozigar and Mowrer, OSU College of Health; a citywi
 10 m noise surface and a county interactive map are forthcoming) and a county
 PowerBI noise dashboard.
 
-Next build step: wire the PORTAL+ODOT demand into generate.py (the four-step plan is
-in demand_data.py), or move to week-6 predictors + the Rao random-forest comparison.
-The closure experiment can also grow into a planned multi-scenario comparison once
-Christof weighs in.
+Next build step: assemble and rehearse the prototype demo (DEMO.md). Week-6 groundwork
+exists: src/predictors.py builds Rao-style multi-buffer (100 to 1200 m) ABM traffic
+predictors (config.BUFFER_RADII_M). The Rao forest comparison needs Rao's NO2
+sampler-site coordinates and values as the shared target; these are confirmed not
+public (not in the paper supplement or the dissertation, only a site map), so they must
+come from Rao/George (request sent Jun 24; Christof thinks the data traces to a past
+student). Alternatives still open: wire the PORTAL+ODOT demand into generate.py, or grow
+the closure experiment into a planned multi-scenario comparison once Christof weighs in.
 
 ## Tech stack
 
