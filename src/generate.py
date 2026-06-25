@@ -269,8 +269,8 @@ def make_vehicle(G, nodes, rng, vid):
     return None
 
 
-def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, nox_coeffs,
-                  G, nodes, rng, signals):
+def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
+                  nox_coeffs, G, nodes, rng, signals):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -373,6 +373,10 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, nox_coeffs,
                 if next_group and next_group[0]["pos"] < L + config.IDM_S0:
                     veh["pos"], veh["v"] = edge[3], 0.0
                     break
+            # the car has fully traversed this segment: count one vehicle through it.
+            # This is the model analog of a real traffic count (vehicles per period),
+            # the apples-to-apples match for ADT, distinct from vehicle-seconds.
+            segment_throughput[edge[:3]] += 1
             veh["pos"] -= edge[3]
             if veh["idx"] + 1 < len(veh["route"]):
                 veh["idx"] += 1
@@ -406,25 +410,30 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     if state is None:
         segment_totals = {edge: 0.0 for edge in G.edges(keys=True)}
         segment_nox = {edge: 0.0 for edge in G.edges(keys=True)}
+        segment_throughput = {edge: 0.0 for edge in G.edges(keys=True)}
         vehicles = []
         for vid in range(n_vehicles):
             veh = make_vehicle(G, nodes, rng, vid)
             if veh is not None:
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
-                 "segment_nox": segment_nox, "vehicles": vehicles}
+                 "segment_nox": segment_nox,
+                 "segment_throughput": segment_throughput, "vehicles": vehicles}
     else:
         print(f"Resuming from step {state['step']}")
         segment_totals = state["segment_totals"]
-        # older checkpoints predate the NOx accumulator; start it fresh if absent
+        # older checkpoints predate these accumulators; start them fresh if absent
         segment_nox = state.get("segment_nox") or {edge: 0.0 for edge in G.edges(keys=True)}
         state["segment_nox"] = segment_nox
+        segment_throughput = (state.get("segment_throughput")
+                              or {edge: 0.0 for edge in G.edges(keys=True)})
+        state["segment_throughput"] = segment_throughput
         vehicles = state["vehicles"]
 
     t0 = time.perf_counter()
     for step in range(state["step"], n_steps):
-        step_vehicles(vehicles, config.DT, step * config.DT,
-                      segment_totals, segment_nox, nox_coeffs, G, nodes, rng, signals)
+        step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
+                      segment_nox, segment_throughput, nox_coeffs, G, nodes, rng, signals)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -436,7 +445,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         rate = (max(len(vehicles), 1) * done) / elapsed if elapsed > 0 else float("inf")
         print(f"{len(vehicles):>5} vehicles x {n_steps} steps "
               f"in {elapsed:6.2f}s  ({rate:>10,.0f} vehicle-steps/s)")
-    return segment_totals, segment_nox
+    return segment_totals, segment_nox, segment_throughput
 
 
 def benchmark(G):
@@ -449,15 +458,19 @@ def benchmark(G):
                        use_checkpoint=False, verbose=True)
 
 
-def save_results(segment_totals, segment_nox):
+def save_results(segment_totals, segment_nox, segment_throughput):
     """Write final per-segment results as one tidy table.
     parquet keeps data types and stays compact. Switch to .to_csv if you ever
     want a file you can open and read by eye.
 
     Columns: value = vehicle-seconds of activity (raw exposure); nox_g = NOx grams
-    from HBEFA3. The NO2 surface is NO2 = config.F_NO2 * nox_g, applied at analysis
-    time so the fraction can be retuned without rerunning the simulation."""
-    rows = [{"u": u, "v": v, "key": k, "value": val, "nox_g": segment_nox[(u, v, k)]}
+    from HBEFA3; throughput = number of vehicles that fully traversed the segment
+    (the model analog of a real traffic count, for validation against PBOT ADT).
+    The NO2 surface is NO2 = config.F_NO2 * nox_g, applied at analysis time so the
+    fraction can be retuned without rerunning the simulation."""
+    rows = [{"u": u, "v": v, "key": k, "value": val,
+             "nox_g": segment_nox[(u, v, k)],
+             "throughput": segment_throughput[(u, v, k)]}
             for (u, v, k), val in segment_totals.items()]
     df = pd.DataFrame(rows)
     out = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_segments.parquet")
@@ -485,8 +498,8 @@ def run_closure_experiment(G):
         # open network: the baseline
         config.RUN_NAME = f"{base}_open"
         print(f"[open] {base} on the full network")
-        totals, nox = run_simulation(G, use_checkpoint=False)
-        save_results(totals, nox)
+        totals, nox, thru = run_simulation(G, use_checkpoint=False)
+        save_results(totals, nox, thru)
         open_no2 = config.F_NO2 * sum(nox.values())
 
         # closed network: same demand, segments in the zone removed
@@ -496,8 +509,8 @@ def run_closure_experiment(G):
         print(f"[closed] removed {len(removed)} segments within {r:.0f} m "
               f"of ({lat}, {lon})")
         config.RUN_NAME = f"{base}_closed"
-        totals, nox = run_simulation(Gc, use_checkpoint=False)
-        save_results(totals, nox)
+        totals, nox, thru = run_simulation(Gc, use_checkpoint=False)
+        save_results(totals, nox, thru)
         closed_no2 = config.F_NO2 * sum(nox.values())
     finally:
         config.RUN_NAME = base
@@ -519,5 +532,5 @@ if __name__ == "__main__":
     elif mode == "closure":
         run_closure_experiment(G)
     else:
-        totals, nox = run_simulation(G)
-        save_results(totals, nox)
+        totals, nox, thru = run_simulation(G)
+        save_results(totals, nox, thru)

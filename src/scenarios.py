@@ -60,12 +60,12 @@ def _advance(vehicles, signals, n_steps, t0=0):
     G/nodes/rng are only touched when a car finishes its route and respawns; the
     controlled scenarios keep cars mid-route, so passing dummies here is safe."""
     coeffs = emissions.active_coeffs()
-    seg_tot, seg_nox = defaultdict(float), defaultdict(float)
+    seg_tot, seg_nox, seg_thru = defaultdict(float), defaultdict(float), defaultdict(float)
     trace = []
     for s in range(n_steps):
         prev_v = {veh["id"]: veh["v"] for veh in vehicles}
-        step_vehicles(vehicles, config.DT, (t0 + s) * config.DT,
-                      seg_tot, seg_nox, coeffs, None, [], random.Random(0), signals)
+        step_vehicles(vehicles, config.DT, (t0 + s) * config.DT, seg_tot,
+                      seg_nox, seg_thru, coeffs, None, [], random.Random(0), signals)
         for veh in vehicles:
             a = (veh["v"] - prev_v[veh["id"]]) / config.DT
             # cumulative distance along the whole route (so it stays monotonic across
@@ -189,15 +189,15 @@ def _run_on_network(G, n_vehicles, n_steps):
     rng = random.Random(config.RANDOM_SEED)
     signals = prepare_signals(G)
     coeffs = emissions.active_coeffs()
-    seg_tot, seg_nox = defaultdict(float), defaultdict(float)
+    seg_tot, seg_nox, seg_thru = defaultdict(float), defaultdict(float), defaultdict(float)
     vehicles = []
     for vid in range(n_vehicles):
         veh = make_vehicle(G, nodes, rng, vid)
         if veh is not None:
             vehicles.append(veh)
     for s in range(n_steps):
-        step_vehicles(vehicles, config.DT, s * config.DT,
-                      seg_tot, seg_nox, coeffs, G, nodes, rng, signals)
+        step_vehicles(vehicles, config.DT, s * config.DT, seg_tot,
+                      seg_nox, seg_thru, coeffs, G, nodes, rng, signals)
     return np.array([veh["v"] for veh in vehicles])
 
 
