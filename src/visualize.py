@@ -288,10 +288,179 @@ def plot_scenarios():
     print(f"Saved scenario evidence sheet to {out}")
 
 
+def load_day():
+    """Load the 24-hour time-of-day results (one file, an 'hour' column)."""
+    path = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_day_segments.parquet")
+    if not os.path.exists(path):
+        raise SystemExit(f"No day results at {path}; run the time-of-day "
+                         f"experiment first (python src/generate.py day).")
+    return pd.read_parquet(path)
+
+
+def plot_day(G, df):
+    """Time-of-day NO2: the dimension Rao's single static surface cannot produce.
+
+    Writes two figures:
+      *_day_profile.png  network-total NO2 by hour: the AM and PM peaks, the whole
+                         point of running the model through the clock.
+      *_day_grid.png     a small-multiple NO2 map for each hour, ALL on one shared
+                         color scale so the surface visibly lights up at rush hour
+                         and fades overnight. Per-panel scales would hide exactly
+                         the effect we want to show, so the scale is global.
+    """
+    edges = list(G.edges(keys=True))
+
+    # --- Figure 1: network-total NO2 by hour --------------------------------
+    by_hour = df.groupby("hour")["nox_g"].sum() * config.F_NO2
+    hours = list(range(24))
+    totals = [float(by_hour.get(h, 0.0)) for h in hours]
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    ax.plot(hours, totals, color="#1f77b4", lw=2, marker="o", ms=4)
+    peak = int(np.argmax(totals))
+    ax.axvline(peak, ls="--", color="grey", lw=1)
+    ax.text(peak, totals[peak], f"  peak {peak:02d}:00", color="grey", va="top")
+    ax.set_title("Powell ABM: network-total NO2 by hour of day\n"
+                 "time-of-day dynamics a static land-use surface cannot produce")
+    ax.set_xlabel("hour of day")
+    ax.set_ylabel("network-total NO2 (g)")
+    ax.set_xticks(range(0, 24, 2))
+    ax.set_ylim(bottom=0)
+    ax.grid(True, alpha=0.25)
+    fig.tight_layout()
+    out1 = os.path.join(config.FIGURES_DIR, f"{config.RUN_NAME}_day_profile.png")
+    fig.savefig(out1, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved hourly NO2 profile to {out1}")
+
+    # --- Figure 2: small-multiple hourly maps, one shared color scale --------
+    # global vmax across all hours so the 24 panels are directly comparable; clip
+    # the top (98th pct) so a couple of hot segments don't wash the rest out
+    no2_all = config.F_NO2 * df["nox_g"].to_numpy()
+    pos = no2_all[no2_all > 0]
+    vmax = float(np.percentile(pos, 98)) if pos.size else 1.0
+    norm = mcolors.PowerNorm(gamma=0.5, vmin=0.0, vmax=vmax)
+    cmap = mpl.colormaps["viridis"]
+    bg = "#0e0e12"
+
+    fig, axes = plt.subplots(4, 6, figsize=(20, 14), facecolor=bg)
+    for h in range(24):
+        ax = axes.flat[h]
+        sub = df[df["hour"] == h]
+        nox_by_edge = {(r.u, r.v, r.key): r.nox_g for r in sub.itertuples()}
+        colors, widths = [], []
+        for e in edges:
+            val = config.F_NO2 * nox_by_edge.get(e, 0.0)
+            if val <= 0:
+                colors.append((0.16, 0.16, 0.20, 1.0))
+                widths.append(0.3)
+            else:
+                t = norm(min(val, vmax))
+                colors.append(cmap(t))
+                widths.append(0.4 + 2.0 * t)
+        ox.plot_graph(G, ax=ax, edge_color=colors, edge_linewidth=widths,
+                      node_size=0, bgcolor=bg, show=False, close=False)
+        ax.set_facecolor(bg)   # ox.plot_graph(ax=...) skips the axes patch; match the dark style
+        ax.set_title(f"{h:02d}:00", color="white", fontsize=11)
+
+    sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes, shrink=0.5, pad=0.01)
+    cbar.set_label("NO2 (grams on segment), shared scale", color="white")
+    cbar.ax.yaxis.set_tick_params(color="white")
+    plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
+    fig.suptitle("Powell ABM: modeled NO2 surface through the day",
+                 color="white", fontsize=16)
+    out2 = os.path.join(config.FIGURES_DIR, f"{config.RUN_NAME}_day_grid.png")
+    fig.savefig(out2, dpi=140, bbox_inches="tight", facecolor=bg)
+    plt.close(fig)
+    print(f"Saved hourly NO2 grid to {out2}")
+
+
+def animate_day(G, df):
+    """Looping GIF of the modeled NO2 surface across the 24 hours of the day.
+
+    Same surface as plot_day's grid, but as an animation: one frame per hour,
+    each frame the full network NO2 map for that hour. The colors run on a SINGLE
+    shared scale fixed across every frame, so the surface visibly brightens at
+    rush hour and dims overnight. A per-frame self-normalizing scale would make
+    every hour look equally busy and destroy the whole point. The point is the
+    time-of-day dynamic, the thing a static land-use surface (like Rao's) cannot
+    produce: the same streets, lighting up and fading as the demand cycles.
+
+    Saves one looping GIF to outputs/figures/<RUN_NAME>_day.gif via PillowWriter
+    (no ffmpeg dependency, the safest writer). Falls back to imageio only if
+    PillowWriter is somehow unavailable.
+    """
+    from matplotlib.animation import FuncAnimation, PillowWriter
+
+    edges = list(G.edges(keys=True))
+
+    # One global vmax across ALL hours so the frames are directly comparable; clip
+    # the top (98th pct) so a couple of hot segments don't wash the rest out. This
+    # norm is reused for every frame and for the colorbar, i.e. it is fixed.
+    no2_all = config.F_NO2 * df["nox_g"].to_numpy()
+    pos = no2_all[no2_all > 0]
+    vmax = float(np.percentile(pos, 98)) if pos.size else 1.0
+    norm = mcolors.PowerNorm(gamma=0.5, vmin=0.0, vmax=vmax)   # sqrt-ish scale
+    cmap = mpl.colormaps["viridis"]
+    bg = "#0e0e12"
+
+    # Precompute the (colors, widths) lists for each hour once, so the per-frame
+    # callback only has to draw, not recompute. Same conventions as plot_day:
+    # unused segments dim grey and thin, used segments colored by norm and
+    # thickened with width 0.4 + 2.0 * t.
+    frames = []
+    for h in range(24):
+        sub = df[df["hour"] == h]
+        nox_by_edge = {(r.u, r.v, r.key): r.nox_g for r in sub.itertuples()}
+        colors, widths = [], []
+        for e in edges:
+            val = config.F_NO2 * nox_by_edge.get(e, 0.0)
+            if val <= 0:
+                colors.append((0.16, 0.16, 0.20, 1.0))   # dim grey: street unused this hour
+                widths.append(0.3)
+            else:
+                t = norm(min(val, vmax))
+                colors.append(cmap(t))
+                widths.append(0.4 + 2.0 * t)             # busier segment -> thicker line
+        frames.append((colors, widths))
+
+    # Build the figure and axes once; the colorbar is added once (not per frame).
+    fig, ax = plt.subplots(figsize=(10, 10), facecolor=bg)
+    sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.01)
+    cbar.set_label("NO2 (grams on segment)", color="white")
+    cbar.ax.yaxis.set_tick_params(color="white")
+    plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
+
+    def update(h):
+        # Redraw the whole network for hour h. Clearing and replotting per frame
+        # is the simplest robust approach with ox.plot_graph.
+        ax.clear()
+        colors, widths = frames[h]
+        ox.plot_graph(G, ax=ax, edge_color=colors, edge_linewidth=widths,
+                      node_size=0, bgcolor=bg, show=False, close=False)
+        ax.set_facecolor(bg)   # ox.plot_graph(ax=...) skips the axes patch; keep it dark
+        ax.set_title(f"Powell ABM: modeled NO2 surface - {h:02d}:00",
+                     color="white", fontsize=14)
+        return []
+
+    # 24 frames, looping, ~2 frames per second (500 ms per frame).
+    anim = FuncAnimation(fig, update, frames=range(24), interval=500, blit=False)
+
+    out = os.path.join(config.FIGURES_DIR, f"{config.RUN_NAME}_day.gif")
+    anim.save(out, writer=PillowWriter(fps=2))
+    plt.close(fig)
+    print(f"Saved NO2 day animation to {out}")
+
+
 if __name__ == "__main__":
     # `python src/visualize.py network`   draws just the street network.
     # `python src/visualize.py no2`       draws the modeled NO2 surface.
     # `python src/visualize.py closure`   draws the before/after closure surface.
+    # `python src/visualize.py day`       draws the 24-hour time-of-day NO2 figures.
+    # `python src/visualize.py day-anim`  draws the looping 24-hour NO2 GIF.
     # `python src/visualize.py scenarios` draws the validation test-bench traces.
     # With no argument it draws the traffic-activity segment map.
     # All but `network` and `scenarios` need simulation output on disk.
@@ -306,5 +475,9 @@ if __name__ == "__main__":
             plot_no2_map(G, load_segments())
         elif mode == "closure":
             plot_closure_diff(G)
+        elif mode == "day":
+            plot_day(G, load_day())
+        elif mode == "day-anim":
+            animate_day(G, load_day())
         else:
             plot_segment_map(G, load_segments())

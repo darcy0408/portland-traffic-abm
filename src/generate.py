@@ -7,6 +7,8 @@ Keeping it plot-free is what lets you redraw any figure without rerunning the si
 Run it with:
     python src/generate.py            # full run from config.py
     python src/generate.py benchmark  # quick runtime read at several vehicle counts
+    python src/generate.py closure    # before/after road-closure experiment
+    python src/generate.py day        # 24-hour time-of-day NO2 (hourly surfaces)
 
 The model: real vehicles drive the OSMnx network with routes, follow each other
 via the IDM kernel, queue at signals, and back up across intersections (spillback).
@@ -32,6 +34,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 import emissions
+import demand_data
 from checkpoint import save_checkpoint, load_checkpoint
 
 
@@ -523,6 +526,64 @@ def run_closure_experiment(G):
           "Draw it with: python src/visualize.py closure")
 
 
+def run_day_experiment(G):
+    """24-hour time-of-day experiment: the temporal dimension a static surface
+    cannot produce (Christof's brainstorm direction, Jun 26).
+
+    Rao et al. produce a single long-term-average NO2 surface. The ABM runs second
+    by second, so it can produce one surface PER HOUR of the day. We drive that with
+    a real time-of-day demand shape: the number of vehicles on the network each hour
+    is scaled by the PORTAL hourly profile (src/demand_data.py), so traffic is light
+    overnight, climbs to a morning peak, holds through midday, and peaks again in the
+    afternoon.
+
+    Two results emerge together. The obvious one: NO2 rises and falls with the clock.
+    The interesting one: because a queued car emits far more NOx than a cruising one
+    (the HBEFA3 idle term), peak-hour NO2 rises MORE than the volume alone would
+    predict. That congestion nonlinearity is exactly the interaction effect the ABM
+    exists to show, and it is what a flow-times-a-factor static estimate misses.
+
+    Method (deliberately simple, reusing the validated kernel): each hour is an
+    independent steady-state run whose vehicle count is N_VEHICLES * profile[h] * 24.
+    The * 24 keeps config.N_VEHICLES meaning the DAILY-AVERAGE population, so peak
+    hours sit above it and night hours below (the 24 hourly fractions average 1/24,
+    so the mean hourly count is exactly N_VEHICLES). When the gravity demand model is
+    on, the spatial pattern of trips rides along automatically through run_simulation.
+
+    Known simplification, stated honestly: each hour starts from an empty network and
+    fills over the first few minutes, so there is a short warmup per hour. At one
+    simulated hour per run that warmup is a small fraction, like the uniform signal
+    timing. All 24 results go to one file with an 'hour' column so visualize.py can
+    draw the daily profile and the hourly maps without rerunning anything.
+    """
+    profile = demand_data.hourly_demand_profile()
+    src = "real PORTAL data" if demand_data.is_using_real_data() else "SYNTHETIC fallback"
+    print(f"Time-of-day demand shape: {src}. "
+          f"Daily-average population {config.N_VEHICLES} vehicles.\n")
+
+    frames = []
+    for h in range(24):
+        n_h = max(1, round(config.N_VEHICLES * profile[h] * 24))
+        totals, nox, thru = run_simulation(
+            G, n_vehicles=n_h, use_checkpoint=False, verbose=False)
+        no2_total = config.F_NO2 * sum(nox.values())
+        print(f"[hour {h:02d}:00]  {n_h:>4} vehicles   network NO2 {no2_total:8.1f} g")
+        for (u, v, k), val in totals.items():
+            frames.append({"u": u, "v": v, "key": k, "value": val,
+                           "nox_g": nox[(u, v, k)], "throughput": thru[(u, v, k)],
+                           "n_vehicles": n_h, "hour": h})
+
+    df = pd.DataFrame(frames)
+    out = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_day_segments.parquet")
+    df.to_parquet(out)
+    by_hour = df.groupby("hour")["nox_g"].sum() * config.F_NO2
+    peak = int(by_hour.idxmax())
+    print(f"\nSaved {len(df)} rows (24 hours) to {out}.")
+    print(f"Peak NO2 hour = {peak:02d}:00 ({by_hour[peak]:.1f} g), "
+          f"quietest = {int(by_hour.idxmin()):02d}:00 ({by_hour.min():.1f} g). "
+          f"Draw it with: python src/visualize.py day")
+
+
 if __name__ == "__main__":
     set_seeds(config.RANDOM_SEED)
     G = get_network()
@@ -531,6 +592,8 @@ if __name__ == "__main__":
         benchmark(G)
     elif mode == "closure":
         run_closure_experiment(G)
+    elif mode == "day":
+        run_day_experiment(G)
     else:
         totals, nox, thru = run_simulation(G)
         save_results(totals, nox, thru)
