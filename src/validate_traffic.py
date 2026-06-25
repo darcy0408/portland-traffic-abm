@@ -71,21 +71,33 @@ def main(run_name):
     matched = counts.assign(seg=nearest, snap_m=dist)
     matched = matched[matched["snap_m"] <= SNAP_MAX_M]
 
-    # one row per segment that got at least one count: mean real ADT vs model activity
+    # one row per segment that got at least one count: mean real ADT vs the model's
+    # measures on that segment
     per_seg = (matched.groupby("seg")
                .agg(adt=("adt", "mean"), n_counts=("adt", "size"))
                .reset_index())
-    per_seg["activity"] = abm["value"].to_numpy()[per_seg["seg"].to_numpy()]
-
-    rho = _spearman(per_seg["adt"], per_seg["activity"])
+    seg_idx = per_seg["seg"].to_numpy()
+    per_seg["activity"] = abm["value"].to_numpy()[seg_idx]
+    # throughput is the cleaner match to ADT (vehicle counts), but older runs lack it
+    has_thru = "throughput" in abm.columns
+    if has_thru:
+        per_seg["throughput"] = abm["throughput"].to_numpy()[seg_idx]
 
     out = os.path.join(config.PROCESSED_DIR, f"{run_name}_count_validation.parquet")
     per_seg.to_parquet(out, index=False)
 
+    rho_act = _spearman(per_seg["adt"], per_seg["activity"])
     print(f"Traffic validation for run '{run_name}'")
     print(f"  {len(counts)} count points, {len(matched)} matched to a segment "
           f"within {SNAP_MAX_M:.0f} m, on {len(per_seg)} distinct segments")
-    print(f"  Spearman rank correlation (real ADT vs model activity): {rho:+.3f}")
+    print(f"  Spearman rank correlation (real ADT vs ...)")
+    print(f"    model activity (vehicle-seconds): {rho_act:+.3f}")
+    rho = rho_act
+    if has_thru:
+        rho_thru = _spearman(per_seg["adt"], per_seg["throughput"])
+        print(f"    model throughput (vehicles)     : {rho_thru:+.3f}  "
+              f"<- the apples-to-apples measure")
+        rho = rho_thru
     nonzero = (per_seg["activity"] > 0).sum()
     print(f"  {nonzero}/{len(per_seg)} matched segments carry model traffic "
           f"({len(per_seg) - nonzero} real-count streets the model leaves empty)")
