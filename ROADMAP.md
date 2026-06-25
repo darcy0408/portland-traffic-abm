@@ -79,6 +79,17 @@ build time each week really has.
 - **Jul 24** — progress update 2. **This is during your DEFCON trip.** Either get
   ahead and pre-build the talk, or ask Christof early to swap your slot.
 
+**Summer Proceedings chapter (mandatory NSF REU deliverable):**
+- **Sun Jul 12** — sign up: add your name and a tentative title to the signup sheet.
+  (Done early; tentative title can change anytime.)
+- Three chapter-writing lectures, Wednesdays 12-1pm (the research/career slots),
+  Zoom https://pdx.zoom.us/j/87039235793:
+  - **Jul 1** — finding sources, literature review, annotated bibliography, background
+  - **Jul 8** — writing a title, abstract, and introduction
+  - **Jul 22** — methodology, results, discussion, and conclusion
+- Editors-in-chief: Fatima Asghar and Muhammad Cheema. Draft target is week 9
+  (Aug 3-7); finalize week 10. The chapter is sole-author.
+
 **Recurring meetings:**
 - Daily check-in, 1:30-2:00pm PT (Christof or Nik).
 - Nik's office hours, Mondays 11am-12pm.
@@ -86,6 +97,8 @@ build time each week really has.
   annotated bibliography; Jul 8 writing title/abstract/intro; **Jul 15 GPU/HPC
   session** (bring your runtime-benchmark questions); Jul 22 writing
   methodology/results/discussion/conclusion; Jul 29 NSF GRFP career meeting.
+  (Jul 1, Jul 8, and Jul 22 are the Summer Proceedings chapter-writing lectures
+  above, not optional.)
 
 **Daily:** end-of-day REUnite report (what you did, what's next). `/close-session`
 produces the raw material for this.

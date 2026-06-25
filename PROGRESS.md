@@ -6,6 +6,56 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-25 — Real-world traffic validation (PBOT), the SIGSPATIAL SRC email, and chapter logistics
+
+**Did:**
+- **Traffic-layer validation against real PBOT counts (Christof's Jun 25 ask).** New
+  `src/traffic_counts.py` (pulls the PBOT Traffic Volume Counts layer, clean API, no
+  scraper needed) and `src/validate_traffic.py` snap ~2,221 real count points onto the
+  model's streets (1,654 within 40 m, landing on 247 distinct segments) and compute a
+  Spearman rank correlation of real ADT vs the model. Rank, not raw levels, because
+  demand is still uniform random. **Honest correction along the way:** the first pass
+  used vehicle-seconds (which over-counts queued blocks); a new per-segment throughput
+  counter (true vehicle count, the apples-to-apples match for ADT) raised the
+  correlation from **0.16 to 0.26**, a moderate positive match. So the road structure
+  is partly right before any demand calibration. Re-ran it this session to confirm the
+  numbers firsthand before they went in an email (+0.158 activity, +0.261 throughput).
+  GitHub Actions CI now runs the scenario test-bench on every push (README badge).
+- **SIGSPATIAL 2026 SRC email finalized.** Verified the facts before drafting: undergrad
+  Student Research Competition, 2-page extended abstract, due **Jul 10**, conference in
+  Riverside in November, and the lead author must be an ACM student member (Darcy joined,
+  so that gate is cleared). Reframed the contribution to lead with the **road-closure
+  scenario** (the case Christof flagged, where the ABM beats a static land-use model),
+  with NO2 framing rather than noise. Email is ready, pending Christof's OK on three
+  questions: permission, proceedings/ACM double-submission conflict, and NSF REU travel
+  funding.
+- **Traffic-validation email finalized.** Tightened the result email (leads with +0.26,
+  states the n=247, one demand-design question) and verified every number against a live
+  run first.
+- **Summer Proceedings chapter logistics (Christof's Jun 24 email).** The chapter is a
+  mandatory, sole-author deliverable. Added to `ROADMAP.md`: sign up with a tentative
+  title by **Sun Jul 12**, and the three chapter-writing lectures (Jul 1 sources/lit
+  review, Jul 8 title/abstract/intro, Jul 22 methods/results/discussion/conclusion) are
+  the Wednesday research slots, not optional. Editors-in-chief Fatima and Muhammad.
+  Recommended tentative title saved. New memory `proceedings-chapter-deadlines`.
+- **Reading.** Roberts 2017 notes done (logged Jun 24); Michanowicz is next.
+
+**Decisions:**
+- Send the two Christof emails separately and **spaced** (validation now, SIGSPATIAL at
+  4pm via a calendar reminder) so several questions do not land on him at once.
+- Proposed demand-calibration plan (pending Christof's read): set demand from sources
+  independent of the PBOT counts (ODOT AADT as a volume anchor + a population/employment
+  gravity model for the spatial pattern) and **hold the PBOT counts out as the test set**.
+  This is the same independent-test-set discipline as the Roberts paper.
+- Pursue the SIGSPATIAL SRC submission, contingent on Christof clearing the three questions.
+
+**Next step:**
+- After Christof replies: calibrate demand from the independent sources, hold PBOT out,
+  and re-check the rank correlation. If SIGSPATIAL is cleared, draft the 2-page abstract
+  from the chapter material before the Jul 10 deadline.
+
+---
+
 ## 2026-06-24 — Surprise-meeting redirect: validation test-bench, demo figures, week-6 predictor groundwork
 
 **Did:**

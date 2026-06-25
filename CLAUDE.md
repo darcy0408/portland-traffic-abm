@@ -117,6 +117,15 @@ into 24 normalized hourly demand fractions, but it is not wired into the sim yet
 (time-of-day spawning changes the experiment, and demand calibration is set with
 Christof). NLCD land-use predictors and the Rao comparison are still ahead (week 6).
 
+Traffic-layer validation against real data (Christof's Jun 25 ask): src/traffic_counts.py
+pulls the PBOT Traffic Volume Counts and src/validate_traffic.py snaps ~2,221 count points
+onto 247 model segments and computes a Spearman rank correlation of real ADT vs the model.
+A per-segment throughput counter (true vehicle count) is the apples-to-apples match for ADT
+and raised the correlation from 0.16 (vehicle-seconds) to 0.26, a moderate positive match
+that says the road structure is partly right before demand calibration. The gap is demand,
+which is still uniform random; calibrating it (from sources independent of the held-out PBOT
+counts) is the next validation step. CI (GitHub Actions) runs the scenario test-bench on push.
+
 Open simplifications: signal timing is an assumed uniform cycle, not real per-signal
 plans; demand is still uniform random trips (the real time-of-day profile is pulled
 but not wired in); the emission fleet is a single PC_D_EU4 class. Calibration knobs
