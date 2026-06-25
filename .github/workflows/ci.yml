@@ -1,0 +1,35 @@
+# Continuous integration: run the ABM validation test-bench on every push.
+#
+# This is the automated version of "show me it works" (Christof, Jun 24). On each
+# push or pull request, GitHub installs the dependencies and runs src/scenarios.py,
+# which exits non-zero if any scenario fails, so a change that breaks the IDM
+# car-following or the signal/spillback logic turns the check red.
+#
+# Scope is deliberately small for a solo research prototype: just the test-bench.
+# The saturation scenario skips itself here because the cached Powell network is
+# gitignored (not on GitHub); the three controlled scenarios need no network and
+# fully exercise the kernel.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-bench:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the validation test-bench
+        run: python src/scenarios.py

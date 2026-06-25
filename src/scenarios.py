@@ -230,8 +230,18 @@ if __name__ == "__main__":
         "two cars": scenario_two_cars(),
         "red light": scenario_red_light(),
     }
-    G = prepare_network(get_network())
-    results["saturation"] = scenario_saturation(G)
+    # The saturation scenario needs the cached Powell network, which is gitignored
+    # and so absent in CI. If it is missing, skip saturation rather than triggering
+    # a slow live download; the three controlled scenarios above already exercise the
+    # kernel end to end. Locally (where the cache exists) all four still run.
+    graph_file = os.path.join(config.NETWORK_DIR, "graph.graphml")
+    if os.path.exists(graph_file):
+        G = prepare_network(get_network())
+        results["saturation"] = scenario_saturation(G)
+    else:
+        print("\n4) SATURATION  [SKIPPED]")
+        print(f"   no cached network at {graph_file}; run a sim locally to create it.")
+        print("   The controlled scenarios 1-3 cover the car-following and signal logic.")
 
     print("\n" + "=" * 66)
     n_pass = sum(results.values())
