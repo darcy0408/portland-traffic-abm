@@ -6,9 +6,11 @@ live in under a minute), but every figure is also pre-saved in `outputs/figures/
 as a backup, so nothing depends on a live run succeeding.
 
 Setup once before the meeting:
-    python src/generate.py            # produces the activity + NO2 results
+    python src/generate.py            # produces the activity + NO2 + throughput results
     python src/generate.py closure    # produces the open vs closed results
     python src/scenarios.py           # runs the validation test-bench (4/4 pass)
+    python src/traffic_counts.py      # pulls the real PBOT counts (once, cached)
+    python src/validate_traffic.py    # validates the model against those counts
     python src/visualize.py           # activity map
     python src/visualize.py no2       # NO2 map
     python src/visualize.py closure   # before/after closure map
@@ -88,11 +90,26 @@ and departs on green. And placing 1,500 cars on the network drops the mean speed
 from 9.3 to 4.5 m/s with 31 percent of cars stopped. Congestion is emergent, not
 coded in. All four pass, so I can show the kernel behaves correctly."
 
-Then add: "That is the behavior check. For the real-world check, the NO2 and noise
-comparison stays model-to-model by design, because Portland has no dense sensor
-truth. But the traffic layer can be checked against real numbers: simulated
-volumes and speeds on Powell against the real PORTAL hourly counts, and the ODOT
-AADT for the corridor, 34,900 in 2018 at SE 26th. The data is already pulled."
+Then, the real-world check (your Jun 25 count data):
+
+Run:  python src/traffic_counts.py      # ~2,200 real PBOT counts in the Powell area
+      python src/validate_traffic.py    # snaps each to the model and scores it
+
+Say: "That was the behavior check. For a real-world check I used the city's own
+counts, the PBOT volume data you sent. I pulled the roughly 2,200 count points in
+the Powell area and snapped each to the nearest street in the model. I score it
+with a rank correlation, because demand is still random so the absolute levels
+should not match yet; the fair first question is whether the model puts heavy
+traffic where the city actually measures it. The answer is a moderate yes, 0.26.
+And one honest thing I caught doing this: my first comparison used time-occupied
+per segment, which over-counts congested blocks where cars sit in queues; switching
+to a true vehicle count through each segment raised the correlation from 0.16 to
+0.26. The remaining gap is demand. Random trips send cars down streets that do not
+really carry traffic, so calibrating demand is the next step, and I would set it
+from ODOT volumes and a population model kept independent of these counts so the
+test stays honest. The NO2 and noise surfaces stay model-to-model by design,
+because Portland has no dense sensor truth; this count check is for the traffic
+layer specifically."
 
 ## 6. Weather, scoped as future work (your Jun 23 suggestion)
 
@@ -132,13 +149,14 @@ Heilmeier, in plain language:
 - Who cares: NO2 worsens childhood asthma, so this is a health and planning
   question, especially under disruptions like the I-5 closure.
 - How do you measure success: a rigorous model-to-model comparison, valid whichever
-  forest wins, with the traffic layer checked against PORTAL and ODOT.
+  forest wins, with the traffic layer validated against the city's real traffic
+  counts (rank correlation, 0.26 now and rising as demand is calibrated).
 
 ## Honest limitations to state before he asks
 
 - Signal timing is a uniform assumed cycle, not real per-signal plans (not public).
-- Demand is uniform random trips so far; the real time-of-day profile is pulled
-  but not yet wired in.
+- Demand is uniform random trips so far; validation against the real PBOT counts
+  quantifies the gap (rank correlation 0.26) and motivates calibrating demand next.
 - One emission class (diesel Euro 4) for now.
 - Powell is the proof-of-concept and Plan B; the city-wide run is the next scale-up.
 These are flagged in config.py as the knobs to set with you.
