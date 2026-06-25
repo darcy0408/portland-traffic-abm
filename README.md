@@ -1,5 +1,7 @@
 # Portland Traffic ABM
 
+[![CI](https://github.com/darcy0408/portland-traffic-abm/actions/workflows/ci.yml/badge.svg)](https://github.com/darcy0408/portland-traffic-abm/actions/workflows/ci.yml)
+
 Agent-based model of vehicles on Portland's street network, producing per-segment
 noise and NO2 estimates that feed a random-forest comparison against published baselines.
 
