@@ -8,6 +8,7 @@ as a backup, so nothing depends on a live run succeeding.
 Setup once before the meeting:
     python src/generate.py            # produces the activity + NO2 + throughput results
     python src/generate.py closure    # produces the open vs closed results
+    python src/static_vs_abm.py       # static-vs-ABM closure contrast figure (section 5)
     python src/scenarios.py           # runs the validation test-bench (4/4 pass)
     python src/traffic_counts.py      # pulls the real PBOT counts (once, cached)
     python src/validate_traffic.py    # validates the model against those counts
@@ -52,7 +53,7 @@ Show: the printed table (runs instantly)
 
 Say: "Holding the network fixed and turning vehicles up from 50 to 1000, the
 runtime grows right in step with the vehicle count and throughput stays flat at
-about 330,000 vehicle-steps a second. It scales linearly, so a full-city run is a
+about 300,000 vehicle-steps a second. It scales linearly, so a full-city run is a
 matter of more time, not a wall. Vehicle count and network size are both config
 knobs, the way you asked."
 
@@ -66,13 +67,40 @@ Show: outputs/figures/powell_no2_closure_diff.png
 
 Say: "This is your bridge and I-5 point. I close a block of Powell, the vehicles
 reroute, and I difference the NO2 surface before and after. The network total
-barely moves, under a percent, but the pollution redistributes onto the parallel
-detour routes: SE Holgate up about 96 percent, SE Division about 44 percent, some
-quiet blocks several-fold. That redistribution is exactly what a static land-use
-surface cannot produce, because the land use never changed. Changing three numbers
-in config points this at the I-5 lane closure or a marathon instead."
+rises only a little, about 2 percent, because the detours are longer and slower,
+but the pollution redistributes onto the parallel routes: SE Powell drops about 82
+percent in the closed stretch, SE Division more than doubles at plus 132 percent,
+SE Holgate up about 54 percent, and some quiet side streets several-fold. That
+redistribution is exactly what a static land-use surface cannot produce, because
+the land use never changed. Changing three numbers in config points this at the
+I-5 lane closure or a marathon instead."
 
-## 5. Validating the traffic model (your Jun 23 question I could not answer)
+## 5. Why a static land-use model can't do this (the contribution, in one picture)
+
+Ask it answers: what is the geospatial contribution, made undeniable. This is the
+punchline of the closure result and the centerpiece of the SIGSPATIAL abstract.
+
+Run:  python src/static_vs_abm.py
+Show: outputs/demo/5_static_vs_abm_closure.png
+
+Say: "Same closure, same color scale, two methods side by side. The left is a
+land-use random forest, the same method Rao uses. It is blank: zero change on every
+segment. Not because my land-use model is weak, but because a road closure changes
+nothing about land use, so any model built on land use is frozen. The right is my
+agent model, and it lights up: NO2 comes off SE Powell and lands on the parallel
+arterials, SE Division and SE Holgate. That network-responsive surface is the
+contribution, and it needs nothing from Rao's data."
+
+If he pushes ("is that a fair static model, or a strawman?"): "It does not matter how
+good the static model is. Even Rao's full, well-tuned forest would show exactly zero
+change here, because its inputs do not move when a road closes. Only a source-based
+model can respond. That is the whole argument." Backup point in reserve: that land-use
+forest barely predicts the NO2 surface at all (out-of-bag R2 of -0.16), because the
+pollution concentrates on the road network, which land use describes only crudely. So
+the agent model is both more faithful to where pollution is and the only one that
+responds to network change.
+
+## 6. Validating the traffic model (your Jun 23 question I could not answer)
 
 Ask it answers: how I know the traffic is realistic. You said I do not have to
 understand every line, but I have to be able to SHOW it works. So this is in two
@@ -98,20 +126,24 @@ Run:  python src/traffic_counts.py      # ~2,200 real PBOT counts in the Powell 
 Say: "That was the behavior check. For a real-world check I used the city's own
 counts, the PBOT volume data you sent. I pulled the roughly 2,200 count points in
 the Powell area and snapped each to the nearest street in the model. I score it
-with a rank correlation, because demand is still random so the absolute levels
-should not match yet; the fair first question is whether the model puts heavy
-traffic where the city actually measures it. The answer is a moderate yes, 0.26.
-And one honest thing I caught doing this: my first comparison used time-occupied
-per segment, which over-counts congested blocks where cars sit in queues; switching
-to a true vehicle count through each segment raised the correlation from 0.16 to
-0.26. The remaining gap is demand. Random trips send cars down streets that do not
-really carry traffic, so calibrating demand is the next step, and I would set it
-from ODOT volumes and a population model kept independent of these counts so the
-test stays honest. The NO2 and noise surfaces stay model-to-model by design,
+with a rank correlation, because the absolute levels should not match yet; the fair
+first question is whether the model puts heavy traffic where the city actually
+measures it. And one honest thing I caught doing this: my first comparison used
+time-occupied per segment, which over-counts congested blocks where cars sit in
+queues; switching to a true vehicle count through each segment raised the correlation
+from 0.16 to 0.26. From there, two changes drove it further. Routing cars by travel
+time instead of shortest distance raised the held-out correlation from 0.26 to 0.38,
+the real win. Then I calibrated demand with a gravity model drawn from real Census
+population and LODES jobs, kept independent of these PBOT counts so the test stays
+honest. The full model sits at 0.33: the gravity demand costs a little on this one
+rank metric, because the metric is dominated by network structure that betweenness
+already captures, but it is what makes the closure and time-of-day results meaningful,
+so I keep it on. That is an honest negative, and I report it rather than quietly
+switching to the config that scores highest. The NO2 and noise surfaces stay model-to-model by design,
 because Portland has no dense sensor truth; this count check is for the traffic
 layer specifically."
 
-## 6. Weather, scoped as future work (your Jun 23 suggestion)
+## 7. Weather, scoped as future work (your Jun 23 suggestion)
 
 Ask it answers: the wind and rain idea, kept simple.
 
@@ -150,13 +182,17 @@ Heilmeier, in plain language:
   question, especially under disruptions like the I-5 closure.
 - How do you measure success: a rigorous model-to-model comparison, valid whichever
   forest wins, with the traffic layer validated against the city's real traffic
-  counts (rank correlation, 0.26 now and rising as demand is calibrated).
+  counts (held-out rank correlation 0.33 for the full model, up from 0.26 after
+  switching to travel-time routing).
 
 ## Honest limitations to state before he asks
 
 - Signal timing is a uniform assumed cycle, not real per-signal plans (not public).
-- Demand is uniform random trips so far; validation against the real PBOT counts
-  quantifies the gap (rank correlation 0.26) and motivates calibrating demand next.
+- Demand uses a gravity model from real Census population and LODES jobs (held out
+  from the PBOT counts), not uniform random trips. On the PBOT rank check the full
+  model scores 0.33; gravity does not beat uniform demand on that one metric (an
+  honest negative, since the metric is dominated by network structure), but it is
+  required for the closure and time-of-day experiments to be meaningful.
 - One emission class (diesel Euro 4) for now.
 - Powell is the proof-of-concept and Plan B; the city-wide run is the next scale-up.
 These are flagged in config.py as the knobs to set with you.
