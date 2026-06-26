@@ -34,6 +34,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 import emissions
+import landuse_data
 import demand_data
 from checkpoint import save_checkpoint, load_checkpoint
 
@@ -178,8 +179,9 @@ def apply_closure(G, closure=None):
 
 
 def prepare_network(G):
-    """Give every edge a desired speed in m/s ('v0_mps') and ensure a length.
-    Each car uses its current segment's v0_mps as its target speed in the IDM."""
+    """Give every edge a desired speed in m/s ('v0_mps'), a free-flow travel time
+    ('travel_time_s'), and ensure a length. Each car uses its current segment's
+    v0_mps as its target speed in the IDM, and routes on travel_time_s."""
     for _u, _v, _k, data in G.edges(keys=True, data=True):
         if "length" not in data or data["length"] is None:
             data["length"] = 10.0
@@ -187,6 +189,10 @@ def prepare_network(G):
         if kph is None:
             kph = _default_kph(data.get("highway"))
         data["v0_mps"] = max(kph, 8.0) / 3.6   # floor at 8 km/h so nothing is stuck
+        # free-flow seconds to traverse this segment. Routing on time (not length)
+        # makes drivers prefer faster arterials over short slow side streets, which
+        # is how real trips concentrate on the main roads the city counts as busy.
+        data["travel_time_s"] = data["length"] / data["v0_mps"]
     return G
 
 
@@ -254,15 +260,108 @@ def _edge_between(G, u, v):
     return (u, v, k, d.get("length", 10.0), d.get("v0_mps", 11.0))
 
 
-def make_vehicle(G, nodes, rng, vid):
-    """Create one vehicle with a random origin, destination, and shortest route.
-    Returns None if it could not find a route after a few tries."""
+def build_demand_weights(G, nodes):
+    """Turn the real population/jobs masses into per-node origin and destination
+    weights, aligned with `nodes`. Trips then start where people live (origins
+    weighted by resident population) and end where the jobs are (destinations
+    weighted by employment), instead of uniformly at random.
+
+    Each network node is assigned to the nearest block-group centroid, and that
+    block group's population and jobs are spread evenly over all the nodes assigned
+    to it (a Voronoi split). Spreading the mass over many nodes, rather than dumping
+    each block group's whole population on the single node nearest its centroid,
+    avoids a handful of artificial point sources and gives a smooth density that
+    every street corner in a populated area shares.
+
+    Destinations also get a distance-decay term (config.GRAVITY_DECAY_SCALE_M):
+    given a chosen origin, each candidate destination's job weight is multiplied by
+    exp(-distance / scale), so nearer jobs are likelier. That is the gravity-model
+    deterrence that keeps trips mostly local instead of funneling everyone across
+    the area to the single largest job center. The decay needs the origin, so it is
+    applied per-trip in make_vehicle; this function returns the pieces it needs.
+
+    Returns a `demand` dict (origin weights, job weights, node coordinates in local
+    meters, a node->index map, and the decay scale), or None if gravity demand is
+    off or the land-use data is missing, so the caller falls back to uniform random.
+    """
+    if not config.DEMAND_GRAVITY:
+        return None
+    try:
+        lu = landuse_data.landuse_table()
+    except Exception as e:
+        print(f"  gravity demand unavailable ({e}); using uniform-random trips")
+        return None
+    if len(lu) == 0:
+        print("  no land-use block groups in the study area; using uniform-random trips")
+        return None
+
+    # project node and block-group coordinates to local meters around the study
+    # center (flat approximation; the area is small enough to be accurate to ~1 m)
+    lat0, lon0 = config.STUDY_CENTER
+    mx = 111_320.0 * math.cos(math.radians(lat0))
+    nx_ = np.array([float(G.nodes[n]["x"]) for n in nodes]) - lon0
+    ny_ = np.array([float(G.nodes[n]["y"]) for n in nodes]) - lat0
+    node_x, node_y = nx_ * mx, ny_ * 110_540.0
+    bg_x = (lu["lon"].to_numpy() - lon0) * mx
+    bg_y = (lu["lat"].to_numpy() - lat0) * 110_540.0
+
+    # nearest block group for each node (nodes x block groups is tiny: ~978 x ~19)
+    d2 = (node_x[:, None] - bg_x[None, :]) ** 2 + (node_y[:, None] - bg_y[None, :]) ** 2
+    nearest = d2.argmin(axis=1)
+    pop = lu["population"].to_numpy(dtype=float)
+    jobs = lu["jobs"].to_numpy(dtype=float)
+    # split each block group's mass evenly among the nodes assigned to it, so the
+    # block-group totals stay proportional regardless of how many nodes it caught
+    counts = np.bincount(nearest, minlength=len(lu)).astype(float)
+    counts[counts == 0] = 1.0
+    origin_w = pop[nearest] / counts[nearest]
+    dest_w = jobs[nearest] / counts[nearest]
+
+    if origin_w.sum() <= 0 or dest_w.sum() <= 0:   # degenerate data: fall back safely
+        return None
+    scale = config.GRAVITY_DECAY_SCALE_M
+    print(f"  gravity demand: {len(lu)} block groups, "
+          f"{int(pop.sum()):,} residents, {int(jobs.sum()):,} jobs"
+          + (f", decay scale {scale:.0f} m" if scale else ", no distance decay"))
+    return {
+        "origin_w": origin_w.tolist(),    # list for random.choices (origins)
+        "dest_w": dest_w,                 # numpy array for the per-trip decay math
+        "dest_w_list": dest_w.tolist(),   # list for the no-decay path
+        "node_x": node_x, "node_y": node_y,
+        "index": {n: i for i, n in enumerate(nodes)},
+        "scale": scale,
+    }
+
+
+def make_vehicle(G, nodes, rng, vid, demand=None):
+    """Create one vehicle with an origin, destination, and shortest-time route.
+    With a `demand` context, the origin is drawn in proportion to population and the
+    destination in proportion to jobs, with a distance-decay pull toward nearer jobs;
+    without one, both are uniform random. Returns None if no route is found after a
+    few tries."""
     for _ in range(25):
-        o, d = rng.choice(nodes), rng.choice(nodes)
+        if demand is None:
+            o, d = rng.choice(nodes), rng.choice(nodes)
+        else:
+            o = rng.choices(nodes, weights=demand["origin_w"])[0]
+            if demand["scale"]:
+                # destination weights conditional on this origin: jobs damped by
+                # distance from the origin (gravity deterrence). exp keeps every
+                # weight positive, so there is always something to draw.
+                oi = demand["index"][o]
+                dx = demand["node_x"] - demand["node_x"][oi]
+                dy = demand["node_y"] - demand["node_y"][oi]
+                dist = np.sqrt(dx * dx + dy * dy)
+                w = demand["dest_w"] * np.exp(-dist / demand["scale"])
+                d = rng.choices(nodes, weights=w.tolist())[0]
+            else:
+                d = rng.choices(nodes, weights=demand["dest_w_list"])[0]
         if o == d:
             continue
         try:
-            path = nx.shortest_path(G, o, d, weight="length")
+            # route by travel time, not distance: real drivers minimize time, which
+            # favors faster arterials and matches where real counts concentrate.
+            path = nx.shortest_path(G, o, d, weight="travel_time_s")
         except nx.NetworkXNoPath:
             continue
         if len(path) < 2:
@@ -273,7 +372,7 @@ def make_vehicle(G, nodes, rng, vid):
 
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
-                  nox_coeffs, G, nodes, rng, signals):
+                  nox_coeffs, G, nodes, rng, signals, demand=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -386,7 +485,7 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             else:
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady
-                fresh = make_vehicle(G, nodes, rng, veh["id"])
+                fresh = make_vehicle(G, nodes, rng, veh["id"], demand)
                 if fresh is not None:
                     veh.update(fresh)
                 else:
@@ -408,6 +507,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     nodes = list(G.nodes)
     rng = random.Random(config.RANDOM_SEED)   # own stream, so routes are reproducible
     nox_coeffs = emissions.active_coeffs()    # HBEFA3 row for the configured class, fetched once
+    demand = build_demand_weights(G, nodes)   # population/jobs gravity trip weights
 
     state = load_checkpoint(config.RAW_DIR, config.RUN_NAME) if use_checkpoint else None
     if state is None:
@@ -416,7 +516,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         segment_throughput = {edge: 0.0 for edge in G.edges(keys=True)}
         vehicles = []
         for vid in range(n_vehicles):
-            veh = make_vehicle(G, nodes, rng, vid)
+            veh = make_vehicle(G, nodes, rng, vid, demand)
             if veh is not None:
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
@@ -436,7 +536,8 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     t0 = time.perf_counter()
     for step in range(state["step"], n_steps):
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
-                      segment_nox, segment_throughput, nox_coeffs, G, nodes, rng, signals)
+                      segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
+                      signals, demand)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -547,8 +648,8 @@ def run_day_experiment(G):
     independent steady-state run whose vehicle count is N_VEHICLES * profile[h] * 24.
     The * 24 keeps config.N_VEHICLES meaning the DAILY-AVERAGE population, so peak
     hours sit above it and night hours below (the 24 hourly fractions average 1/24,
-    so the mean hourly count is exactly N_VEHICLES). When the gravity demand model is
-    on, the spatial pattern of trips rides along automatically through run_simulation.
+    so the mean hourly count is exactly N_VEHICLES). Spatial demand (the population/
+    jobs gravity model) rides along automatically through run_simulation.
 
     Known simplification, stated honestly: each hour starts from an empty network and
     fills over the first few minutes, so there is a short warmup per hour. At one
