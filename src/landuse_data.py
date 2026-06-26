@@ -33,9 +33,12 @@ node and uses population as the origin weight and jobs as the destination weight
 
 This is a production-attraction gravity setup: population produces trips at the home
 end, employment attracts them at the work end. A distance-decay term (closer pairs
-more likely) is the usual third ingredient; it is deliberately left out of this first
-version because the study area is only ~3 km across, so every pair is already close.
-Add it later if the comparison needs it (it matters more at city scale).
+more likely) is the usual third ingredient, and it is included: destinations are drawn
+conditional on the origin, with each job's pull damped by
+exp(-distance / config.GRAVITY_DECAY_SCALE_M), so trips stay mostly local instead of
+all funneling to the single largest job center. The decay math lives in generate.py
+(build_demand_weights and make_vehicle); this module only supplies the population and
+job masses those functions weight.
 
 Run it with:
     python src/landuse_data.py            # use cached downloads if present
