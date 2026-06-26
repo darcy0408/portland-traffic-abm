@@ -118,8 +118,17 @@ in 2018 at SE 26th), and, for spatial demand, Census 2020 block-group population
 LODES8 jobs near Powell (src/landuse_data.py; both no-key and independent of the held-out
 PBOT counts). src/demand_data.py turns the PORTAL sample into 24 normalized hourly demand
 fractions, now wired into the sim via the `day` experiment (python src/generate.py day),
-which runs one steady-state hour per hour-of-day scaled by that profile. NLCD land-use
-predictors and the Rao comparison are still ahead (week 6).
+which runs one steady-state hour per hour-of-day scaled by that profile. visualize.py
+renders the day as a network-total NO2 curve, a 24-panel shared-scale map grid, and a
+looping GIF (python src/visualize.py day / day-anim). src/validate_day.py checks it:
+realized throughput tracks the input demand shape (Spearman 0.88), confirming face
+validity, and it quantifies the congestion nonlinearity, a car at the 08:00 peak emits
+about +43% more NO2 than at the 01:00 quiet hour (11.6 vs 8.1 g per vehicle) purely from
+queueing, the interaction effect a static flow-times-a-factor surface cannot produce. The
+check also surfaced capacity saturation (per-hour throughput flattens from about 6am at
+the current 500 daily-average vehicles), a signal that the absolute demand magnitude
+needs calibrating against ODOT AADT. NLCD land-use predictors and the Rao comparison are
+still ahead (week 6).
 
 Traffic-layer validation against real data (Christof's Jun 25 ask): src/traffic_counts.py
 pulls the PBOT Traffic Volume Counts and src/validate_traffic.py snaps ~2,221 count points

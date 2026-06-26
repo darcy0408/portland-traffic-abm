@@ -6,6 +6,56 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-25 (later) — Temporal dimension: 24-hour NO2 surfaces and their validation
+
+**Did:**
+- **Brainstormed where to take the project** now that the code is ahead of schedule, and
+  picked the **temporal dimension** as the highest-leverage next move: in-spec (it deepens
+  the core ABM, not scope creep), already half-built (demand_data.py existed), and it
+  strengthens the exact model-to-model comparison the project rests on. The ABM can
+  produce an NO2 surface PER HOUR; Rao's single static surface cannot. (Pairs with the
+  spatial-demand work logged in the entry below, done the same day.)
+- **Built the 24-hour time-of-day experiment** (`python src/generate.py day`,
+  `run_day_experiment`). Each hour is an independent steady-state run whose vehicle count
+  is scaled by the real PORTAL hourly profile, with config.N_VEHICLES kept as the
+  daily-average population. Writes 24 hourly surfaces to one file with an `hour` column.
+  Result: a clean two-peak commuter day, AM peak at 08:00 (~10,000 g network NO2) vs
+  ~440 g at the 01:00 quiet hour. The gravity spatial demand rides along automatically.
+- **Visualization** (`python src/visualize.py day` and `day-anim`): a network-total NO2
+  curve, a 24-panel shared-scale hourly map grid, and a looping GIF (1.7 MB). The
+  animation was delegated to a sub-agent and verified.
+- **Wrote `src/validate_day.py`.** Two checks. (1) Face validity: realized throughput
+  tracks the input demand shape (Pearson 0.90 / Spearman 0.88), so the model reproduces
+  the shape it was driven with. (2) The congestion finding: a car at the 08:00 peak emits
+  **+43% more NO2** than at the quiet hour (11.6 vs 8.1 g/car) purely from queueing, the
+  interaction effect a static flow-times-a-factor surface cannot produce. The check also
+  surfaced **capacity saturation**: per-hour throughput flattens from ~6am, because at 500
+  daily-average vehicles the peak hours saturate the network. That is realistic congestion
+  AND a calibration signal that the absolute demand magnitude is set too high.
+- **Committed today's work as clean, logically-separate commits**: temporal dimension
+  (6e48163), gravity demand (a3aad93), and a docs cleanup (5eb78fb: DATASETS.md 5b plus a
+  fix to a stale landuse_data.py docstring that said decay was omitted when the code
+  implements it).
+
+**Decisions:**
+- Build the temporal dimension now, and do NOT send Christof a third email about it this
+  week (two are already pending). Show the artifact at the next meeting instead.
+- Use the simple "24 independent hourly runs, count scaled by profile" design (Option A)
+  rather than one continuous 24-hour run, so the validated car-following kernel is reused
+  untouched.
+- Co-Authored-By trailer included on the Claude-authored commit, omitted on the
+  Darcy-authored ones (pending Darcy's call on the AI-acknowledgment policy).
+
+**Next step:**
+- Bring the temporal-dimension figures (day profile, map grid, GIF) and the honest "what
+  worked / what didn't" gravity result to the next small-group meeting (the prototype-demo
+  venue). After Christof replies to the two pending emails, calibrate the absolute demand
+  magnitude (the saturation finding points to lowering the daily-average count / anchoring
+  it on ODOT AADT) and re-check. If SIGSPATIAL is cleared, draft the 2-page abstract before
+  the Jul 10 deadline.
+
+---
+
 ## 2026-06-25 — Routing by travel time (win), gravity spatial demand (honest negative result), closure refreshed
 
 **Did:**
