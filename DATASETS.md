@@ -192,6 +192,39 @@ a clean held-out test set.
   https://aqs.epa.gov/aqsweb/airdata/download_files.html  Plan PDF (network plan, not
   measurements) is the primary source: see REFERENCES.md [6].
 
+## 7. Calibration data availability (Jun 26 hunt, for the post-demo calibration work)
+
+Two of the three "calibration work left" items on the demo deck were data-scouted to see
+if they are even gettable for a remote student. Result: one is gated, one is buildable.
+
+- **Real per-signal timing: NOT gettable, becomes a documented limitation.** Neither PBOT
+  nor ODOT publishes signal timing (cycle/split/offset) as open data; there is no public
+  ATSPM dashboard in Oregon. The only path is a public-records request (slow). More
+  fundamentally, the Powell corridor runs **SCATS adaptive control** (installed Oct 2011,
+  ~SE 11th to SE 72nd), so a fixed timing plan largely does not exist there: the system
+  recomputes splits/offsets in real time from detectors. So the uniform 60 s / 50%-green
+  cycle is a deliberate, citable simplification, not a data gap to fill. Cite the PSU
+  evaluation (REFERENCES.md [7]) and frame matching adaptive control as future work.
+  Locations-only layer (already have via OSM): https://gis-pdx.opendata.arcgis.com/datasets/traffic-signals
+- **Mixed vehicle fleet: BUILDABLE from public data, sharpens the NO2 surface (not the
+  count match).** Replaces the single PC_D_EU4 class with a real type / fuel / age mix.
+  - PRIMARY: EPA MOVES county database for **Multnomah County, FIPS 41051** (from the 2020
+    NEI onroad inputs). Three tables give all three weights, county-specific, public domain,
+    no MOVES GUI run needed: `sourceTypeAgeDistribution` (age), `avft` (gas/diesel split),
+    `sourceTypeYear`/`sourceTypePopulation` (type mix). Schema:
+    https://github.com/USEPA/EPA_MOVES_Model/blob/master/docs/MOVESDatabaseTables.md ;
+    NEI onroad TSD: https://www.epa.gov/system/files/documents/2023-01/NEI2020_TSD_Section5_Onroad_0.pdf
+  - FAST FALLBACK: weighted basket of SUMO HBEFA4 classes using the documented 2022
+    average-fleet shares (mostly PC_petrol_Euro-*, a diesel minority, a few % rigid-truck/LCV).
+    Same NOx(v,a) machinery, per class. Label as European-average until reweighted to MOVES.
+    https://sumo.dlr.de/docs/Vehicle_Type_Parameter_Defaults.html
+  - TYPE-ONLY CROSS-CHECK (free, local): Oregon DMV registrations by county (Multnomah ~95%
+    passenger). https://www.oregon.gov/odot/dmv/pages/news/vehicle_stats.aspx
+  - Open knob (Christof decision): how finely to resolve the diesel / heavy-duty share,
+    since those dominate per-vehicle NOx. The MOVES `avft` table for 41051 settles it locally.
+- **Real time-of-day volumes: already prototyped.** The `day` mode (24 hourly runs scaled by
+  the PORTAL profile) adds the temporal dimension; see section 5 / PROGRESS.md.
+
 ---
 
 ## Licensing summary

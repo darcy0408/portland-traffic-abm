@@ -72,6 +72,18 @@ Criteria Pollutant Air Monitoring Network Plan. Submitted to EPA Region 10, July
   measured concentrations; pull the latter from EPA AQS by site ID if needed. See
   DATASETS.md section 6.
 
+## Signal-timing context (the SCATS limitation)
+
+[7] Slavin, C., Feng, W., Figliozzi, M., & Koonce, P. (2013). Statistical Study of the
+Impact of Adaptive Traffic Signal Control on Traffic and Transit Performance.
+Transportation Research Record, 2356. doi:10.3141/2356-14
+- Role: documents that SE Powell runs SCATS adaptive signal control (installed Oct 2011,
+  ~SE 11th to SE 72nd). Cite it to justify the model's uniform-cycle assumption honestly:
+  because the corridor is adaptively controlled, no fixed public timing plan exists to
+  import, so a uniform cycle is a deliberate simplification and matching adaptive control
+  is future work. Local and credible (Figliozzi is PSU faculty; Koonce is PBOT's signals
+  lead). Preprint via PDXScholar. Found Jun 26. See DATASETS.md section 7.
+
 ## Methods the project uses (citations to add as they are pulled in)
 
 - HBEFA emission factors (per-vehicle NO2).
