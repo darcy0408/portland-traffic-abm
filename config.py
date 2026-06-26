@@ -89,6 +89,26 @@ F_NO2 = 0.30
 # the main arterial is cut and traffic has to divert onto parallel streets.
 CLOSURE = (45.49854, -122.63862, 150.0)
 
+# --- Spatial demand (gravity model from population + jobs) ---
+# Trip origins are drawn with probability proportional to resident population, and
+# destinations proportional to jobs, both from real Census/LODES data near the study
+# area (see src/landuse_data.py). This replaces the uniform-random origin/destination
+# draw so traffic concentrates where people actually live and work. Set False to fall
+# back to the uniform draw (e.g. for the runtime benchmark). The masses come only from
+# population and jobs, never from the PBOT counts, so those counts stay a held-out
+# validation set.
+DEMAND_GRAVITY = True
+LODES_YEAR = 2021   # LEHD LODES8 workplace-jobs vintage; 2021 avoids the 2020 anomaly
+# Gravity distance-decay length (meters). Destinations are drawn conditional on the
+# origin, with each job's pull multiplied by exp(-distance / this scale), so nearer
+# jobs are likelier and trips stay mostly local instead of all funneling to the one
+# big job center. This is the classic gravity-model deterrence term. The value is set
+# a priori (comparable to the study-area radius and the short end of urban trip
+# lengths), NOT tuned against the held-out PBOT counts, so the validation stays an
+# honest test. Revisit at the calibration gate with Christof. Set to None to disable
+# decay (origins and destinations drawn independently).
+GRAVITY_DECAY_SCALE_M = 1500.0
+
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular
 # buffers of increasing radius around it, so a point "sees" its neighborhood and
