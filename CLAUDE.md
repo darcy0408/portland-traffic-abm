@@ -59,6 +59,18 @@ core, it is a stale early draft. This file is the current truth.
   minutes of work, and resumes from the last checkpoint.
 - All parameters, paths, and the random seed live in config.py. The same config
   reproduces the same numbers.
+- The seed in config.py is always pinned before any run whose numbers will be
+  cited (a slide, the email to Christof, the chapter, the abstract). An unpinned
+  seed makes each run produce different numbers, so a cited figure can never be
+  reproduced. If two runs of the same experiment disagree, suspect the seed first.
+- One simulation runs at a time. Never start a second generate.py run that writes
+  the same data files while another is still running. Two programs writing the
+  same file at once can corrupt it, with no warning.
+- Figure, demo, and report work reads the existing data files. It never re-runs
+  the simulation to make a picture. The simulation is run once by generate.py to
+  produce the authoritative data files; everything downstream reads those files.
+  This is the single-source-of-truth rule: compute the numbers once, then have
+  every figure and document copy from that one result instead of recomputing.
 - Do not commit generated data or figures. data/ and outputs/ are gitignored and
   get archived separately at the end.
 - Cache the OSMnx graph once and reuse it, since downloads are slow.

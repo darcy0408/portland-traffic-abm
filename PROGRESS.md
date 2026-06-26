@@ -6,6 +6,48 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-25 (demo prep) — Monday demo deck, locked results, Christof's results-first email
+
+**Did:**
+- **Decoded Christof's Jun 25 email.** He flagged that he has not seen results yet, wants
+  the model validated with real data, and finds the GIS/geospatial contribution unclear.
+  He is out starting Jul 4, so any SIGSPATIAL SRC submission (2-page abstract, Jul 10
+  deadline) has to come together next week, with a go/no-go mid-week. Takeaway: Monday's
+  demo is the moment to SHOW results.
+- **Built the Monday demo deck** (PowerPoint, `C:\Users\Darcy\Downloads\Powell_ABM_demo_v3.pptx`,
+  10 slides, outside the repo). Darcy wrote the speaker notes in their own voice; the deck
+  carries those forward. New slides: a geospatial-contribution slide (answers "what's the
+  GIS contribution": a network-responsive exposure surface, not a static map) and a
+  quantified-closure slide.
+- **Generated demo figures** (in gitignored `outputs/demo/`): a validation scatter (model
+  vs real counts) plus a spatial agreement map, and a closure top-streets bar chart. Two
+  read-only figure tasks were delegated to subagents, then everything was regenerated from
+  locked data for consistency.
+- **Locked the numbers (single source of truth).** The deck's numbers were stale. Did a
+  clean deterministic run (deleted the checkpoint first) and settled the authoritative
+  values: traffic validation Spearman rho = 0.33 (model throughput vs real PBOT/county ADT,
+  n=247); closure shifts NO2 off SE Powell (-82%) onto the parallel arterial SE Division
+  (+132%, the clean headline), SE Holgate (+54%), and residential side streets. Total NO2
+  barely changes; the result is the spatial redistribution.
+- **Kept Rao off the demo slide** at Darcy's request: the NO2 forest comparison is framed
+  as "built and ready, runs if/when the target data arrives", not an active ask.
+
+**Decisions:**
+- **Monday's goal is a convincing demo, not a finished project.** Christof's bar is results
+  he can see; his decision point is mid-next-week.
+- **Single-source-of-truth for numbers:** run the sim once, lock the data, and have every
+  figure and slide read from that one result. Codified in CLAUDE.md this session.
+
+**Next step (IMPORTANT consistency check):**
+- Parallel commits today (gravity-model spatial demand, 24-hour time-of-day) may have
+  changed the DEFAULT simulation. Before Monday, re-verify the demo's numbers (Spearman
+  0.33, SE Division +132%, and the "demand is still uniform random" claim on the slide)
+  against the final committed code, and update the deck if they shifted. Then rehearse the
+  v3 deck end to end. Optional upside: a second closure scenario and a demand-weighting
+  attempt.
+
+---
+
 ## 2026-06-25 (later) — Temporal dimension: 24-hour NO2 surfaces and their validation
 
 **Did:**
