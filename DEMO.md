@@ -100,6 +100,41 @@ pollution concentrates on the road network, which land use describes only crudel
 the agent model is both more faithful to where pollution is and the only one that
 responds to network change.
 
+## 5b. The redistribution is robust and general (not one lucky seed)
+
+Ask it answers: is the closure result real, or an artifact of one random run?
+
+Run:  python src/closure_robustness.py
+Show: outputs/demo/7_closure_robustness.png
+
+Say: "To check it is not noise, I closed three different arterials, Powell, Division,
+and Holgate, each under six random seeds. The headline is the closed street's own drop:
+it loses 68 to 80 percent of its NO2 every single time, with a spread of only a few
+points across seeds. That is rock-solid, not a fluke. And it generalizes: close any one
+arterial and its pollution collapses and reroutes onto the parallels. So this is a
+method, not a one-off. One honest detail: the size of the gain on each parallel varies
+more by seed than the drop does, and I report that rather than hide it."
+
+Note if he asks about the +132% on the earlier slide: that is the pinned seed-42 run
+that every map is rendered from, the reproducible representative. The 6-seed average
+for SE Division is +93%, so seed 42 sits near the top of the range. Both are honest;
+I lead with the reproducible run and show the ensemble as the robustness check.
+
+## 5c. Who breathes it: population exposure (the human stake)
+
+Ask it answers: who cares, in human terms.
+
+Run:  python src/exposure.py
+Show: outputs/demo/6_exposure_change.png
+
+Say: "A closure does not just move pollution, it moves whose air it lands in. Using
+Census block-group population, closing one block of Powell raises modeled NO2 for about
+11,000 residents and lowers it for about 12,000, a roughly 9 percent rise in the
+population-weighted average. The neighborhoods on the detour routes see the biggest
+increases. This is modeled NO2, a relative comparison and not measured air quality, but
+it turns a pollution map into an exposure-and-equity result, which is the health stake
+behind the whole project."
+
 ## 6. Validating the traffic model (your Jun 23 question I could not answer)
 
 Ask it answers: how I know the traffic is realistic. You said I do not have to
