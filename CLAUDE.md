@@ -197,9 +197,24 @@ County Portland noise study (Bozigar and Mowrer, OSU College of Health; a citywi
 10 m noise surface and a county interactive map are forthcoming) and a county
 PowerBI noise dashboard.
 
-Next build step: assemble and rehearse the prototype demo (DEMO.md). Week-6 groundwork
-exists: src/predictors.py builds Rao-style multi-buffer (100 to 1200 m) ABM traffic
-predictors (config.BUFFER_RADII_M). The Rao forest comparison needs Rao's NO2
+SIGSPATIAL contribution, made undeniable (Jun 26): the headline is now a single figure
+(src/static_vs_abm.py) showing the same closure two ways on one change scale, a static
+land-use model blank (zero change on every segment) beside the ABM redistributing. It
+rests on a strong, well-fit static baseline (src/landuse_model.py, out-of-bag R^2 0.51,
+so it is not a strawman) and a short invariance proof (a static model's land-use inputs
+do not change when a road closes, so its prediction cannot move). The closure result was
+hardened: robustness across 6 seeds and generality across three arterials
+(src/closure_sweep.py, src/closure_robustness.py) show closing an arterial reliably
+strips 68 to 80% of its own NO2 and reroutes it onto the parallels; population exposure
+(src/exposure.py) states it in human terms (~11,000 residents' modeled NO2 rises).
+SIGSPATIAL_ABSTRACT_MATERIAL.md collects the 2-page abstract building blocks. The demo
+deck is built (Powell_ABM_demo_v4.pptx, 13 slides). All of this needs nothing from Rao,
+so the contribution is not blocked on the sampler data.
+
+Next build step: rehearse the built demo (Powell_ABM_demo_v4.pptx, DEMO.md) and get
+Christof's SIGSPATIAL go/no-go at Monday's meeting. Week-6 groundwork exists:
+src/predictors.py builds Rao-style multi-buffer (100 to 1200 m) ABM traffic predictors
+(config.BUFFER_RADII_M). The Rao forest comparison needs Rao's NO2
 sampler-site coordinates and values as the shared target; these are confirmed not
 public (not in the paper supplement or the dissertation, only a site map), so they must
 come from Rao/George (request sent Jun 24; Christof thinks the data traces to a past

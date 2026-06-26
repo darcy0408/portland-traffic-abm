@@ -45,20 +45,31 @@ took two streams that need NO sim run and only new files, so nothing raced.
   interpolated and needs ONE pinned-seed rerun to confirm (held until after Monday's demo so
   the demo's locked numbers do not shift mid-presentation).
 
-**Did (demo/SIGSPATIAL agent, also committed; its result numbers to be confirmed in that
-workstream, not independently verified here):**
-- `src/closure_sweep.py` / `src/closure_robustness.py`: run the closure across several seeds
-  and three arterials (Powell, Division, Holgate) serially, then report the NO2 redistribution
-  as a mean-with-spread (robustness: is it seed noise?) and check the pattern generalizes
-  (generality: a method, not a one-off). Reuses the real kernel via run_closure_experiment.
-- `src/exposure.py`: assigns each Census block group a local modeled-NO2 exposure and compares
-  open vs closed, to state the closure result as a people-affected (health/equity) number.
-  Clearly labels everything as relative modeled output, not measured air quality.
-- `src/landuse_model.py`: a genuinely strong Rao-style static land-use regression (road
-  geometry, intersection density, distance-to-major-road, plus population/jobs over Rao's
-  buffers) so the static-vs-ABM contrast rests on a fair baseline, not a strawman.
-- `SIGSPATIAL_ABSTRACT_MATERIAL.md` + updates to `DEMO.md` and `src/static_vs_abm.py`: the
-  2-page abstract building blocks and the refreshed headline static-vs-ABM closure figure.
+**Did (demo/SIGSPATIAL workstream, numbers confirmed firsthand in this same session):**
+- **The headline figure** (`src/static_vs_abm.py`, `outputs/demo/5_static_vs_abm_closure.png`):
+  the same closure two ways on one shared red/blue change scale. A static land-use model is blank
+  (zero NO2 change on every segment) next to the ABM lighting up with redistribution. The
+  geospatial contribution in one glance, and it needs nothing from Rao.
+- **Robustness + generality** (`src/closure_sweep.py` + `closure_robustness.py`,
+  `outputs/demo/7_closure_robustness.png`): closed three arterials (Powell, Division, Holgate)
+  under 6 seeds each, 36 sims run serially per the one-sim rule. Closing an arterial removes 68 to
+  80% of its own NO2 every time, std only 2 to 7 points (not seed noise), and the pattern holds for
+  all three (a method, not a one-off).
+- **Population exposure** (`src/exposure.py`, `outputs/demo/6_exposure_change.png`): the closure
+  raises modeled NO2 for ~11,060 residents and lowers it for ~12,488 (+9.2% population-weighted).
+  The human stake. Labeled relative modeled output, not measured air quality.
+- **Stronger static baseline** (`src/landuse_model.py`): a 29-predictor Rao-style land-use forest
+  (road length by class, intersection density, distance-to-major-road, plus pop/jobs over Rao's
+  buffers) fits the ABM open surface at out-of-bag R^2 = 0.51 (the pop/jobs-only version was -0.16).
+  Held FIXED across the closure, so it is still blank: the contrast now rests on a GOOD baseline,
+  not a strawman.
+- **Proof, validation framing, `SIGSPATIAL_ABSTRACT_MATERIAL.md`:** the invariance proof and the
+  two-pronged validation (spatial Spearman 0.33, p=1.3e-7, 95% CI [0.19, 0.44]; temporal 0.88),
+  plus the rest of the 2-page abstract building blocks.
+- **Demo deck reworked to `Powell_ABM_demo_v4.pptx` (13 slides):** removed all Rao mentions and
+  second-person phrasing, added a blue title theme (was all black-and-white), fixed the cramped
+  validation slide, and added three contribution slides (money shot, robustness, exposure).
+  `DEMO.md` updated to match (sections 5, 5b, 5c). Deck and figures stay gitignored.
 
 **Decisions:**
 - Deconflicted the two efforts by stream, not by file: this session took noise + calibration
@@ -66,6 +77,13 @@ workstream, not independently verified here):**
   and abstract. This avoided two agents building the same thing or racing on shared files.
 - Noise model is cars-only category 1 for v1, matching the project's single PC_D_EU4 emission
   class. Heavy vehicles are a documented limitation and a calibration knob for Christof.
+- (demo workstream) Lead with the pinned seed-42 closure numbers as the reproducible
+  representative (Division +132%, Powell -82%), and present the 6-seed ensemble (Division
+  +93% +/- 41) as the robustness check. State both; never silently lead with the biggest number.
+- (demo workstream) The static land-use model is held FIXED across the closure (a regression is
+  not refit for a one-day event), which keeps the invariance argument airtight while the baseline
+  stays genuinely well-fit. The closure contribution stands without Rao's sampler data, so the
+  SIGSPATIAL story is not blocked on a data request that likely will not come.
 - HOLD two convenience edits (a `noise` mode in visualize.py, a noise-knobs block in config.py)
   rather than apply them now, because the demo agent could still touch those shared files and
   the noise scripts run standalone without them. Apply next quiet session.
