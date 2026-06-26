@@ -6,6 +6,57 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-25 — Routing by travel time (win), gravity spatial demand (honest negative result), closure refreshed
+
+**Did:**
+- **Routing by travel time, not distance.** Real drivers minimize time, which favors
+  faster arterials, exactly where real counts concentrate. One-line change (every edge
+  got a `travel_time_s` weight; `make_vehicle` routes on it). It raised the PBOT rank
+  correlation (real ADT vs model throughput, 247 segments) from **0.26 to 0.38**. Kept.
+- **Gravity spatial demand model.** Built `src/landuse_data.py` to pull two real,
+  no-key, PBOT-independent sources: Census 2020 Centers of Population (19 block groups,
+  23,548 residents, with centroids) for the home end, and LODES8 jobs (12,389 jobs) for
+  the work end. `generate.py:build_demand_weights` snaps that mass to network nodes
+  (Voronoi split, so it is a smooth density, not point sources), and `make_vehicle` now
+  draws origins proportional to population and destinations proportional to jobs, with an
+  exponential distance-decay pull toward nearer jobs. New config knobs: `DEMAND_GRAVITY`,
+  `LODES_YEAR`, `GRAVITY_DECAY_SCALE_M`.
+- **Honest negative result.** The gravity demand did NOT improve the PBOT match
+  (0.38 -> 0.345 no decay, 0.328 with 1500 m decay). Worked out why: this metric is
+  dominated by network structure, which uniform-random demand already captures via
+  betweenness on the arterials. Adding home-work structure just makes traffic lumpier.
+  Deliberately stopped tuning the decay scale, because sweeping it to beat 0.38 would be
+  quietly fitting the held-out PBOT counts and would wreck the test.
+- **Refreshed the closure experiment** under the new demand+routing model and verified it
+  firsthand from the saved files. Closing the 150 m Powell zone now raises total NO2
+  +2.1% (was -0.4%, because detours are genuinely longer/slower) and redistributes it:
+  SE Powell -82% in the closed stretch, SE Division +132% (more than doubles), SE Holgate
+  +54%, SE Gladstone +140%, side streets multi-fold. Figure re-rendered.
+- **Documented** both data sources and the validation finding in `DATASETS.md` (new
+  section 5b); updated the `CLAUDE.md` current-phase status (validation, closure numbers,
+  simplifications). Survived a parallel-editing collision that briefly clobbered the
+  `generate.py` routing/gravity edits, then merged cleanly with the new `day`-mode work
+  and confirmed the merged file reproduces the numbers.
+
+**Decisions:**
+- Keep routing-by-time (principled, and a clear win).
+- Keep `DEMAND_GRAVITY = True` by default, even though it slightly lowers the static rank
+  metric, because the closure and time-of-day experiments need realistic destinations.
+  Report BOTH numbers (0.38 structure-only benchmark, 0.35 full model) with the
+  explanation, which is exactly the honest, Occam-vs-realism nuance Christof wants.
+- Decay scale fixed a priori at 1.5 km, NOT tuned against PBOT, to keep the test honest.
+- No second email to Christof today: SIGSPATIAL already went out this morning. Fold the
+  routing win, the gravity negative result, and the demand-design answer into the single
+  later update once he replies, so questions do not land on him all at once.
+
+**Next step:**
+- Refresh and rehearse the prototype demo (`DEMO.md`) for Monday's (Jun 29) small-group
+  meeting, updating the closure talking points to the new numbers (SE Division +132%,
+  total +2.1%). Hold the combined Christof update until his replies (Rao site data,
+  SIGSPATIAL clearance, demand design); send nothing new today.
+
+---
+
 ## 2026-06-25 — Real-world traffic validation (PBOT), the SIGSPATIAL SRC email, and chapter logistics
 
 **Did:**

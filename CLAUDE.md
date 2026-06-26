@@ -103,33 +103,45 @@ Closure experiment is built and run (Christof's Jun 23 idea, the case where the 
 beats a static land-use surface). config.CLOSURE defines a (lat, lon, radius) zone;
 generate.py runs the same demand twice (open, then with the zone's segments removed
 so vehicles reroute) and visualize.py differences the two NO2 surfaces (python
-src/generate.py closure, then python src/visualize.py closure). Result on Powell:
-closing a 150 m zone (24 segments) barely moves the network total (-0.4%) but
-redistributes NO2 onto the parallel routes the detour traffic picks up (SE Holgate
-about +96%, SE Division about +44%, with some low-baseline residential blocks rising
-several-fold). That redistribution, not the net change, is what Rao's static surface
-cannot produce.
+src/generate.py closure, then python src/visualize.py closure). Result on Powell
+(under the gravity-demand + time-routing model, refreshed Jun 25): closing a 150 m
+zone (24 segments) raises the network NO2 total a little (+2.1%, because the detours
+are longer and slower) and redistributes it onto the parallel routes the detour
+traffic picks up: SE Powell drops about 82% in the closed stretch, while SE Division
+roughly doubles (+132%), SE Holgate about +54%, SE Gladstone about +140%, and
+low-baseline side streets rise several-fold. That redistribution, not the net change,
+is what Rao's static surface cannot produce.
 
-Real public data is now partly pulled (DATASETS.md): a real PORTAL hourly
-volume+speed profile (nearest open station to Powell) and the verified ODOT AADT
-for Powell (34,900 in 2018 at SE 26th). src/demand_data.py turns the PORTAL sample
-into 24 normalized hourly demand fractions, but it is not wired into the sim yet
-(time-of-day spawning changes the experiment, and demand calibration is set with
-Christof). NLCD land-use predictors and the Rao comparison are still ahead (week 6).
+Real public data is now pulled (DATASETS.md): a real PORTAL hourly volume+speed
+profile (nearest open station to Powell), the verified ODOT AADT for Powell (34,900
+in 2018 at SE 26th), and, for spatial demand, Census 2020 block-group population and
+LODES8 jobs near Powell (src/landuse_data.py; both no-key and independent of the held-out
+PBOT counts). src/demand_data.py turns the PORTAL sample into 24 normalized hourly demand
+fractions, now wired into the sim via the `day` experiment (python src/generate.py day),
+which runs one steady-state hour per hour-of-day scaled by that profile. NLCD land-use
+predictors and the Rao comparison are still ahead (week 6).
 
 Traffic-layer validation against real data (Christof's Jun 25 ask): src/traffic_counts.py
 pulls the PBOT Traffic Volume Counts and src/validate_traffic.py snaps ~2,221 count points
-onto 247 model segments and computes a Spearman rank correlation of real ADT vs the model.
-A per-segment throughput counter (true vehicle count) is the apples-to-apples match for ADT
-and raised the correlation from 0.16 (vehicle-seconds) to 0.26, a moderate positive match
-that says the road structure is partly right before demand calibration. The gap is demand,
-which is still uniform random; calibrating it (from sources independent of the held-out PBOT
-counts) is the next validation step. CI (GitHub Actions) runs the scenario test-bench on push.
+onto 247 model segments and computes a Spearman rank correlation of real ADT vs the model's
+per-segment throughput (the apples-to-apples match for ADT). Two changes were tested this
+session. (1) Routing vehicles by travel TIME instead of distance raised the correlation
+from 0.26 to 0.38, a principled win (real drivers minimize time, which favors arterials);
+it is kept. (2) Adding a population->jobs gravity demand model (src/landuse_data.py +
+build_demand_weights) did NOT improve it (0.38 -> 0.345, and 0.328 with distance decay).
+That is an honest negative result: this metric is dominated by network structure, which
+uniform demand already captures via betweenness on the arterials. Gravity demand is kept on
+by default (config.DEMAND_GRAVITY) because the closure and time-of-day experiments need
+realistic destinations; its decay scale was set a priori (1.5 km), NOT tuned against the
+held-out PBOT counts, so the test stays honest. CI (GitHub Actions) runs the scenario
+test-bench on push.
 
 Open simplifications: signal timing is an assumed uniform cycle, not real per-signal
-plans; demand is still uniform random trips (the real time-of-day profile is pulled
-but not wired in); the emission fleet is a single PC_D_EU4 class. Calibration knobs
-flagged in config.py to set with Christof: F_NO2, the fleet class, signal timing.
+plans; demand now has a real spatial pattern (population/jobs gravity) and a real
+time-of-day shape (the `day` mode), but the gravity decay scale is an a-priori value
+not yet calibrated and trips are not split into directional AM/PM commute flows; the
+emission fleet is a single PC_D_EU4 class. Calibration knobs flagged in config.py to set
+with Christof: F_NO2, the fleet class, signal timing, and now the gravity decay scale.
 
 Noise path (week 8): Christof (Jun 23) could not find Powell-specific noise data
 from the city, which confirms the model-to-model framing (no clean noise ground
