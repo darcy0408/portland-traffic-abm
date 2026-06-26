@@ -115,7 +115,7 @@ One car on an open road accelerates to the limit and holds. A follower keeps a
 safe gap and never overlaps the leader, settling at the 9.5 m headway the model
 predicts. A car at a red light stops two meters short of the line, never runs it,
 and departs on green. And placing 1,500 cars on the network drops the mean speed
-from 9.3 to 4.5 m/s with 31 percent of cars stopped. Congestion is emergent, not
+from 9.6 to 3.5 m/s with 34 percent of cars stopped. Congestion is emergent, not
 coded in. All four pass, so I can show the kernel behaves correctly."
 
 Then, the real-world check (your Jun 25 count data):
