@@ -177,11 +177,20 @@ a clean held-out test set.
 
 ## 6. NO2 monitoring (context only, NOT a validation spine)
 
-- **Oregon DEQ / EPA AQS** ambient NO2 — only a handful of Portland-metro sites (one
-  SE community site, near-road sites by I-5). Far too sparse for a surface, which is
-  exactly why the project is framed model-to-model. Use as a 2 to 3 point magnitude
-  spot check, stated honestly as such. Pre-generated CSVs:
-  https://aqs.epa.gov/aqsweb/airdata/download_files.html
+- **Oregon DEQ / EPA AQS** ambient NO2. Confirmed against the source (2023 Oregon
+  Annual Ambient Criteria Pollutant Air Monitoring Network Plan, DEQ to EPA Region 10):
+  the entire Portland-Vancouver-Hillsboro metro (2.5M people) has exactly TWO regulatory
+  NO2 monitors. (1) SE Lafayette community / NCore site, AQS 41-051-0080, at
+  45.4966, -122.6029 (5824 SE Lafayette, Portland), the nearest monitor to the Powell
+  study area, a couple km east of center. (2) One freeway near-road site, AQS 41-067-0005,
+  on I-5 at MP 290.14 in Tualatin (AADT 153,822, 2021), 27 m from the freeway; a second
+  near-road site is pending but low priority because the existing one reads well below the
+  NAAQS. Neither is on Powell. Two points for the whole metro is far too sparse to validate
+  a street-segment surface, which is exactly why the project is framed model-to-model. At
+  most, pull the SE Lafayette annual mean from EPA AQS as a single-point magnitude sanity
+  check, stated honestly as such (a Christof decision, not the spine). Pre-generated CSVs:
+  https://aqs.epa.gov/aqsweb/airdata/download_files.html  Plan PDF (network plan, not
+  measurements) is the primary source: see REFERENCES.md [6].
 
 ---
 
