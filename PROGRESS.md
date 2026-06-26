@@ -6,6 +6,45 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-26 (later) — DEQ monitoring plan: the citable backing for model-to-model
+
+Short session, run alongside a separate demo-rehearsal agent. Touched only docs and
+references (no sim, no code), so nothing raced with the demo work.
+
+**Did:**
+- **Read the 2023 Oregon DEQ Annual Ambient Criteria Pollutant Air Monitoring Network
+  Plan** (the `AnnualACPAMNPlan` PDF Darcy downloaded). Confirmed the key fact firsthand:
+  the entire Portland-Vancouver-Hillsboro metro (2.5M people) runs exactly TWO regulatory
+  NO2 monitors, the SE Lafayette community/NCore site (AQS 41-051-0080, 45.4966 -122.6029)
+  and one I-5 freeway near-road site (AQS 41-067-0005, AADT 153,822, 27 m from the road,
+  reading well below the NAAQS). Neither is on Powell.
+- **Turned that into the project's citable model-to-model justification.** Replaced the
+  vague `DATASETS.md` section 6 placeholder ("a handful of sites") with the confirmed
+  specifics, and added the plan to `REFERENCES.md` as [6] under a new "Why model-to-model"
+  heading. This upgrades the honesty framing from an assertion to a primary-source fact:
+  Portland genuinely lacks the dense NO2 sensor data a surface would need to be validated,
+  which is exactly why the comparison is model-to-model.
+- **Closed a dangling TODO.** The thing that prompted Darcy to pull the PDF was the old
+  `DATASETS.md` section 6 note asking to check the DEQ sites; that loop is now resolved.
+- Saved memory `deq-no2-monitoring-sparse` so future sessions resurface it for the chapter
+  and the SIGSPATIAL abstract.
+
+**Decisions:**
+- Use the DEQ plan strictly as a CITATION for the model-to-model framing, NOT as a
+  validation track (sensor-validation-as-spine is out of scope per CLAUDE.md). The one
+  middle option, a single-point magnitude sanity check against the nearest monitor
+  (SE Lafayette), is left as a Christof decision and a footnote at most, not built.
+- Noted that this PDF is a network PLAN (monitor locations + siting rules), not measured
+  concentrations; actual values come from EPA AQS by site ID if ever needed.
+
+**Next step:**
+- Unchanged from the main thrust: after Monday's demo, do the pinned-seed `N_VEHICLES=240`
+  rerun and apply the two held noise snippets. When drafting the SIGSPATIAL abstract /
+  chapter limitations, cite REFERENCES.md [6] for the "only two NO2 monitors in the metro"
+  sentence.
+
+---
+
 ## 2026-06-26 — Noise surface (2nd output) + demand calibration; demo/SIGSPATIAL agent work also landed
 
 This session ran two efforts in parallel in the same repo, kept from colliding by the
