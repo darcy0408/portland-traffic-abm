@@ -142,6 +142,18 @@ the current 500 daily-average vehicles), a signal that the absolute demand magni
 needs calibrating against ODOT AADT. NLCD land-use predictors and the Rao comparison are
 still ahead (week 6).
 
+Demand calibrated against ODOT AADT (Jun 26, src/calibrate_demand.py, read-only, AADT only
+so the PBOT counts stay held out). Powell AADT 34,900 converts to ~727 veh/hr average-hour
+directional and ~1,400-1,745 veh/hr peak-hour directional. At N_VEHICLES=500 the busiest
+Powell segment carries 1,070 veh/hr, 1.47x over the average-hour target. The saturation is a
+real STRUCTURAL ceiling, not a bad parameter: one following lane per directed segment under
+the assumed 60 s / 50%-green signal caps each segment around 1,070 veh/hr, which sits below
+Powell's real peak, so demand cannot be scaled up to reach the peak (that would need
+multi-lane segments or higher signal capacity). Recommendation is N_VEHICLES = 240 (matches
+AADT/24 directional); the exact value is interpolated and awaits one pinned-seed rerun to
+confirm, held until after the Monday demo so its cited numbers do not shift. The lane-capacity
+fork (lower demand vs model multiple lanes) is a Christof decision.
+
 Traffic-layer validation against real data (Christof's Jun 25 ask): src/traffic_counts.py
 pulls the PBOT Traffic Volume Counts and src/validate_traffic.py snaps ~2,221 count points
 onto 247 model segments and computes a Spearman rank correlation of real ADT vs the model's
@@ -164,7 +176,21 @@ not yet calibrated and trips are not split into directional AM/PM commute flows;
 emission fleet is a single PC_D_EU4 class. Calibration knobs flagged in config.py to set
 with Christof: F_NO2, the fleet class, signal timing, and now the gravity decay scale.
 
-Noise path (week 8): Christof (Jun 23) could not find Powell-specific noise data
+Noise path (week 8): a FIRST version of the second output surface is now built (Jun 26,
+src/noise.py + src/visualize_noise.py). It reads an existing run's saved per-segment results
+(no simulation) and produces a per-segment dB(A) road-traffic noise surface with the EU
+CNOSSOS method: rolling + propulsion sound power over 8 octave bands, A-weighted, then a
+deliberately simple line-source geometric-divergence propagation to a 10 m receiver. It is
+congestion-aware: realized speed is recovered as v_mean = length * throughput / value, so
+jammed segments emit more. Result on powell_no2: dB(A) 26.5 / 39.6 / 59.4 (min/median/max),
+loudest on Powell and Division, arterials brightest, dead streets silent. The category-1
+coefficients, reference speed, band order, and A-weighting were verified element-by-element
+against Directive (EU) 2015/996 Appendix F Table F-1, so they are publication-safe. Documented
+v1 simplifications: cars only (no heavy vehicles), and propagation drops ground/barriers/
+atmospherics/meteorology; those are exactly where the FHWA Traffic Noise Model (TNM) reference
+comparison plugs in next. Two convenience edits are intentionally NOT yet applied (a `noise`
+mode in visualize.py, a noise-knobs block in config.py); the scripts run standalone meanwhile.
+Christof (Jun 23) could not find Powell-specific noise data
 from the city, which confirms the model-to-model framing (no clean noise ground
 truth) and Plan B. Two leads to chase for the noise comparison: the OSU / Multnomah
 County Portland noise study (Bozigar and Mowrer, OSU College of Health; a citywide

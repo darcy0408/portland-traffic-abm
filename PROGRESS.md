@@ -6,6 +6,81 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-26 — Noise surface (2nd output) + demand calibration; demo/SIGSPATIAL agent work also landed
+
+This session ran two efforts in parallel in the same repo, kept from colliding by the
+project's iron rules (one sim at a time, never two processes writing the same data files,
+no concurrent edits to the same source file). The split was deliberate: a demo/SIGSPATIAL
+agent owned the closure/forest/abstract work and the only simulation runs; this session
+took two streams that need NO sim run and only new files, so nothing raced.
+
+**Did (this session, verified firsthand):**
+- **Built the project's SECOND output surface: a road-traffic NOISE surface (CNOSSOS-EU).**
+  New `src/noise.py` + `src/visualize_noise.py`. It runs no simulation: it reads an existing
+  run's saved per-segment results and turns them into a per-segment dB(A) surface using the
+  EU CNOSSOS road source method (rolling + propulsion noise, 8 octave bands, A-weighted),
+  then a deliberately simple line-source geometric-divergence propagation to a 10 m receiver
+  (every dropped term, ground/barriers/atmospherics/heavy vehicles, is documented; that is
+  where the future FHWA TNM comparison plugs in). The surface is congestion-aware: realized
+  per-segment speed is recovered as v_mean = length * throughput / value, so jammed Powell
+  segments correctly emit more. Result on `powell_no2`: 2,838 segments, dB(A) min/median/max
+  26.5 / 39.6 / 59.4, loudest streets Powell and Division (59.4), arterials brightest, dead
+  streets silent. Per-vehicle sanity (96 dB(A) at 50 km/h) matches CNOSSOS cat-1 literature.
+- **Verified the CNOSSOS coefficients against the primary source.** A focused check confirmed
+  every category-1 coefficient (AR, BR, AP, BP), the reference speed (70 km/h), the band
+  ordering, and the A-weighting array match Directive (EU) 2015/996 Appendix F Table F-1
+  element by element (pulled from the official EUR-Lex PDF). No transposed digits, no sign
+  errors. The source coefficients are publication-safe; the only caveats are the documented
+  simplifications (cars-only, simplified propagation, undercalibrated flow).
+- **Calibrated absolute demand against ODOT AADT, and found a real structural limit.** New
+  `src/calibrate_demand.py` (read-only, uses ODOT AADT 34,900 only, PBOT counts untouched).
+  Powell AADT converts to ~727 veh/hr average-hour directional and ~1,400-1,745 veh/hr
+  peak-hour directional. At N_VEHICLES=500 the busiest Powell segment carries 1,070 veh/hr,
+  1.47x over the average-hour target. The 24-hour data confirms HARD saturation: in the loaded
+  regime input +94% yields throughput only +3%, the busiest segment pegged at ~1,011 veh/hr.
+  This is a structural per-segment capacity ceiling (one following lane per directed segment
+  under the assumed 60 s / 50%-green signal), not a tuning error, and it sits BELOW Powell's
+  real peak directional volume, so demand cannot be scaled up to reach the peak. Recommendation:
+  N_VEHICLES = 240 so the daily-average matches AADT/24 directional. The 240 value is
+  interpolated and needs ONE pinned-seed rerun to confirm (held until after Monday's demo so
+  the demo's locked numbers do not shift mid-presentation).
+
+**Did (demo/SIGSPATIAL agent, also committed; its result numbers to be confirmed in that
+workstream, not independently verified here):**
+- `src/closure_sweep.py` / `src/closure_robustness.py`: run the closure across several seeds
+  and three arterials (Powell, Division, Holgate) serially, then report the NO2 redistribution
+  as a mean-with-spread (robustness: is it seed noise?) and check the pattern generalizes
+  (generality: a method, not a one-off). Reuses the real kernel via run_closure_experiment.
+- `src/exposure.py`: assigns each Census block group a local modeled-NO2 exposure and compares
+  open vs closed, to state the closure result as a people-affected (health/equity) number.
+  Clearly labels everything as relative modeled output, not measured air quality.
+- `src/landuse_model.py`: a genuinely strong Rao-style static land-use regression (road
+  geometry, intersection density, distance-to-major-road, plus population/jobs over Rao's
+  buffers) so the static-vs-ABM contrast rests on a fair baseline, not a strawman.
+- `SIGSPATIAL_ABSTRACT_MATERIAL.md` + updates to `DEMO.md` and `src/static_vs_abm.py`: the
+  2-page abstract building blocks and the refreshed headline static-vs-ABM closure figure.
+
+**Decisions:**
+- Deconflicted the two efforts by stream, not by file: this session took noise + calibration
+  (no sim, new files only); the demo agent took the closure sweep, forest baseline, exposure,
+  and abstract. This avoided two agents building the same thing or racing on shared files.
+- Noise model is cars-only category 1 for v1, matching the project's single PC_D_EU4 emission
+  class. Heavy vehicles are a documented limitation and a calibration knob for Christof.
+- HOLD two convenience edits (a `noise` mode in visualize.py, a noise-knobs block in config.py)
+  rather than apply them now, because the demo agent could still touch those shared files and
+  the noise scripts run standalone without them. Apply next quiet session.
+- HOLD the N_VEHICLES=240 rerun until after Monday's demo, so the demo's cited numbers stay
+  frozen. Only one sim runs at a time regardless.
+
+**Next step:**
+- After Monday's demo (when the sim is free and the demo numbers no longer need freezing): do
+  the single pinned-seed rerun to confirm N_VEHICLES = 240 (`generate.py` then
+  `calibrate_demand.py`, expect busiest Powell 654-800 veh/hr), then apply the two held noise
+  snippets. Raise with Christof the lane-capacity fork (lower demand to 240 vs model multi-lane
+  capacity) and that the noise surface now exists with the FHWA TNM comparison as its next step.
+
+---
+
 ## 2026-06-25 (demo prep) — Monday demo deck, locked results, Christof's results-first email
 
 **Did:**
