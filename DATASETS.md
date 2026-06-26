@@ -141,6 +141,40 @@ These build the Rao-style land-use predictors so the comparison is apples-to-app
   Public domain. PopGrid ships with 2010 blocks (mind the vintage).
   https://www.epa.gov/benmap
 
+## 5b. Spatial demand: where trips start and end (gravity model)
+
+These ground WHERE trips begin and end (origins by population, destinations by
+jobs), the spatial complement to PORTAL's time-of-day shape (section 2). They feed
+the gravity demand model in `src/landuse_data.py` + `generate.py`
+(`build_demand_weights`). Both are no-account, no-API-key downloads, and BOTH are
+independent of the PBOT counts the model is validated against, so those counts stay
+a clean held-out test set.
+
+- **Census 2020 Centers of Population, block groups (PULLED, Jun 25).** One file per
+  state gives every block group its resident POPULATION and population-weighted
+  centroid lat/lon in a single small CSV. Oregon (state FIPS 41) within the 1.5 km
+  study radius: **19 block groups, 23,548 residents**. Used as the origin (home-end)
+  mass. Public domain. No key.
+  https://www2.census.gov/geo/docs/reference/cenpop2020/blkgrp/CenPop2020_Mean_BG41.txt
+- **LEHD LODES8 Workplace Area Characteristics, Oregon (PULLED, Jun 25).** Jobs by
+  workplace census block (column C000 = total jobs); we aggregate blocks to block
+  group (first 12 digits of the 15-digit GEOID) and join to the centers-of-population
+  centroids. Study area: **12,389 jobs**, with one dominant job center near the study
+  middle. Used as the destination (work-end) mass. Year is `config.LODES_YEAR` (2021,
+  avoiding the 2020 anomaly). Public domain. No key.
+  https://lehd.ces.census.gov/data/lodes/LODES8/or/wac/or_wac_S000_JT00_2021.csv.gz
+
+  **Validation finding (Jun 25).** Two changes were tested against the held-out PBOT
+  counts (Spearman rank of real ADT vs model throughput on 247 segments):
+  (1) routing vehicles by travel TIME instead of distance raised the correlation from
+  **0.26 to 0.38** (a clear, principled win, kept); (2) adding the population->jobs
+  gravity demand did NOT improve it (0.38 -> 0.35, and 0.33 with distance decay),
+  because this metric is dominated by network structure, which uniform demand already
+  captures via betweenness on the arterials. The gravity model is kept on by default
+  anyway (`config.DEMAND_GRAVITY`) because the closure and time-of-day experiments
+  need realistic destinations; the decay scale was set a priori (1.5 km), NOT tuned
+  against PBOT, to keep the test set honest.
+
 ## 6. NO2 monitoring (context only, NOT a validation spine)
 
 - **Oregon DEQ / EPA AQS** ambient NO2 — only a handful of Portland-metro sites (one
