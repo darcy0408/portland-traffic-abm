@@ -6,6 +6,51 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-26 (demo deck build) — Monday deck fleshed out and polished, numbers re-verified
+
+Ran concurrently with the fleet-calibration and DEQ-monitoring sessions logged below (parallel
+agents, same day). This session focused on the prototype demo deck, which lives on Google Drive
+(`G:\My Drive\PSU REU\Presentations\Powell_ABM_demo_v4_speaker_notes_revisedAgain.pptx`), outside
+the repo. The simulation was not changed.
+
+**Did:**
+- **Re-verified every cited demo number against the committed code** (single-source-of-truth):
+  traffic validation Spearman 0.33, closure redistribution (SE Powell -82%, SE Division +132%,
+  SE Holgate +54%, SE Gladstone +140%, total +2.1%), linear runtime, and the static land-use forest
+  out-of-bag R2 of -0.16. Fixed stale numbers in DEMO.md (the closure talking point and the
+  1,500-car saturation scenario) and committed `src/static_vs_abm.py` (untracked but referenced by
+  the runbook).
+- **Regenerated the 24-hour time-of-day experiment from current code** and re-verified it: throughput
+  tracks the real demand shape (Spearman 0.88), and a peak-hour car emits +41% more NO2 than a
+  quiet-hour car from queueing alone (was +43% under older code, so the slide is now current).
+- **Built the deck out to 15 slides.** Added a "How do you know it's right? Validation by design"
+  limitations slide right after the validation slide (only two regulatory NO2 monitors in Portland, so
+  a few single points cannot validate a street-by-street surface; comparing methods is the rigorous
+  choice; a dense passive-sampler campaign is what real ground truth would require, framed as out of
+  scope, not a personal plan). Added a time-of-day backup slide (a surface per hour, the +41% figure).
+  Built the slide-7 R2 rebuttal into its speaker notes.
+- **Fixed deck formatting bugs:** slide 11 text overlapping the scatter plot, invisible white bullets
+  on the two new slides (added the dark background), slide 5's small floating map (now two-column, map
+  left / bullets right), the slide 10 scenario bullets (reworded to match the four plots plus the
+  saturation result), and a title underline crossing the figure on slide 10.
+
+**Decisions:**
+- **Declined the regulatory-monitor (DEQ/EPA AQS, SE Lafayette) validation-anchor route.** That advice
+  came from a parallel instance running in the wrong project without this project's spec; a single
+  monitor cannot validate a spatial surface, and sensor validation is explicitly out of scope. Turned
+  it into the honest limitations slide instead.
+- The time-of-day slide is an appendix (pull on demand), not in the main linear flow, to keep the demo
+  tight.
+- Canonical demo artifact is the Drive deck named above. NOTE: a parallel session also reported
+  "hardening the deck," so confirm there is one canonical deck file before Monday (reconcile if two
+  versions diverged).
+
+**Next step:**
+- Rehearse the Monday demo end to end. When Rao reports back this weekend, run the `src/predictors.py`
+  forest pipeline if the site data arrives.
+
+---
+
 ## 2026-06-26 (latest) — Rao reply unblocks the comparison; mixed-fleet emission calibration
 
 A data-and-framing day. The simulation was not changed; the new code is a standalone
