@@ -6,6 +6,51 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-26 (latest) — Rao reply unblocks the comparison; mixed-fleet emission calibration
+
+A data-and-framing day. The simulation was not changed; the new code is a standalone
+calibration model that does not touch any cited number.
+
+**Did:**
+- **The big break: Dr. Meenakshi Rao replied** and agreed to dig through her old laptop
+  this weekend for the original passive-sampler site data. That data is the shared target
+  the model-to-model random-forest comparison needs, so it could finally unblock the whole
+  comparison. Sent a follow-up thanking her and framing this project as extending her
+  method while holding her statistical engine constant.
+- **Settled the "could I gather my own NO2 data?" question: no.** Her 174-site campaign was
+  funded fieldwork that cannot be replicated remotely from Colorado. Decision is to keep the
+  model-to-model framing and name a local sampler campaign as future work, not a task here.
+- **Built a real calibrated mixed-fleet emission model** (`src/fleet.py`): 40 verified
+  HBEFA3 vehicle classes and a sourced Multnomah County fleet mix, including a Powell
+  heavy-vehicle share from real PBOT class counts. It showed the current all-diesel
+  (PC_D_EU4) assumption overstates NOx by about 1.8x, which means today's NO2 surface is an
+  upper bound. Kept fully separate from the demo as an offline preview on the existing NO2
+  surface (no sim run), so it never touched a cited number.
+- **Scouted whether the flagged calibration knobs are even gettable.** Signal timing is NOT
+  (Powell runs SCATS adaptive control, so there is no fixed published plan), but fleet
+  composition IS, which is what justified building the fleet model.
+- **Hardened the Monday demo deck:** verified every number against the committed code, fixed
+  several stale ones, and caught and fixed an over-promise on slide 14 about which
+  calibration items sharpen which result. Core results confirmed to hold (closure
+  redistribution, 24-hour throughput tracking demand at Spearman 0.88).
+
+**Decisions:**
+- Keep the model-to-model framing as the spine; a self-run sampler campaign is future work,
+  not a deliverable, because it is impossible to do remotely.
+- The mixed-fleet model stays an offline upper-bound caveat for now. Whether to make the
+  fleet mix the live emission assumption (replacing all-diesel) is a Christof calibration
+  decision, not something to flip before the demo.
+- All-diesel NO2 surface is honestly an upper bound; the ~1.8x overstatement is documented,
+  not hidden.
+
+**Next step:**
+- Rehearse the Monday demo and get Christof's SIGSPATIAL go/no-go. Hold the pinned-seed
+  `N_VEHICLES=240` rerun and the two held noise snippets until after the demo so cited
+  numbers do not shift. If Rao's site data arrives, the `src/predictors.py` forest pipeline
+  is ready to run against it.
+
+---
+
 ## 2026-06-26 (later) — DEQ monitoring plan: the citable backing for model-to-model
 
 Short session, run alongside a separate demo-rehearsal agent. Touched only docs and

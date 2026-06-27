@@ -170,11 +170,18 @@ held-out PBOT counts, so the test stays honest. CI (GitHub Actions) runs the sce
 test-bench on push.
 
 Open simplifications: signal timing is an assumed uniform cycle, not real per-signal
-plans; demand now has a real spatial pattern (population/jobs gravity) and a real
-time-of-day shape (the `day` mode), but the gravity decay scale is an a-priori value
-not yet calibrated and trips are not split into directional AM/PM commute flows; the
-emission fleet is a single PC_D_EU4 class. Calibration knobs flagged in config.py to set
-with Christof: F_NO2, the fleet class, signal timing, and now the gravity decay scale.
+plans (and confirmed Jun 26 that Powell's real plans are NOT gettable: it runs SCATS
+adaptive control, so there is no fixed published cycle to calibrate against); demand now
+has a real spatial pattern (population/jobs gravity) and a real time-of-day shape (the
+`day` mode), but the gravity decay scale is an a-priori value not yet calibrated and trips
+are not split into directional AM/PM commute flows; the live emission fleet is still a
+single PC_D_EU4 (all-diesel) class. As of Jun 26 src/fleet.py provides a calibrated
+mixed-fleet alternative (40 HBEFA3 classes + a sourced Multnomah County mix with a
+PBOT-derived Powell heavy-vehicle share) and an offline preview on the existing NO2 surface
+(no sim run); it shows the all-diesel assumption overstates NOx by about 1.8x, so the
+current NO2 surface is an honest upper bound. Whether to switch the live sim to the
+mixed fleet is a Christof calibration decision. Calibration knobs flagged in config.py to
+set with Christof: F_NO2, the fleet class, signal timing, and now the gravity decay scale.
 
 Noise path (week 8): a FIRST version of the second output surface is now built (Jun 26,
 src/noise.py + src/visualize_noise.py). It reads an existing run's saved per-segment results
