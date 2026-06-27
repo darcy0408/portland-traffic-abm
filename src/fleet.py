@@ -122,27 +122,33 @@ DEFAULT_FLEET = [
 #     value. OREGON-derived, not Multnomah-measured.
 #   - Age/standard bands (newest ~33%, mid ~38%, old ~14%): US national average age ~12.5 yr.
 #     NATIONAL DEFAULT. EPA MOVES has an exact Multnomah age table to swap in later.
-#   - Heavy-duty/bus ~4%: typical urban-arterial freight share, biased up because Powell is a
-#     state-highway freight route. TYPICAL DEFAULT (no Powell classification count found yet;
-#     src/traffic_counts.py PBOT data may carry a class field to tighten this).
+#   - Commercial/heavy ~5.4%: REAL LOCAL data, PBOT layer 253 "Vehicle Class Counts", 2014
+#     counts on SE Powell at SE 28th (volume-weighted %Trucks = 5.4%). Crucially TwoAxleCF~0.99,
+#     so ~99% are TWO-AXLE light commercial (delivery vans), NOT heavy multi-axle: mapped mostly
+#     to LDV_D. Genuine heavy multi-axle is ~0.05% (HDV, a sliver). A small transit-bus share is
+#     kept explicit because TriMet runs Powell frequently and buses are NOx-heavy (buses are
+#     2-axle, so they hide inside this count; naming them is deliberate). The exact LDV/HDV/Bus
+#     split inside the 5.4% is a Christof calibration knob.
 #   - EV ~3%: zero tailpipe NOx (mapped to the BEV zero row).
-# The NOx-critical buckets are the diesel cars (5%) and heavy diesel (4%): ~9% of vehicles but
-# the majority of fleet NOx. Those are kept as distinct classes on purpose. Motorcycles (~1% of
-# traffic) are folded into old gasoline as a documented simplification (no MC class extracted;
-# minor NOx). These shares are the Christof calibration knob; tighten with the MOVES 41051 age
-# table and a real Powell heavy-vehicle count when available.
+# The NOx-critical buckets are the diesel cars (5%) and the commercial/bus diesel (~5.4%, now
+# mostly light-commercial per the Powell class count): together the majority of fleet NOx, kept
+# as distinct classes on purpose. Motorcycles (~1% of traffic) are folded into old gasoline as a
+# documented simplification (no MC class extracted; minor NOx). These shares are the Christof
+# calibration knob; tighten further with the MOVES 41051 age table and the layer-253 axle split.
 PORTLAND_FLEET = [
     ("PC_G_EU6", 0.33),    # newest gasoline passenger car (Tier 3 ~ Euro 6)
-    ("PC_G_EU5", 0.19),    # mid-age gasoline
+    ("PC_G_EU5", 0.196),   # mid-age gasoline (+0.006 rebalance, see note below)
     ("PC_G_EU4", 0.19),    # mid/older gasoline
     ("PC_G_EU3", 0.15),    # old gasoline (+ ~1% motorcycle folded in as gasoline)
     ("PC_D_EU5", 0.03),    # diesel passenger car, Euro 5  (NOx-critical)
     ("PC_D_EU6", 0.02),    # diesel passenger car, Euro 6  (NOx-critical)
     ("BEV",      0.03),    # battery-electric, zero tailpipe NOx
-    ("LDV_D_EU5", 0.02),   # light commercial diesel van
-    ("HDV_D_EU5", 0.03),   # heavy-duty diesel truck       (NOx-critical)
-    ("Bus",       0.01),   # urban transit bus (diesel)    (NOx-critical)
+    ("LDV_D_EU5", 0.045),  # two-axle light commercial diesel (bulk of Powell's ~5.4% trucks)
+    ("HDV_D_EU5", 0.004),  # genuine heavy multi-axle diesel (~0.05% on Powell, a sliver)
+    ("Bus",       0.005),  # TriMet diesel transit bus (NOx-heavy; named deliberately)
 ]
+# Rebalanced PC_G_EU5 0.19 -> 0.196 to keep the shares summing to 1.00 after the layer-253
+# commercial split (the freed share goes back to the dominant mid-age gasoline bucket).
 
 
 def validate(mix):
