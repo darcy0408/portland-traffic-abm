@@ -22,10 +22,13 @@ calibration model that does not touch any cited number.
   model-to-model framing and name a local sampler campaign as future work, not a task here.
 - **Built a real calibrated mixed-fleet emission model** (`src/fleet.py`): 40 verified
   HBEFA3 vehicle classes and a sourced Multnomah County fleet mix, including a Powell
-  heavy-vehicle share from real PBOT class counts. It showed the current all-diesel
-  (PC_D_EU4) assumption overstates NOx by about 1.8x, which means today's NO2 surface is an
-  upper bound. Kept fully separate from the demo as an offline preview on the existing NO2
-  surface (no sim run), so it never touched a cited number.
+  heavy-vehicle share from real PBOT class counts (layer 253, which found Powell's "trucks"
+  are ~99% two-axle light commercial, not heavy diesel). It showed the current all-diesel
+  (PC_D_EU4) assumption overstates NOx by roughly 2 to 4x (the offline `src/fleet_preview.py`
+  gives ~4x after that truck-share calibration; the factor is sensitive to the heavy/bus
+  share, the key remaining knob), which means today's NO2 surface is an honest upper bound.
+  Kept fully separate from the demo as an offline preview on the existing NO2 surface (no sim
+  run), so it never touched a cited number.
 - **Scouted whether the flagged calibration knobs are even gettable.** Signal timing is NOT
   (Powell runs SCATS adaptive control, so there is no fixed published plan), but fleet
   composition IS, which is what justified building the fleet model.

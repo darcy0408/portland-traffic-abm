@@ -178,9 +178,12 @@ are not split into directional AM/PM commute flows; the live emission fleet is s
 single PC_D_EU4 (all-diesel) class. As of Jun 26 src/fleet.py provides a calibrated
 mixed-fleet alternative (40 HBEFA3 classes + a sourced Multnomah County mix with a
 PBOT-derived Powell heavy-vehicle share) and an offline preview on the existing NO2 surface
-(no sim run); it shows the all-diesel assumption overstates NOx by about 1.8x, so the
-current NO2 surface is an honest upper bound. Whether to switch the live sim to the
-mixed fleet is a Christof calibration decision. Calibration knobs flagged in config.py to
+(no sim run, src/fleet_preview.py); it shows the all-diesel assumption overstates NOx by
+roughly 2 to 4x (the network preview gives ~4x once the Powell truck share is calibrated to
+real PBOT layer-253 class counts, which found Powell's "trucks" are ~99% two-axle light
+commercial, not heavy diesel; the exact factor is sensitive to the heavy-diesel/bus share,
+the key remaining knob), so the current NO2 surface is an honest upper bound. Whether to
+switch the live sim to the mixed fleet is a Christof calibration decision. Calibration knobs flagged in config.py to
 set with Christof: F_NO2, the fleet class, signal timing, and now the gravity decay scale.
 
 Noise path (week 8): a FIRST version of the second output surface is now built (Jun 26,
