@@ -220,8 +220,16 @@ if they are even gettable for a remote student. Result: one is gated, one is bui
     https://sumo.dlr.de/docs/Vehicle_Type_Parameter_Defaults.html
   - TYPE-ONLY CROSS-CHECK (free, local): Oregon DMV registrations by county (Multnomah ~95%
     passenger). https://www.oregon.gov/odot/dmv/pages/news/vehicle_stats.aspx
-  - Open knob (Christof decision): how finely to resolve the diesel / heavy-duty share,
-    since those dominate per-vehicle NOx. The MOVES `avft` table for 41051 settles it locally.
+  - LOCAL Powell heavy-vehicle share: PBOT **layer 253 "Vehicle Class Counts"** (separate from
+    the layer-250 volumes the project pulls) carries `PctTrucks` / `PctCars` / `TwoAxleCF`. 2014
+    counts on SE Powell at SE 28th give volume-weighted **%Trucks = 5.4%**, but `TwoAxleCF ~ 0.99`
+    means ~99% are TWO-AXLE light commercial (vans), not heavy multi-axle (~0.05%). So Powell's
+    "trucks" are mostly light-commercial diesel, with transit buses hidden in the 2-axle count.
+    PORTLAND_FLEET now reflects this. Endpoint (same no-key REST pattern as traffic_counts.py):
+    https://www.portlandmaps.com/od/rest/services/COP_OpenData_Transportation/MapServer/253/query
+  - Open knob (Christof decision): how finely to resolve the diesel / heavy-duty / bus split
+    inside that 5.4%, since those dominate per-vehicle NOx. The MOVES `avft` table for 41051 and
+    the layer-253 axle split settle it locally.
 - **Real time-of-day volumes: already prototyped.** The `day` mode (24 hourly runs scaled by
   the PORTAL profile) adds the temporal dimension; see section 5 / PROGRESS.md.
 
