@@ -6,6 +6,60 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-29 — Demo deck polish + 6-slide cut; Rao data arrives; parallel forest pipeline found
+
+Most of this session was on the demo decks (which live on Google Drive, outside the repo) and
+on handling Rao's data. The only repo code change committed by this session is a one-line
+wording tweak to the SIGSPATIAL abstract; the forest-pipeline commits below were made by a
+parallel agent working the same repo at the same time.
+
+**Did:**
+- **Demo deck (`G:\My Drive\PSU REU\Presentations\Powell_ABM_demo_v5.pptx`, outside the repo).**
+  Fixed three things: (1) the "why static can't" slide's speaker notes contradicted its figure
+  (notes said the land-use baseline R2 was -0.16 "barely explaining" while the figure says it
+  fits at 0.51); rewrote the notes to the 0.51 strong-baseline framing. (2) Swapped the Future
+  Work slide's "rain" content for the noise surface. (3) Added a new noise slide (CNOSSOS dB(A)
+  surface, min/median/max 26.5 / 39.6 / 59.4, loudest on Powell and Division), cloned from the
+  NO2 slide so the styling matched, then moved it to slide 5 beside the NO2 surface and
+  renumbered all section badges. Verified the runtime slide's numbers against the committed
+  `benchmark` mode (real 200-step runs; a full simulated hour is ~6 s for 500 cars).
+- **Built a 6-slide short cut, `Powell_ABM_demo_v5_short_v3.pptx`** (title + geospatial + NO2 +
+  closure + why-static + traffic-counts) so Darcy can ask Christof which length he wants.
+  Tightened wording and fixed an overlapping stat box (the "0.26 -> 0.38" label was wrapping
+  onto its sublabel).
+- **Installed LibreOffice** so decks can be rendered to PNG and verified visually (caught the
+  white-on-white background bug on the cloned noise slide that a text-only check would miss).
+  Recipe saved in memory `deck-rendering-libreoffice`.
+- **Explained the deck's terms to Darcy** in plain language: R2 and the "baseline R2 is not my
+  model's score" framing, PBOT, Spearman rank correlation, absolute volumes, the 0.33 score,
+  and the gravity demand model.
+- **Rao's NO2 sampler data ARRIVED** (`no2_for_Darcy.xlsx`): 603 readings at 352 unique sites
+  across the whole Portland metro, with measured NO2, four sampling rounds, and season (521
+  summer / 82 winter). Analyzed the spatial spread: only 5 sites fall in the 1.5 km Powell
+  window, but ~67 within 5 km and ~158 within 8 km. A random forest cannot train/test on 5
+  points, so the comparison would require widening the study area, which is a
+  Powell-focus-vs-wider-network call for Christof. Darcy emailed Christof to let him decide
+  whether the comparison is worth doing at all (his earlier steer treated it as optional).
+- **A parallel agent had already built it.** The data is banked at `data/rao/no2_for_Darcy.xlsx`
+  (gitignored, never commit) and a parallel session committed the full pipeline: `src/rao_data.py`
+  (loader), a land-use site-feature builder, and `src/forest_compare.py` (land-use vs ABM vs
+  both forests, spatial block cross-validation per Roberts, reads saved surfaces, runs no sim).
+  It reached the same conclusion (too few sites on the 1.5 km net) and parked the pipeline as
+  dormant plumbing, not yet run. Removed the redundant duplicate copy this session had made.
+
+**Decisions:**
+- `short_v3` (6 slides) is the Monday demo; the full `v5` (16 slides) is the backup. Plan: open
+  by letting Christof pick the length.
+- Rao data is banked with no urgency. Do NOT widen the network or run the forest comparison
+  unless Christof asks; the pipeline is ready when/if he does. The closure and noise
+  contributions still need nothing from Rao.
+
+**Next step:**
+- Rehearse `short_v3` for Monday's demo. Await Christof's reply on two things: the demo itself,
+  and whether to pursue the Rao forest comparison and at what study-area scope.
+
+---
+
 ## 2026-06-26 (demo deck build) — Monday deck fleshed out and polished, numbers re-verified
 
 Ran concurrently with the fleet-calibration and DEQ-monitoring sessions logged below (parallel

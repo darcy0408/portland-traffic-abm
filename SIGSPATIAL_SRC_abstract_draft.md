@@ -101,8 +101,9 @@ We compare the agent model against a static baseline: a random forest fit on
 land-use and network predictors, with an out-of-bag R squared of 0.51. The
 baseline is well fit and is not a strawman.
 
-We then close a 150 m zone on the arterial (24 directed segments) and rerun the
-same travel demand so vehicles reroute around it. The static surface does not
+We then pose the edge-removal counterfactual: close a 150 m zone on the arterial
+(24 directed segments) and rerun the same travel demand so vehicles reroute
+around it. The static surface does not
 change, because none of its land-use inputs change. The agent model strips 68 to
 80 percent of the closed arterial's NO2 from the closed stretch and redistributes
 it onto the parallel routes that detouring traffic takes up; on SE Powell the

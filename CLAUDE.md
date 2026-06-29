@@ -224,16 +224,19 @@ so the contribution is not blocked on the sampler data.
 Next build step: rehearse the built demo (Powell_ABM_demo_v4.pptx, DEMO.md) and get
 Christof's SIGSPATIAL go/no-go at Monday's meeting. Week-6 groundwork exists:
 src/predictors.py builds Rao-style multi-buffer (100 to 1200 m) ABM traffic predictors
-(config.BUFFER_RADII_M). The Rao forest comparison needs Rao's NO2
-sampler-site coordinates and values as the shared target; these are confirmed not
-public (not in the paper supplement or the dissertation, only a site map), so they must
-come from Rao/George (request sent Jun 24; Christof thinks the data traces to a past
-student, so plan for not getting it). Fallbacks if the site data does not come,
-simplest first: (1) ask for Rao's modeled NO2 surface instead of raw sites and do a
-surface-to-surface comparison; (2) make the closure result and the noise path the
-headline contribution, since neither needs external data; (3) keep the forest pipeline
-ready to run when any target appears. The blocked cross-validation that makes the
-comparison fair (Roberts paper) waits on having a target. Alternatives still open: wire
+(config.BUFFER_RADII_M). UPDATE Jun 28-29: Rao's NO2 sampler data ARRIVED (she sent it
+directly; banked at data/rao/no2_for_Darcy.xlsx, gitignored, never commit). It is 603
+readings at 352 unique sites across the whole Portland metro (measured NO2, 4 rounds, 521
+summer / 82 winter), so the long-standing "not public, must come from Rao" block is
+resolved. The full comparison pipeline is now built and committed (src/rao_data.py loader,
+a land-use site-feature builder, src/forest_compare.py: land-use vs ABM vs both forests with
+Roberts spatial block cross-validation, reads saved surfaces, runs no sim). It is PARKED, not
+yet run, for one reason: only 5 sites fall in the 1.5 km Powell window (too few to train and
+test a forest), so running it for real means widening the study area (~67 sites at 5 km, ~158
+at 8 km), which is a Powell-focus-vs-wider-network scope decision for Christof. Darcy emailed
+him to decide whether the comparison is even worth pursuing; until he replies, do not widen
+the network or run it. The closure result and the noise path remain the headline contributions
+and need nothing from Rao. Alternatives still open: wire
 the PORTAL+ODOT demand into generate.py, or grow the closure experiment into a planned
 multi-scenario comparison once Christof weighs in.
 
