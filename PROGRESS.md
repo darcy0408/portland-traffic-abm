@@ -6,6 +6,55 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-29 (forest pipeline + abstract + Rao benchmark) — built the whole week-6 comparison, ready to fire
+
+Ran in parallel with the demo-deck session logged just below (two agents, same repo, same day,
+kept apart by the one-sim and no-shared-file rules). This session owned the SIGSPATIAL abstract,
+the Rao data handling, and building out the week-6 forest comparison; that session owned the
+decks. Both reached the same Rao conclusion independently (too few sites on the 1.5 km net).
+
+**Did:**
+- **Hardened and committed the SIGSPATIAL abstract** (`SIGSPATIAL_SRC_abstract_draft.md`, was an
+  untracked floating draft). Filled the real Rao and HBEFA/SUMO citations, and replaced an
+  out-of-scope "ongoing work" claim (a mobile-exposure pedestrian layer + a particulate-matter
+  surface, neither built nor in scope) with the project's real next steps: the Rao land-use
+  random-forest NO2 comparison (with Roberts spatial block cross-validation) and the FHWA TNM
+  noise comparison. Fixed a method overstatement (cross-validation belongs to the forest
+  comparison, not the surface-to-surface TNM one).
+- **Profiled, preserved, and benchmarked Rao's data.** Copied `no2_for_Darcy.xlsx` into the
+  gitignored `data/rao/` (confirmed git ignores it; it is her unpublished field data, never
+  commit). Confirmed the 174-summer / 82-winter rounds are the exact 2017-paper campaign, plus
+  two bonus 2012 summer rounds. Ran a real runtime benchmark of an expanded network: a 5 km
+  network is 9,015 nodes / 25,991 edges, holds 68 sampler sites, and runs ~10 to 20 minutes per
+  simulated hour, so the wider-network option is computationally fine (nowhere near the
+  days-or-weeks risk Christof flagged). This is the feasibility number behind the scope decision.
+- **Built the full week-6 comparison pipeline** (decision-independent, reads files, runs no sim;
+  4 commits): `src/rao_data.py` (NO2 target loader), `predictors.build_site_predictors` (ABM
+  traffic features at the sampler sites, pulled from existing saved columns),
+  `landuse_model.build_site_features` (Rao-style land-use features at the same sites, a pure
+  addition that leaves the frozen demo path untouched), and `src/forest_compare.py` (same forest
+  on land-use vs ABM vs both, scored with Roberts spatial block CV). Smoke-tested end to end on
+  the frozen `powell_no2` run; numbers are not interpretable yet (only 15 sites in range) but the
+  plumbing is proven. Real result is one command once the network grows.
+- **Drafted a scope-decision email to Christof** recommending the 5 km network (68 sites,
+  tractable runtime), keeping closure + noise as the headline, Powell as Plan B. Tied to his
+  Jul 4 departure and Monday's go/no-go.
+- **Updated memories** so future sessions know the Rao data arrived (`rao-comparison-target-data`,
+  `rao-site-data-not-public`, and the index).
+
+**Decisions:**
+- The pipeline is built but PARKED until Christof picks the network scope (5 km vs full metro)
+  AND the demo's sim freeze lifts. Do not widen the network or run it before then. When ready,
+  the steps are: set `STUDY_RADIUS_M = 5000`, regenerate the graph cache and `landuse_bg.parquet`
+  for the larger area, run the sim, then `python src/forest_compare.py <run>`.
+- Kept the model-to-model framing and the honest in-scope abstract; cut the invented future work.
+
+**Next step:**
+- Send the scope email so Christof can decide before Jul 4, then await his reply on scope. Once
+  decided and the demo is done, do the 5 km regen + run and produce the real comparison.
+
+---
+
 ## 2026-06-29 — Demo deck polish + 6-slide cut; Rao data arrives; parallel forest pipeline found
 
 Most of this session was on the demo decks (which live on Google Drive, outside the repo) and

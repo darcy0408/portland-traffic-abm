@@ -233,9 +233,14 @@ a land-use site-feature builder, src/forest_compare.py: land-use vs ABM vs both 
 Roberts spatial block cross-validation, reads saved surfaces, runs no sim). It is PARKED, not
 yet run, for one reason: only 5 sites fall in the 1.5 km Powell window (too few to train and
 test a forest), so running it for real means widening the study area (~67 sites at 5 km, ~158
-at 8 km), which is a Powell-focus-vs-wider-network scope decision for Christof. Darcy emailed
-him to decide whether the comparison is even worth pursuing; until he replies, do not widen
-the network or run it. The closure result and the noise path remain the headline contributions
+at 8 km), which is a Powell-focus-vs-wider-network scope decision for Christof. The wider
+network is computationally fine: a 5 km network (9,015 nodes / 25,991 edges, 68 sites) was
+benchmarked at ~10 to 20 minutes per simulated hour, nowhere near the days-or-weeks
+computational risk, so cost is not a reason to avoid it. A scope-decision email to Christof was
+drafted (recommending the 5 km network); until he replies, do not widen the network or run it.
+When cleared, the run steps are: set STUDY_RADIUS_M = 5000, regenerate the graph cache and
+landuse_bg.parquet for the larger area, run the sim, then python src/forest_compare.py <run>.
+The closure result and the noise path remain the headline contributions
 and need nothing from Rao. Alternatives still open: wire
 the PORTAL+ODOT demand into generate.py, or grow the closure experiment into a planned
 multi-scenario comparison once Christof weighs in.
