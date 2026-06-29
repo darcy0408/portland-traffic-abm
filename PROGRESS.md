@@ -6,6 +6,55 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-29 (research scan + abstract reframe + SRC logistics) — found the nearest prior art, made the abstract read as SIGSPATIAL
+
+Ran alongside the forest-pipeline and demo-deck sessions logged below (same day, different
+focus). This session was the strategy/writing/literature side: email triage, the related-work
+scan, reframing the abstract for the SIGSPATIAL audience, verifying the headline figure, and
+nailing down the submission logistics.
+
+**Did:**
+- **Cleaned up the Google Scholar alerts.** The old alerts were mostly noise (sociology
+  "street-level bureaucrat" papers, out-of-scope reservoir computing). Replaced them with five
+  targeted queries (traffic NO2, OSMnx+traffic, agent-based+air-quality, CNOSSOS/noise) and
+  dropped the dead pollen alert, so the inbox now surfaces real related work.
+- **Found the closest prior art: Tirico et al. 2025** (Transportation Research Part D), which
+  runs the same traffic -> NO2 + CNOSSOS-noise chain. Read it, saved it to Zotero, and worked out
+  what it means: it VALIDATES the method as publishable, and it does NOT do the static-vs-dynamic
+  comparison, so the project's contribution stays intact and distinct. Memory written
+  (tirico-2025-related-work).
+- **Reframed the SIGSPATIAL abstract for the spatial-systems audience.** Rewrote the abstract
+  opening, keywords, and intro to lead with "spatial data products" and frame the road closure as
+  an edge-removal counterfactual on a network (plus a matching tweak in the results). Same
+  science, but it now reads as a SIGSPATIAL paper, not an environmental one. Merged cleanly with
+  the parallel session's citation and ongoing-work edits to the same file.
+- **Verified the headline figure renders.** Ran src/static_vs_abm.py from existing files (no
+  sim): static panel blank, ABM panel redistributes, and the numbers match the abstract (OOB
+  R^2 0.51, Powell -82%, Division +132%, Holgate +54%, 2,409 segments move). Noted two poster
+  improvements: label the arterials on the map, and rename "Rao's method" to "Rao-style" now that
+  Rao's actual data has arrived (avoids confusing the method with the data).
+- **Confirmed the SIGSPATIAL SRC submission logistics** from the official 2026 page: 2-page
+  extended abstract, ACM format, undergraduate track, firm deadline Jul 10 2026, via EasyChair.
+- **Memories written:** tirico-2025-related-work and project-ambition-grad-level (Darcy wants the
+  most well-thought-out grad-level project of the cohort; favor depth, protect the Rao+closure core).
+
+**Decisions:**
+- Do NOT rush a Rao head-to-head comparison just to show Christof in the meeting. A two-hour
+  result on ~68 sites would be noisy and unpinned, and a sloppy number risks credibility with a
+  mentor who draws a hard research-vs-engineering line. Prep the pipeline and decide scope with
+  him instead (consistent with the parked-pipeline decision logged below). Note: subscription tier
+  does not speed the simulation; the bottleneck is sim runtime and rigor, not assistant throughput.
+- Keep the mobile-exposure ("runner") layer and a particulate-matter surface as possible later
+  extensions, NOT in the SRC abstract.
+
+**Next step:**
+- At Christof's meeting, get four answers: the SIGSPATIAL go/no-go, the Rao network-scope decision
+  (5 km / 68 sites is the recommendation), travel funding for Riverside, and whether the REU
+  chapter trips the not-published-elsewhere clause. Then one pinned-seed run locks the abstract's
+  cited numbers.
+
+---
+
 ## 2026-06-29 (forest pipeline + abstract + Rao benchmark) — built the whole week-6 comparison, ready to fire
 
 Ran in parallel with the demo-deck session logged just below (two agents, same repo, same day,

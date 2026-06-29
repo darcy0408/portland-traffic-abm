@@ -221,6 +221,21 @@ SIGSPATIAL_ABSTRACT_MATERIAL.md collects the 2-page abstract building blocks. Th
 deck is built (Powell_ABM_demo_v4.pptx, 13 slides). All of this needs nothing from Rao,
 so the contribution is not blocked on the sampler data.
 
+Closest prior art identified (Jun 28): Tirico et al. 2025 (Transportation Research Part D
+149, 105029) runs essentially the same chain, microscopic traffic to NO2 plus CNOSSOS noise,
+which VALIDATES this method as publishable. The differentiation: they compare
+traffic-management scenarios inside their own model and never compare a dynamic surface
+against a static land-use baseline, so the static-vs-dynamic comparison and the closure
+redistribution remain this project's own contribution (memory: tirico-2025-related-work).
+The SIGSPATIAL SRC submission is confirmed from the official 2026 page: a 2-page extended
+abstract (ACM format), undergraduate track, firm deadline Jul 10 2026, via EasyChair. The
+abstract draft (SIGSPATIAL_SRC_abstract_draft.md) was given a spatial-systems reframe (the
+closure framed as an edge-removal counterfactual on a network) so it reads as a SIGSPATIAL
+contribution rather than an environmental one. Two logistics to clear with Christof: SRC
+finalists must present in person in Riverside CA (Nov 3-6 2026), so acceptance implies
+travel/funding, and the not-published-elsewhere clause should be checked against the REU
+proceedings chapter.
+
 Next build step: rehearse the built demo (Powell_ABM_demo_v4.pptx, DEMO.md) and get
 Christof's SIGSPATIAL go/no-go at Monday's meeting. Week-6 groundwork exists:
 src/predictors.py builds Rao-style multi-buffer (100 to 1200 m) ABM traffic predictors
