@@ -285,6 +285,58 @@ def build_features(G, seg_df, radii=None):
     return pd.DataFrame(cols, index=seg_df.index)
 
 
+def build_site_features(G, sites, radii=None):
+    """Build the Rao-style land-use feature matrix at a set of POINTS (the
+    passive-sampler sites), one row per site in `sites` order.
+
+    This is the land-use counterpart to predictors.build_site_predictors: the same
+    buffer aggregation, but centered on each sampler site instead of a segment
+    midpoint, so the static (land-use) and agent (traffic) forests are fit on the
+    SAME points with only the predictor SOURCE differing. It reuses every helper in
+    this module unchanged; build_features (the per-segment demo path) is untouched.
+
+    `sites` is a DataFrame with columns site_id, lat, lon. Features (each over every
+    buffer radius): pop_buf, jobs_buf, majrdlen_buf, minrdlen_buf, nodes_buf, plus a
+    single dist_major (meters to the nearest major-road midpoint). The per-segment
+    "own road" features (own_length/own_is_major/own_rank) are dropped: a sampler
+    point does not sit on one specific edge, and dist_major already encodes arterial
+    proximity. Every feature is permanent built environment, so it is closure-
+    invariant exactly as in the per-segment case.
+    """
+    radii = config.BUFFER_RADII_M if radii is None else radii
+
+    c_lat = sites["lat"].to_numpy(float)        # center points: the sampler sites
+    c_lon = sites["lon"].to_numpy(float)
+
+    bg = pd.read_parquet(BG_PATH)               # population / jobs masses
+    bg_lat, bg_lon = bg["lat"].to_numpy(float), bg["lon"].to_numpy(float)
+    pop, jobs = bg["population"].to_numpy(float), bg["jobs"].to_numpy(float)
+
+    e_lat, e_lon, e_len, e_major = _edge_geometry(G)
+    maj_len = np.where(e_major, e_len, 0.0)
+    min_len = np.where(e_major, 0.0, e_len)
+
+    n_lat, n_lon = _node_coords(G)
+    ones = np.ones_like(n_lat)
+
+    pop_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, pop, radii)
+    job_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, jobs, radii)
+    maj_sums = _cross_buffer_sums(c_lat, c_lon, e_lat, e_lon, maj_len, radii)
+    min_sums = _cross_buffer_sums(c_lat, c_lon, e_lat, e_lon, min_len, radii)
+    node_sums = _cross_buffer_sums(c_lat, c_lon, n_lat, n_lon, ones, radii)
+
+    cols = {}
+    for r in radii:
+        cols[f"pop_buf{r}"] = pop_sums[r]
+        cols[f"jobs_buf{r}"] = job_sums[r]
+        cols[f"majrdlen_buf{r}"] = maj_sums[r]
+        cols[f"minrdlen_buf{r}"] = min_sums[r]
+        cols[f"nodes_buf{r}"] = node_sums[r]
+    cols["dist_major"] = _nearest_distance(c_lat, c_lon, e_lat[e_major], e_lon[e_major])
+
+    return pd.DataFrame(cols, index=sites.index)
+
+
 def build_static_model(radii=None):
     """Load everything, build the land-use features, fit the random forest, and return
     a StaticModel. The forest uses the SAME settings as the ABM-side forest so the two
