@@ -124,6 +124,70 @@ def build_abm_predictors(run_name=None, radii=None):
     return out
 
 
+def _segment_lengths(G, df):
+    """Segment length in meters, aligned row-for-row with df (from the graph edge
+    geometry, which the parquet does not carry)."""
+    out = np.empty(len(df))
+    for i, r in enumerate(df.itertuples()):
+        out[i] = float(G[r.u][r.v][r.key].get("length", 10.0))
+    return out
+
+
+def build_site_predictors(sites, run_name=None, radii=None):
+    """Build Rao-style multi-buffer ABM traffic predictors AT a set of points
+    (the passive-sampler sites), the form the forest comparison needs.
+
+    build_abm_predictors centers each buffer on a segment midpoint (segment ->
+    segment). Here each buffer is centered on a sampler SITE, and we aggregate the
+    surrounding segments' traffic into that site's feature row (site -> segments).
+    Same neighborhood idea as Rao: a location is described by the traffic in the
+    rings around it, not by the one segment it happens to sit on.
+
+    `sites` is a DataFrame with columns site_id, lat, lon (e.g. from
+    rao_data.rao_targets). For each site and each radius we compute:
+      - activity_buf{r}:   total vehicle-seconds on segments within r meters
+      - throughput_buf{r}: total vehicle traversals (the model's count) within r
+      - meanspeed_buf{r}:  activity-weighted mean realized speed (m/s) within r,
+                           with v_mean = length * throughput / vehicle-seconds
+    plus n_seg_buf{max r} so a site with no nearby network is easy to drop.
+
+    Only the segments present in the run are used, so a site outside the simulated
+    network simply gets zeros (and n_seg ~ 0); filter those before training.
+    """
+    radii = config.BUFFER_RADII_M if radii is None else radii
+    G = load_network()
+    df = load_run(run_name)
+
+    seg_lat, seg_lon = _segment_midpoints(G, df)
+    activity = df["value"].to_numpy(float)
+    throughput = df["throughput"].to_numpy(float)
+    length = _segment_lengths(G, df)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        v_mean = np.where(activity > 0, length * throughput / activity, 0.0)
+
+    sx, sy = _local_xy(seg_lat, seg_lon)                       # segments
+    px, py = _local_xy(sites["lat"].to_numpy(float),
+                       sites["lon"].to_numpy(float))           # sites
+    # site-by-segment squared distances (P sites x N segments)
+    d2 = (px[:, None] - sx[None, :]) ** 2 + (py[:, None] - sy[None, :]) ** 2
+
+    out = pd.DataFrame({
+        "site_id": sites["site_id"].to_numpy(),
+        "lat": sites["lat"].to_numpy(float),
+        "lon": sites["lon"].to_numpy(float),
+    })
+    act_w = v_mean * activity                                  # for weighted speed
+    for r in radii:
+        within = d2 <= float(r) ** 2                           # P x N neighbor mask
+        a = within @ activity
+        out[f"activity_buf{r}"] = a
+        out[f"throughput_buf{r}"] = within @ throughput
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out[f"meanspeed_buf{r}"] = np.where(a > 0, (within @ act_w) / a, 0.0)
+    out[f"n_seg_buf{max(radii)}"] = (d2 <= float(max(radii)) ** 2).sum(axis=1)
+    return out
+
+
 if __name__ == "__main__":
     run = sys.argv[1] if len(sys.argv) > 1 else config.RUN_NAME
     feats = build_abm_predictors(run)
