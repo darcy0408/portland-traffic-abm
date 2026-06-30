@@ -6,6 +6,44 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-29 (built the Wednesday traffic-foundation deck) — turned the understanding into a deck, a figure, and one more experiment
+
+Follow-on to the understanding session below. Took everything we worked out about the
+traffic-validation plot and turned it into the actual deliverable for Wednesday: a figure,
+a deck, a study guide, and one more "try to break it" experiment.
+
+**Did:**
+- **Built the side-by-side validation figure** (src/validate_traffic_map.py): the model's
+  traffic next to the real PBOT/county counts on the SAME streets, colored by rank so busy
+  matches busy, plus the Spearman scatter with rho. Reads saved files, runs no simulation.
+  This is the "show the heat map matches the real data" picture Christof asked for.
+- **Ran the saturation experiment in the repo.** Re-ran the sim at 240 vehicles vs 500
+  (below the lane-capacity ceiling) under a separate run name so the authoritative
+  powell_no2 files were untouched. Rank correlation went 0.328 -> 0.329: no change. config.py
+  now documents this and is reverted to the authoritative 500-vehicle setup.
+- **Settled the per-hour vs per-day question with data.** Summed the existing 24-hour run
+  into a model daily total (matching ADT's units): rho 0.327 vs the 1-hour 0.328, and the
+  two model measures rank streets at 0.999. So the time-window mismatch is why rank is the
+  right tool, NOT why the score is moderate. Added as a hidden backup slide.
+- **Built the Wednesday deck + study guide.** Powell_ABM_demo_v6.1_traffic_foundation.pptx:
+  5 slides (title, the four hand-checkable scenarios, the activity heat map, the real-count
+  validation, then stress-test + limits + next step) plus 1 hidden backup slide, scoped to
+  the traffic foundation only, matching the V5.2 dark/cyan style. Plus a speaker-notes +
+  21-question drill (Powell_ABM_v6_speaker_notes_and_drill.md). Both live in Downloads; decks
+  stay out of the repo by convention.
+
+**Decisions:**
+- The most likely lever to raise the ~0.33 is adding through-traffic (regional trips entering
+  and leaving at the network edge on the arterials), set a priori and NOT tuned to the
+  held-out PBOT counts. This is the next model change, after Christof clears it Wednesday.
+
+**Next step:**
+- Rehearse the v6.1 deck for Wednesday 8am, drilling slide 4 (what a point is, why rank)
+  until it can be explained without notes. After the meeting, if cleared, prototype the
+  through-traffic demand as the next model improvement.
+
+---
+
 ## 2026-06-29 (Monday meeting fallout + understanding the traffic-validation plot) — Christof's redirect: validate the traffic foundation first, and a session spent understanding it instead of building
 
 A hard but constructive session. Darcy felt the Monday demo meeting went badly (Zoom

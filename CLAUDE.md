@@ -251,8 +251,17 @@ rho 0.328 -> 0.329 at 240 vs 500 vehicles; boundary-exclusion diagnostic: no imp
 when edge segments are dropped). Christof also answered the scope email ("That is great!"):
 keep things SIMPLE FIRST, then scale to the FULL METRO area eventually (not the 5km
 compromise); so the Rao forest stays parked until the scale-up phase is explicitly
-green-lit. The next concrete deliverable is the foundation-first traffic validation for the
-Wednesday Jul 1 8am check-in. Week-6 groundwork exists:
+green-lit. The foundation-first traffic validation for the Wednesday Jul 1 8am check-in is now
+BUILT (Jun 29): src/validate_traffic_map.py renders the model's traffic beside the real
+PBOT/county counts on the same streets (rank-colored) plus the Spearman scatter, reading
+saved files (no sim). A 5-slide traffic-foundation deck (no NO2/closure, lead with the
+cars) and a speaker-notes + 21-question study guide were built (in Downloads, decks stay
+out of the repo). Also settled the per-hour-vs-per-day question: summing the 24-hour run
+to a model daily total gives rho 0.327 vs the 1-hour 0.328 (the two rank streets at 0.999),
+so the time window is WHY rank is the right comparison, not why the score is moderate. The
+most likely lever to raise the ~0.33 is adding through-traffic (boundary/cordon trips on
+the arterials, set a priori, NOT tuned to the held-out counts); prototype it after Christof
+clears it. Week-6 groundwork exists:
 src/predictors.py builds Rao-style multi-buffer (100 to 1200 m) ABM traffic predictors
 (config.BUFFER_RADII_M). UPDATE Jun 28-29: Rao's NO2 sampler data ARRIVED (she sent it
 directly; banked at data/rao/no2_for_Darcy.xlsx, gitignored, never commit). It is 603
