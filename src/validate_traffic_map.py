@@ -60,6 +60,28 @@ def _short(name):
     return name
 
 
+HIT_COL = "#1fe0c8"    # cyan: the model's best agreement (a headline arterial)
+MISS_COL = "#ff45d0"   # magenta: the model's worst over-rate (a quiet street it over-uses)
+
+
+def _mark_location(ax, G, edge, color, label):
+    """Ring an edge's location on a map with an open circle (so the street's own
+    rank color still shows through) and label it, so the same street can be traced
+    across all three panels."""
+    u, v, k = edge
+    geom = G.edges[edge].get("geometry")
+    if geom is not None:
+        xs, ys = geom.xy
+        mx, my = xs[len(xs) // 2], ys[len(ys) // 2]
+    else:
+        mx = 0.5 * (G.nodes[u]["x"] + G.nodes[v]["x"])
+        my = 0.5 * (G.nodes[u]["y"] + G.nodes[v]["y"])
+    ax.scatter([mx], [my], s=320, facecolors="none", edgecolors=color,
+               linewidths=2.6, zorder=10)
+    ax.annotate(label, (mx, my), textcoords="offset points", xytext=(9, 6),
+                color=color, fontsize=9, weight="bold", zorder=11)
+
+
 def _spearman(a, b):
     """Spearman rank correlation: Pearson correlation of the ranks."""
     ra = pd.Series(a).rank().to_numpy()
@@ -113,6 +135,19 @@ def main(run_name):
     rho = _spearman(per_seg["adt"], per_seg["throughput"])
     n = len(per_seg)
 
+    # pick two example segments to highlight in ALL three panels, so the audience
+    # can trace one street from the maps to the scatter: the model's best agreement
+    # on a headline arterial (Powell) and its worst over-rate (a quiet street the
+    # route-finder over-uses). Both come from the data, not hard-coded.
+    ranks_real = per_seg["adt"].rank().to_numpy()
+    ranks_model = per_seg["throughput"].rank().to_numpy()
+    segs = per_seg["seg"].to_numpy()
+    seg_names = np.array([_edge_name(G, seg_to_edge[s]) for s in segs], dtype=object)
+    is_powell = np.array(["Powell" in nm for nm in seg_names])
+    hit_i = int(np.where(is_powell)[0][np.argmax(per_seg["adt"].to_numpy()[is_powell])])
+    miss_i = int(np.argmax(ranks_model - ranks_real))
+    hit_edge, miss_edge = seg_to_edge[segs[hit_i]], seg_to_edge[segs[miss_i]]
+
     cmap = mpl.colormaps["inferno"]
     fig = plt.figure(figsize=(18, 7), facecolor=BG)
     gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 0.9], wspace=0.08)
@@ -125,6 +160,12 @@ def main(run_name):
     _draw_map(fig, ax_model, G, model_by_edge, cmap,
               "MODEL traffic (ABM throughput)\ncolor = rank of vehicles through segment")
 
+    # ring the same two example streets on both maps in their scatter colors, so
+    # the eye can check: Powell bright in both (agreement), 26th dark-then-bright
+    for ax in (ax_real, ax_model):
+        _mark_location(ax, G, hit_edge, HIT_COL, _short(seg_names[hit_i]))
+        _mark_location(ax, G, miss_edge, MISS_COL, _short(seg_names[miss_i]))
+
     # shared rank colorbar spanning the two maps
     sm = mpl.cm.ScalarMappable(norm=mcolors.Normalize(0, 1), cmap=cmap)
     sm.set_array([])
@@ -136,8 +177,6 @@ def main(run_name):
     plt.setp(plt.getp(cbar.ax.axes, "xticklabels"), color="white")
 
     # scatter: the Spearman picture
-    ranks_real = pd.Series(per_seg["adt"]).rank().to_numpy()
-    ranks_model = pd.Series(per_seg["throughput"]).rank().to_numpy()
     ax_sc.set_facecolor(BG)
     ax_sc.scatter(ranks_real, ranks_model, s=22, c="#f2b134", alpha=0.8,
                   edgecolors="none")
@@ -147,18 +186,10 @@ def main(run_name):
     b, a = np.polyfit(ranks_real, ranks_model, 1)
     xs = np.array(lim)
     ax_sc.plot(xs, b * xs + a, color="#e0482b", lw=2)
-    # highlight two example streets so they can be pointed at during the talk:
-    # the model's best agreement on a headline arterial (Powell) and its worst
-    # over-rate (a quiet street the route-finder over-uses). Both read from data.
-    seg_names = np.array([_edge_name(G, seg_to_edge[s]) for s in per_seg["seg"]], dtype=object)
-    adt_vals = per_seg["adt"].to_numpy()
-    is_powell = np.array(["Powell" in nm for nm in seg_names])
-    hit_i = int(np.where(is_powell)[0][np.argmax(adt_vals[is_powell])])  # busiest Powell segment
-    miss_i = int(np.argmax(ranks_model - ranks_real))                    # biggest model over-rate
-    # both example dots sit high on the plot, so drop their labels below and inward
-    # (hit -> lower-left, miss -> lower-right) to clear the title and each other
-    for i, role, col, dx, ha in [(hit_i, "hit", "#1fe0c8", -10, "right"),
-                                 (miss_i, "miss", "#ff45d0", 10, "left")]:
+    # mark the same two example streets as on the maps (open circle + label); both
+    # dots sit high on the plot, so drop their labels below to clear the title
+    for i, role, col, dx, ha in [(hit_i, "hit", HIT_COL, -10, "right"),
+                                 (miss_i, "miss", MISS_COL, 10, "left")]:
         ax_sc.scatter([ranks_real[i]], [ranks_model[i]], s=140, facecolors="none",
                       edgecolors=col, linewidths=2.4, zorder=5)
         ax_sc.annotate(f"{_short(seg_names[i])} ({role})",
