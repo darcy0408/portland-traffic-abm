@@ -127,3 +127,7 @@ N_STEPS = 3600                # example: one simulated hour at one-second steps
 CHECKPOINT_EVERY = 300        # save state every 300 steps, so a crash loses at most this much work
 RUN_NAME = "powell_no2"       # names the output files; change it for each new experiment
                               # (this run: spillback + HBEFA3 NOx -> NO2 surface)
+# Jun 29 saturation-vs-rank test: re-ran at N_VEHICLES=240 (RUN_NAME "powell_n240")
+# to see if unsaturating raised the traffic-count rank correlation. It did NOT
+# (rho 0.328 -> 0.329), so the weak ordering is about demand STRUCTURE/routing, not
+# magnitude. Reproduce by setting N_VEHICLES=240 and RUN_NAME="powell_n240" here.
