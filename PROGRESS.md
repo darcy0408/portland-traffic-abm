@@ -6,6 +6,72 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-29 (Monday meeting fallout + understanding the traffic-validation plot) — Christof's redirect: validate the traffic foundation first, and a session spent understanding it instead of building
+
+A hard but constructive session. Darcy felt the Monday demo meeting went badly (Zoom
+fumbling, plus could not answer Christof's questions about the traffic-validation plot
+live). Read the full meeting transcript and got an honest picture, then spent the session
+NOT building, but understanding the foundation, which is exactly what Christof asked for.
+
+**Did:**
+- **Confirmed Christof's scope reply.** He answered the Jun 28 scope email: "That is
+  great!" and chose a STAGED path, "keep things simple first and then scale up to the
+  full metro area." So the eventual target is the full metro, NOT the 5km compromise, and
+  the immediate priority is to simplify/clarify/validate, not widen the network. The Rao
+  forest comparison stays parked until the scale-up phase is explicitly green-lit. Memory
+  updated (rao-comparison-target-data).
+- **Read the full meeting transcript honestly.** Christof's real critique was not "your
+  project is bad" (he ended with "keep up the good work" and called the closure "very
+  cool"). It was: you are moving faster than you can explain, VALIDATE THE TRAFFIC
+  FOUNDATION before NO2, understand every piece, do not add more, and he reads the current
+  traffic-count scatter as NOT yet showing the model works (the dots scatter instead of
+  hugging the diagonal). He flagged the AI-tool trap (generating output you cannot explain).
+  Memory written (christof-jun29-validate-traffic-first).
+- **Understood the traffic-validation plot from the ground up** (the Wednesday homework
+  Christof set): what a dot is (one street segment with a real count, 247 of ~2,838), the
+  axes (x = real-traffic rank, y = model rank), the two lines (dotted diagonal = the
+  perfect-match target; red = the actual trend), and the vocabulary (ADT, throughput,
+  PBOT, n, rho, Spearman). Darcy can now explain these in their own words.
+- **Found the answer to Christof's "why rank, not absolute?" question.** The model is in
+  vehicles-per-hour and ADT is vehicles-per-day, so absolute numbers cannot match and the
+  demand magnitude is uncalibrated; rank sidesteps the units. The constructive next idea
+  (Darcy's): convert model hourly throughput to a daily equivalent using the PORTAL
+  24-hour profile, to enable an absolute-value comparison.
+- **Stress-tested the weak correlation (the "try to break your model" exercise).** Ran a
+  read-only boundary-exclusion diagnostic (scratchpad): dropping the edge segments does NOT
+  raise the rank correlation (it wobbles ~0.31-0.37 with no trend), so the network boundary
+  is NOT the cause. Combined with the earlier saturation test (rho 0.328 -> 0.329 at 240 vs
+  500 vehicles), the modest ~0.33 is about demand STRUCTURE/routing, not magnitude or
+  geometry. So expanding the network will get the Rao sites but will not by itself fix this
+  number. (config.py gained a comment documenting the saturation test; validate_traffic_map.py,
+  the validation-figure script, committed.)
+- **Drafted the Rao outreach.** Realized Rao (Meenakshi Rao, the paper's first author) had
+  herself offered to meet, and Christof was nudging Darcy toward that offer. Drafted an
+  email to her with five specific method questions (site selection, exact predictors +
+  buffer radii, cross-validation + reported performance, how the seasonal rounds map to the
+  2017 paper, units/QA), plus an optional note to Christof. Decided: send Rao the questions
+  in writing (better for capturing method detail), and a meeting is optional and low-stakes
+  since she is friendly.
+
+**Decisions:**
+- Network scope: simplify first, full metro eventually (Christof). Do NOT widen the network
+  or run forest_compare until the scale-up phase is green-lit.
+- Near-term priority flips to validating the TRAFFIC layer and being able to explain it,
+  ahead of any NO2/closure polish. Lead with the cars, not the pollution surface.
+- The ~0.33 traffic-count rank correlation is demand-structure-limited, not a saturation or
+  edge-effect bug. Do not chase the number by tuning against the held-out PBOT counts.
+- Rao contact: email her the method questions in writing; treat the meeting as an optional,
+  low-stakes intro she already offered.
+
+**Next step:**
+- For Wednesday's 8am check-in, build the foundation-first traffic validation Christof asked
+  for: show what the cars are doing (movement, density, interaction) and a heat map of
+  modeled car density with evidence it matches the real counts, and be able to explain every
+  element of the validation plot (including rank vs absolute). Do NOT add NO2/closure work on
+  top yet.
+
+---
+
 ## 2026-06-29 (research scan + abstract reframe + SRC logistics) — found the nearest prior art, made the abstract read as SIGSPATIAL
 
 Ran alongside the forest-pipeline and demo-deck sessions logged below (same day, different

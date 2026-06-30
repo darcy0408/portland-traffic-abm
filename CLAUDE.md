@@ -236,8 +236,23 @@ finalists must present in person in Riverside CA (Nov 3-6 2026), so acceptance i
 travel/funding, and the not-published-elsewhere clause should be checked against the REU
 proceedings chapter.
 
-Next build step: rehearse the built demo (Powell_ABM_demo_v4.pptx, DEMO.md) and get
-Christof's SIGSPATIAL go/no-go at Monday's meeting. Week-6 groundwork exists:
+Jun 29 (Monday) meeting outcome and REDIRECT: the demo meeting happened. Christof's
+critique was process, not product: the work is moving faster than it can be explained
+(he flagged the AI-tool trap), and he wants the TRAFFIC FOUNDATION validated and
+explainable BEFORE any NO2/closure polish. He reads the current traffic-count scatter
+(src/validate_traffic_map.py, Spearman rho ~0.33) as NOT yet evidence the model works
+(the dots scatter instead of hugging the diagonal), and is skeptical of the rank metric
+(why not absolute values). He ended supportive ("keep up the good work", closure is "very
+cool"). The near-term priority is therefore: lead with the cars (movement, density,
+interaction), produce a car-density heat map with evidence it matches the real counts, and
+be able to explain every element of the validation plot. Do NOT add more on top yet. The
+~0.33 is demand-STRUCTURE-limited, not a saturation or edge-effect bug (saturation test:
+rho 0.328 -> 0.329 at 240 vs 500 vehicles; boundary-exclusion diagnostic: no improvement
+when edge segments are dropped). Christof also answered the scope email ("That is great!"):
+keep things SIMPLE FIRST, then scale to the FULL METRO area eventually (not the 5km
+compromise); so the Rao forest stays parked until the scale-up phase is explicitly
+green-lit. The next concrete deliverable is the foundation-first traffic validation for the
+Wednesday Jul 1 8am check-in. Week-6 groundwork exists:
 src/predictors.py builds Rao-style multi-buffer (100 to 1200 m) ABM traffic predictors
 (config.BUFFER_RADII_M). UPDATE Jun 28-29: Rao's NO2 sampler data ARRIVED (she sent it
 directly; banked at data/rao/no2_for_Darcy.xlsx, gitignored, never commit). It is 603
@@ -251,10 +266,12 @@ test a forest), so running it for real means widening the study area (~67 sites 
 at 8 km), which is a Powell-focus-vs-wider-network scope decision for Christof. The wider
 network is computationally fine: a 5 km network (9,015 nodes / 25,991 edges, 68 sites) was
 benchmarked at ~10 to 20 minutes per simulated hour, nowhere near the days-or-weeks
-computational risk, so cost is not a reason to avoid it. A scope-decision email to Christof was
-drafted (recommending the 5 km network); until he replies, do not widen the network or run it.
-When cleared, the run steps are: set STUDY_RADIUS_M = 5000, regenerate the graph cache and
-landuse_bg.parquet for the larger area, run the sim, then python src/forest_compare.py <run>.
+computational risk, so cost is not a reason to avoid it. Christof replied to the scope email
+Jun 29: simplify first, scale to the FULL METRO eventually (not the 5 km compromise), so do
+NOT widen the network or run forest_compare until the scale-up phase is explicitly cleared.
+When cleared, the run steps are: set STUDY_RADIUS_M to the chosen radius, regenerate the
+graph cache and landuse_bg.parquet for the larger area, run the sim, then
+python src/forest_compare.py <run>.
 The closure result and the noise path remain the headline contributions
 and need nothing from Rao. Alternatives still open: wire
 the PORTAL+ODOT demand into generate.py, or grow the closure experiment into a planned
