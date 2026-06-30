@@ -43,6 +43,23 @@ BG = "#0e0e12"
 GREY = (0.16, 0.16, 0.20, 1.0)   # streets with no real count: not part of the comparison
 
 
+def _edge_name(G, edge):
+    """Street name for a (u, v, k) edge; joins the list OSM sometimes stores."""
+    nm = G.edges[edge].get("name", "")
+    if isinstance(nm, list):
+        nm = ", ".join(dict.fromkeys(nm))
+    return nm or ""
+
+
+def _short(name):
+    """Shorten a street name for an on-figure label (Southeast 26th Avenue -> SE 26th Ave)."""
+    for a, b in [("Southeast", "SE"), ("Northeast", "NE"), ("Southwest", "SW"),
+                 ("Northwest", "NW"), ("Boulevard", "Blvd"), ("Avenue", "Ave"),
+                 ("Street", "St"), ("Place", "Pl")]:
+        name = name.replace(a, b)
+    return name
+
+
 def _spearman(a, b):
     """Spearman rank correlation: Pearson correlation of the ranks."""
     ra = pd.Series(a).rank().to_numpy()
@@ -130,6 +147,25 @@ def main(run_name):
     b, a = np.polyfit(ranks_real, ranks_model, 1)
     xs = np.array(lim)
     ax_sc.plot(xs, b * xs + a, color="#e0482b", lw=2)
+    # highlight two example streets so they can be pointed at during the talk:
+    # the model's best agreement on a headline arterial (Powell) and its worst
+    # over-rate (a quiet street the route-finder over-uses). Both read from data.
+    seg_names = np.array([_edge_name(G, seg_to_edge[s]) for s in per_seg["seg"]], dtype=object)
+    adt_vals = per_seg["adt"].to_numpy()
+    is_powell = np.array(["Powell" in nm for nm in seg_names])
+    hit_i = int(np.where(is_powell)[0][np.argmax(adt_vals[is_powell])])  # busiest Powell segment
+    miss_i = int(np.argmax(ranks_model - ranks_real))                    # biggest model over-rate
+    # both example dots sit high on the plot, so drop their labels below and inward
+    # (hit -> lower-left, miss -> lower-right) to clear the title and each other
+    for i, role, col, dx, ha in [(hit_i, "hit", "#1fe0c8", -10, "right"),
+                                 (miss_i, "miss", "#ff45d0", 10, "left")]:
+        ax_sc.scatter([ranks_real[i]], [ranks_model[i]], s=140, facecolors="none",
+                      edgecolors=col, linewidths=2.4, zorder=5)
+        ax_sc.annotate(f"{_short(seg_names[i])} ({role})",
+                       (ranks_real[i], ranks_model[i]), textcoords="offset points",
+                       xytext=(dx, -16), ha=ha, color=col, fontsize=10, weight="bold",
+                       zorder=6)
+
     ax_sc.set_xlim(lim); ax_sc.set_ylim(lim)
     ax_sc.set_xlabel("rank of REAL traffic count (ADT)", color="white")
     ax_sc.set_ylabel("rank of MODEL traffic (throughput)", color="white")

@@ -231,18 +231,19 @@ def plot_scenarios():
     red = _load_scenario("red_light")
 
     L = config.VEHICLE_LENGTH_M
+    MPS_TO_MPH = 2.23694    # the sim computes in m/s; we display speed in mph for a US audience
     fig, axes = plt.subplots(2, 2, figsize=(11, 8))
     fig.suptitle("ABM validation: four hand-checkable scenarios", fontsize=14, weight="bold")
 
     # Panel A: one car accelerates to the limit and holds
     ax = axes[0, 0]
-    v_limit = one["v"].max()                       # the car tops out exactly at v0
-    ax.plot(one["t"], one["v"], color="#1f77b4", lw=2)
+    v_limit = one["v"].max() * MPS_TO_MPH          # the car tops out exactly at v0
+    ax.plot(one["t"], one["v"] * MPS_TO_MPH, color="#1f77b4", lw=2)
     ax.axhline(v_limit, ls="--", color="grey", lw=1)
     ax.text(one["t"].iloc[-1], v_limit, " speed limit", va="bottom", ha="right",
             color="grey", fontsize=9)
     ax.set_title("1) One car: accelerates to the limit, no overshoot")
-    ax.set_xlabel("time (s)"); ax.set_ylabel("speed (m/s)")
+    ax.set_xlabel("time (s)"); ax.set_ylabel("speed (mph)")
 
     # Panel B: two cars, the clear gap settles to the IDM desired headway
     lead = two[two["id"] == 0].reset_index(drop=True)
@@ -260,10 +261,10 @@ def plot_scenarios():
 
     # Panel C: two cars, the follower's speed converges to the leader's
     ax = axes[1, 0]
-    ax.plot(lead["t"], lead["v"], color="#9467bd", lw=2, label="leader (slow)")
-    ax.plot(foll["t"], foll["v"], color="#1f77b4", lw=2, label="follower")
+    ax.plot(lead["t"], lead["v"] * MPS_TO_MPH, color="#9467bd", lw=2, label="leader (slow)")
+    ax.plot(foll["t"], foll["v"] * MPS_TO_MPH, color="#1f77b4", lw=2, label="follower")
     ax.set_title("3) Two cars: follower matches the leader's speed")
-    ax.set_xlabel("time (s)"); ax.set_ylabel("speed (m/s)")
+    ax.set_xlabel("time (s)"); ax.set_ylabel("speed (mph)")
     ax.legend(loc="upper right", fontsize=9)
 
     # Panel D: one car at a red light stops short of the line, departs on green
