@@ -6,6 +6,62 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-06-30 — Deck-explainability pass for the Wed Jul 1 8am check-in: mph units, ringed example streets, plain-language notes
+
+Prep session ahead of tomorrow's 8am traffic-foundation check-in. The whole point was
+Christof's Jun 29 critique (work moving faster than it can be explained): make every
+figure and every speaker note something Darcy can explain cold, not add anything new.
+
+**Did:**
+- **Converted the car-following scenario plots to mph** (`visualize.py`, `plot_scenarios`).
+  Panels 1 and 3 (speeds) now display miles per hour instead of m/s, so the numbers read
+  naturally for a US audience (speed limit shows as ~31 mph, the leader as ~11 mph). This
+  is display-only: the sim still computes in m/s, so no data file or cited number changed.
+  Panels 2 and 4 (a gap and a distance) stay in meters. Committed (`c9a1faa`).
+- **Highlighted two real example streets on the traffic-validation figure**
+  (`validate_traffic_map.py`), found from the data, not hard-coded: SE Powell (the "hit",
+  cyan) where the model matches the city's counts, and SE 26th Ave (the "miss", magenta)
+  where the model over-uses a quiet street. First on the scatter (`c9a1faa`), then ringed
+  the SAME two streets on both the real and model maps in the same colors (`8bc7a92`), using
+  open circles so each street's rank color still shows through. Now one street can be traced
+  across all three panels: Powell bright in both maps (agreement), 26th dark-then-bright
+  (the model over-uses it). Both commits read saved files and run no simulation.
+- **Corrected a rank-direction error before it reached the talk.** The plot ranks quietest
+  up (rank 1 = quietest, high number = busiest), so busy streets sit top-right. An earlier
+  hypothetical example had it backwards; caught it and reframed the notes to lean on position
+  (top-right = busy) instead of "rank 1", which is unambiguous when pointing at the screen.
+- **Worked through the speaker notes in plain language** for the scenario slide (what each
+  axis is, what each solid/dashed line means, m/s vs mph, what IDM stands for), the activity
+  map (map-not-a-plot, vehicle-seconds, activity vs throughput), and the validation slide
+  (a dot is a street not a car/sensor, why rank not raw volume, how to read 0.33 honestly).
+  Darcy can now explain each element unaided.
+- **Diagnosed and started fixing scrambled speaker notes across deck versions** (decks live
+  on Drive, outside the repo). Found slide 2's notes truncated in one file and slide 3's
+  notes garbled (slide-4 notes plus pasted ChatGPT chatter) in multiple files. Confirmed via
+  PowerPoint screenshots that the professional slides 5/6 layouts are clean (the overlaps I
+  saw were a LibreOffice font-substitution artifact, not real). Settled `TheRealSpeakerNotes.pptx`
+  as the master: correct notes on 5 of 6 slides, only slide 3's notes still need swapping to
+  the clean activity-map version.
+- **Confirmed the Rao method-questions email was sent** (was drafted Jun 29).
+
+**Decisions:**
+- Units are a display-layer concern only: compute in SI (m/s), convert to mph at the figure
+  and in the spoken words. Do NOT convert the simulation internals or any cited number, that
+  would fight the published formulas and risk silent bugs (and Christof would read rewriting
+  the physics into imperial as a red flag).
+- Keep the SE 26th miss example but state honestly it is the model's single worst over-rate,
+  so it never reads as cherry-picking; most dots are moderate and 0.33 is the average.
+
+**Next step:**
+- Rehearse the deck end to end for the 8am check-in, drilling the validation slide (why rank
+  not raw volume, how to read 0.33) until it is automatic. One small loose end: swap slide 3's
+  notes in `TheRealSpeakerNotes.pptx` to the clean activity-map version (the file was open in
+  PowerPoint so it could not be edited programmatically; close it first, or paste the clean
+  notes in by hand). Two figures still need re-inserting into the deck: the mph `scenarios.png`
+  and the ringed `powell_no2_traffic_validation_map.png`.
+
+---
+
 ## 2026-06-29 (built the Wednesday traffic-foundation deck) — turned the understanding into a deck, a figure, and one more experiment
 
 Follow-on to the understanding session below. Took everything we worked out about the
