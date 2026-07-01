@@ -6,6 +6,52 @@ what we did, any decisions made, and the single most important next step.
 
 ---
 
+## 2026-07-01 — Wed check-in debrief: "model doesn't work yet", the McDonald paper defense, and the through-traffic plan
+
+No code changed this session. It was a meeting debrief, a paper read, and planning. Git clean.
+
+**Did:**
+- **Read the full Jul 1 8am check-in transcript** (`G:\My Drive\PSU REU\transcripts\dumpster_norm.txt`).
+  Christof brought Nik in (Nik covers day-to-day for the next ~2 weeks). His verdict on the
+  traffic layer: it "doesn't quite work yet" and the gate before moving on is getting more of
+  the validation scatter's points onto the diagonal line. He questioned the rank axis (why not
+  absolute values), was skeptical that adding complexity would help, and repeated the "if you
+  let Claude do it and you have no control" concern. It was NOT a quit signal: he engaged
+  deeply and apologized for putting Darcy on the spot. Memory written
+  (christof-jul01-model-doesnt-work-yet).
+- **Honest read of the presentation itself:** the prepared walkthrough (four hand-checkable
+  test panels, the activity map, the throughput validation, the saturation stress-test, and the
+  through-traffic next step) was long, accurate, and well organized. The stumbles were narrow:
+  the cold-open pitch to Nik before the slides, and the "ADT" label, which nobody in the room
+  (Darcy, Christof, or Nik) could define on the spot. Not evidence the model is misunderstood.
+- **Pulled and read the McDonald 2026 thesis** (Colin McDonald, Cal Poly MS, "An Evaluation of
+  Road Network Structure as a Predictor of Traffic Volume"). The PDF is a 56-page scanned image
+  with no text layer, so it was read by rendering pages to PNG (pymupdf) in the scratchpad. Its
+  Table 6.5 (San Francisco) is the citable defense: purely structural metrics (degree 0.308,
+  closeness 0.312, pure betweenness 0.293) land at ~0.29-0.31, essentially our 0.33; demand-aware
+  predictors (origin-destination counts 0.810, modified betweenness on the primal graph 0.895,
+  past traffic counts 0.989) reach 0.7-0.9. So 0.33 is the structural ceiling, and demand is the
+  lever up.
+- **Key synthesis:** Christof's goal (move points onto the diagonal), the McDonald finding
+  (demand lifts ~0.3 to 0.7-0.9), and Darcy's own in-meeting proposal (add regional
+  through-traffic on the arterials) are all the same next step. Christof even got the paper cited
+  to him live and asked Darcy to email it.
+
+**Decisions:**
+- The next model change is **through-traffic** (cordon / regional trips that enter one network
+  edge and exit another along the arterials), set a priori and NOT tuned against the held-out
+  PBOT counts. This is now cleared: Christof's stated goal is to move points onto the line, and
+  through-traffic is the principled way to do it.
+- Framing: the McDonald paper is the roadmap TO Christof's diagonal, not an excuse to sit at 0.33.
+
+**Next step:**
+- Draft the post-meeting email to Christof and Nik: send the McDonald paper (he explicitly asked
+  for it), explain in writing why 0.33 is the structural ceiling, and lay out the through-traffic
+  plan to move the dots. Then build the through-traffic demand feature so the next check-in shows
+  a moved correlation, not just a plan.
+
+---
+
 ## 2026-06-30 — Deck-explainability pass for the Wed Jul 1 8am check-in: mph units, ringed example streets, plain-language notes
 
 Prep session ahead of tomorrow's 8am traffic-foundation check-in. The whole point was

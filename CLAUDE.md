@@ -286,6 +286,20 @@ and need nothing from Rao. Alternatives still open: wire
 the PORTAL+ODOT demand into generate.py, or grow the closure experiment into a planned
 multi-scenario comparison once Christof weighs in.
 
+Jul 1 (Wednesday 8am check-in) outcome: Christof (with Nik, who now covers day-to-day for ~2
+weeks) reviewed the traffic-foundation validation and concluded the traffic layer "doesn't quite
+work yet." The explicit gate before moving on is getting more of the validation-scatter points
+onto the diagonal (higher agreement), not more layers on top. He questioned the rank axis (why not
+absolute values) and was skeptical that added complexity would help. Not a quit signal; he engaged
+closely and the presentation's prepared walkthrough was accurate. The cleared next model change is
+adding THROUGH-TRAFFIC (regional trips entering one network edge and leaving another along the
+arterials), set a priori and NOT tuned to the held-out PBOT counts, because that is the principled
+way to move the dots. Defense for the current 0.33: McDonald 2026 (Cal Poly MS thesis, Table 6.5)
+shows purely structural predictors correlate with real volume at Spearman ~0.29-0.31 while
+demand-aware predictors reach 0.7-0.9, so 0.33 is the structural ceiling and demand is the lever.
+Immediate deliverable: email Christof + Nik the McDonald paper (he asked for it) with the
+structural-ceiling explanation and the through-traffic plan, then build through-traffic.
+
 ## Tech stack
 
 Python, OSMnx, NetworkX, NumPy, pandas, Matplotlib. Often run in Google Colab
