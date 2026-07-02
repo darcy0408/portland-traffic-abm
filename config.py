@@ -109,6 +109,31 @@ LODES_YEAR = 2021   # LEHD LODES8 workplace-jobs vintage; 2021 avoids the 2020 a
 # decay (origins and destinations drawn independently).
 GRAVITY_DECAY_SCALE_M = 1500.0
 
+# --- Through-traffic (regional cordon demand, Jul 1) ---
+# The gravity model above makes every trip start AND end inside the 1.5 km circle.
+# But a real arterial like Powell carries heavy through-traffic: cars that started
+# miles away and are only passing through. Without it the arterials are under-fed and
+# get ranked too low against the real counts, while shortest-path routing over-uses
+# quiet side streets as shortcuts (the SE 26th failure in the traffic validation).
+# THROUGH_TRAFFIC_FRACTION of trips are instead "through trips" that enter at one edge
+# of the network and leave at another, crossing the area. Entry/exit points are the
+# perimeter nodes (beyond THROUGH_BOUNDARY_FRAC of the study radius from center),
+# weighted toward the fastest roads that cross the boundary, so regional traffic comes
+# in on the arterials the way it really does. The fraction and boundary are set A
+# PRIORI from geometry and road class, NEVER tuned against the held-out PBOT counts, so
+# the validation stays an honest test. Set the fraction to 0.0 to disable (reproduces
+# the local-only gravity runs, e.g. powell_no2).
+THROUGH_TRAFFIC_FRACTION = 0.0
+# Jul 1 through-traffic experiment: an a-priori 30% through-trip share (RUN_NAME
+# "powell_through", seed 42) raised the traffic-count rank correlation from 0.328 to
+# 0.387 (activity 0.195 -> 0.270), the predicted direction: feeding the arterials with
+# regional traffic and starving the side-street shortcuts. The 0.30 was set a priori,
+# NOT tuned to the held-out PBOT counts. Reproduce by setting this to 0.30 and
+# RUN_NAME="powell_through". Left at 0.0 so powell_no2 stays the local-only baseline
+# until the fraction is set with Christof/Nik.
+THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
+                               # fraction of STUDY_RADIUS_M from the study center
+
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular
 # buffers of increasing radius around it, so a point "sees" its neighborhood and

@@ -333,14 +333,73 @@ def build_demand_weights(G, nodes):
     }
 
 
-def make_vehicle(G, nodes, rng, vid, demand=None):
+def build_through_context(G, nodes):
+    """Precompute the boundary (cordon) entry/exit points for through-traffic.
+
+    Through trips model regional traffic passing through the study area: they start
+    and end on the PERIMETER of the network instead of inside it. A node is on the
+    perimeter if it lies beyond THROUGH_BOUNDARY_FRAC of the study radius from the
+    center. Each perimeter node is weighted by the fastest road that meets it (its
+    max incident v0_mps), so through-traffic enters mainly on the arterials (Powell,
+    Division) the way real regional traffic does, not on residential dead-ends. The
+    weights come from geometry and road class only, never from the PBOT counts, so
+    the validation stays an honest test.
+
+    Returns a context dict (boundary nodes, entry weights, per-node local-meter
+    coords, and the through-trip fraction), or None if the fraction is 0 or there are
+    too few boundary nodes to make a crossing trip.
+    """
+    frac = config.THROUGH_TRAFFIC_FRACTION
+    if not frac or frac <= 0:
+        return None
+    lat0, lon0 = config.STUDY_CENTER
+    mx = 111_320.0 * math.cos(math.radians(lat0))
+    r_bound = config.THROUGH_BOUNDARY_FRAC * config.STUDY_RADIUS_M
+    boundary, weight, bx, by = [], [], [], []
+    for n in nodes:
+        x = (float(G.nodes[n]["x"]) - lon0) * mx
+        y = (float(G.nodes[n]["y"]) - lat0) * 110_540.0
+        if math.hypot(x, y) < r_bound:
+            continue
+        # fastest incident road (in- and out-edges), so arterial crossings dominate
+        speeds = [d.get("v0_mps", 8.0) for _a, _b, d in G.edges(n, data=True)]
+        speeds += [d.get("v0_mps", 8.0) for _a, _b, d in G.in_edges(n, data=True)]
+        boundary.append(n)
+        weight.append(max(speeds) if speeds else 8.0)
+        bx.append(x)
+        by.append(y)
+    if len(boundary) < 2:
+        print("  through-traffic: too few boundary nodes; disabling")
+        return None
+    print(f"  through-traffic: {frac:.0%} of trips cross the area, "
+          f"{len(boundary)} boundary entry/exit nodes (arterial-weighted)")
+    return {"nodes": boundary, "weight": weight,
+            "bx": np.array(bx), "by": np.array(by), "fraction": frac}
+
+
+def make_vehicle(G, nodes, rng, vid, demand=None, through=None):
     """Create one vehicle with an origin, destination, and shortest-time route.
     With a `demand` context, the origin is drawn in proportion to population and the
     destination in proportion to jobs, with a distance-decay pull toward nearer jobs;
-    without one, both are uniform random. Returns None if no route is found after a
-    few tries."""
+    without one, both are uniform random. With a `through` context, a fraction of
+    trips instead enter and leave on the network perimeter, modeling regional
+    through-traffic. Returns None if no route is found after a few tries."""
     for _ in range(25):
-        if demand is None:
+        if through is not None and rng.random() < through["fraction"]:
+            # THROUGH trip: enter on a perimeter node and leave on another, so the
+            # trip crosses the study area like regional traffic passing through.
+            bnodes, bw = through["nodes"], through["weight"]
+            oi = rng.choices(range(len(bnodes)), weights=bw)[0]
+            o = bnodes[oi]
+            # destination: another boundary node, weighted by its own entry weight
+            # AND by distance from the origin, so the trip crosses the area (favoring
+            # the far side) instead of hopping between two adjacent perimeter nodes.
+            dx = through["bx"] - through["bx"][oi]
+            dy = through["by"] - through["by"][oi]
+            dist = np.sqrt(dx * dx + dy * dy)
+            w = np.asarray(bw) * dist
+            d = bnodes[rng.choices(range(len(bnodes)), weights=w.tolist())[0]]
+        elif demand is None:
             o, d = rng.choice(nodes), rng.choice(nodes)
         else:
             o = rng.choices(nodes, weights=demand["origin_w"])[0]
@@ -372,7 +431,7 @@ def make_vehicle(G, nodes, rng, vid, demand=None):
 
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
-                  nox_coeffs, G, nodes, rng, signals, demand=None):
+                  nox_coeffs, G, nodes, rng, signals, demand=None, through=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -485,7 +544,7 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             else:
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady
-                fresh = make_vehicle(G, nodes, rng, veh["id"], demand)
+                fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through)
                 if fresh is not None:
                     veh.update(fresh)
                 else:
@@ -508,6 +567,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     rng = random.Random(config.RANDOM_SEED)   # own stream, so routes are reproducible
     nox_coeffs = emissions.active_coeffs()    # HBEFA3 row for the configured class, fetched once
     demand = build_demand_weights(G, nodes)   # population/jobs gravity trip weights
+    through = build_through_context(G, nodes)  # regional through-traffic (cordon) trips
 
     state = load_checkpoint(config.RAW_DIR, config.RUN_NAME) if use_checkpoint else None
     if state is None:
@@ -516,7 +576,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         segment_throughput = {edge: 0.0 for edge in G.edges(keys=True)}
         vehicles = []
         for vid in range(n_vehicles):
-            veh = make_vehicle(G, nodes, rng, vid, demand)
+            veh = make_vehicle(G, nodes, rng, vid, demand, through)
             if veh is not None:
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
@@ -537,7 +597,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     for step in range(state["step"], n_steps):
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
-                      signals, demand)
+                      signals, demand, through)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
