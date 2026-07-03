@@ -109,6 +109,22 @@ LODES_YEAR = 2021   # LEHD LODES8 workplace-jobs vintage; 2021 avoids the 2020 a
 # decay (origins and destinations drawn independently).
 GRAVITY_DECAY_SCALE_M = 1500.0
 
+# --- Real origin-destination demand from LODES (Jul 2) ---
+# The gravity model above is a GUESS at the home->work distribution: it multiplies a
+# population marginal by a jobs marginal and a distance-decay term. LODES gives the
+# real JOINT distribution: actual counts of commuters from each home block group to
+# each work block group (src/lodes_od.py, LEHD LODES8 OD file). With this flag on,
+# trips draw a real home-BG -> work-BG pair in proportion to that flow, then map each
+# end to a network node, instead of the gravity product. This is an honest INPUT, not
+# tuning: LODES is Census commute data, independent of the held-out PBOT counts we
+# score against (cf. McDonald 2026: demand-aware predictors reach Spearman 0.7-0.9 vs
+# ~0.3 for pure structure, so real demand is the principled lever). CAVEAT: at the
+# 1.5 km Powell scale the internal OD is thin (~575 commuters, 210 BG pairs), because
+# most corridor traffic is through-traffic or has one end outside the window; the OD
+# payoff grows with the study area, so this pairs naturally with the metro scale-up.
+# Left off so powell_no2 stays the gravity baseline until set with Christof/Nik.
+DEMAND_LODES_OD = False
+
 # --- Through-traffic (regional cordon demand, Jul 1) ---
 # The gravity model above makes every trip start AND end inside the 1.5 km circle.
 # But a real arterial like Powell carries heavy through-traffic: cars that started

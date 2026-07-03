@@ -35,6 +35,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import emissions
 import landuse_data
+import lodes_od
 import demand_data
 from checkpoint import save_checkpoint, load_checkpoint
 
@@ -260,6 +261,79 @@ def _edge_between(G, u, v):
     return (u, v, k, d.get("length", 10.0), d.get("v0_mps", 11.0))
 
 
+def build_od_demand(G, nodes):
+    """Build a real origin-destination demand context from LODES commute flows.
+
+    Where build_demand_weights approximates trips as population x jobs x decay (a
+    gravity guess at the joint home->work distribution), this uses the REAL joint
+    distribution: LODES counts of commuters from each home block group to each work
+    block group (src/lodes_od.py). A trip draws a home-BG -> work-BG pair in
+    proportion to that flow, then lands on a random network node inside each end's
+    block group.
+
+    Each node is assigned to its nearest study-area block-group centroid (the same
+    Voronoi split build_demand_weights uses), giving each block group the set of nodes
+    that represent it. Only OD pairs whose home AND work block groups both caught at
+    least one node survive (a pair with no node to place an end cannot be realized).
+
+    Returns a `demand` dict tagged mode="od" (pair block-group lists, flow weights, and
+    each block group's node list), or None if OD demand is off or the flow table is
+    empty, so the caller falls back to gravity or uniform-random trips.
+    """
+    if not config.DEMAND_LODES_OD:
+        return None
+    try:
+        od = lodes_od.od_table()
+        lu = landuse_data.landuse_table()
+    except Exception as e:
+        print(f"  LODES OD demand unavailable ({e}); falling back")
+        return None
+    if len(od) == 0 or len(lu) == 0:
+        print("  no LODES OD flows in the study area; falling back")
+        return None
+
+    # assign each node to its nearest block-group centroid (same projection and
+    # nearest-centroid rule as build_demand_weights, so the two demand models place
+    # trips on the same node-to-block-group map)
+    lat0, lon0 = config.STUDY_CENTER
+    mx = 111_320.0 * math.cos(math.radians(lat0))
+    node_x = (np.array([float(G.nodes[n]["x"]) for n in nodes]) - lon0) * mx
+    node_y = (np.array([float(G.nodes[n]["y"]) for n in nodes]) - lat0) * 110_540.0
+    bg_x = (lu["lon"].to_numpy() - lon0) * mx
+    bg_y = (lu["lat"].to_numpy() - lat0) * 110_540.0
+    d2 = (node_x[:, None] - bg_x[None, :]) ** 2 + (node_y[:, None] - bg_y[None, :]) ** 2
+    nearest = d2.argmin(axis=1)
+
+    # each block group -> the list of node IDs assigned to it
+    bg_geoids = lu["bg_geoid"].tolist()
+    bg_nodes = {g: [] for g in bg_geoids}
+    for ni, bi in enumerate(nearest):
+        bg_nodes[bg_geoids[bi]].append(nodes[ni])
+
+    # keep only flows whose home and work block groups both own at least one node
+    pairs_h, pairs_w, weights = [], [], []
+    for r in od.itertuples():
+        if bg_nodes.get(r.h_bg) and bg_nodes.get(r.w_bg):
+            pairs_h.append(r.h_bg)
+            pairs_w.append(r.w_bg)
+            weights.append(float(r.flow))
+    if not weights:
+        print("  LODES OD flows have no placeable node; falling back")
+        return None
+
+    kept_flow = sum(weights)
+    print(f"  LODES OD demand: {len(weights)} placeable home->work BG pairs, "
+          f"{int(kept_flow):,} commuters ({100*kept_flow/od['flow'].sum():.0f}% of "
+          f"study-area flow placeable)")
+    return {
+        "mode": "od",
+        "pairs_h": pairs_h,     # home block group per flow pair
+        "pairs_w": pairs_w,     # work block group per flow pair
+        "weights": weights,     # commuter counts (draw pairs in proportion to these)
+        "bg_nodes": bg_nodes,   # block group -> list of node IDs inside it
+    }
+
+
 def build_demand_weights(G, nodes):
     """Turn the real population/jobs masses into per-node origin and destination
     weights, aligned with `nodes`. Trips then start where people live (origins
@@ -283,7 +357,16 @@ def build_demand_weights(G, nodes):
     Returns a `demand` dict (origin weights, job weights, node coordinates in local
     meters, a node->index map, and the decay scale), or None if gravity demand is
     off or the land-use data is missing, so the caller falls back to uniform random.
+
+    If config.DEMAND_LODES_OD is on, real LODES origin-destination flows replace the
+    gravity guess; this delegates to build_od_demand and only falls through to gravity
+    if the OD table is empty or unplaceable.
     """
+    if config.DEMAND_LODES_OD:
+        od = build_od_demand(G, nodes)
+        if od is not None:
+            return od
+        # OD requested but unavailable: fall through to the gravity model below
     if not config.DEMAND_GRAVITY:
         return None
     try:
@@ -401,6 +484,14 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None):
             d = bnodes[rng.choices(range(len(bnodes)), weights=w.tolist())[0]]
         elif demand is None:
             o, d = rng.choice(nodes), rng.choice(nodes)
+        elif demand.get("mode") == "od":
+            # REAL OD trip: draw a home-BG -> work-BG pair in proportion to the LODES
+            # commuter flow, then place each end on a random node inside that block
+            # group (the gravity guess is replaced by the measured joint distribution).
+            pi = rng.choices(range(len(demand["weights"])),
+                             weights=demand["weights"])[0]
+            o = rng.choice(demand["bg_nodes"][demand["pairs_h"][pi]])
+            d = rng.choice(demand["bg_nodes"][demand["pairs_w"][pi]])
         else:
             o = rng.choices(nodes, weights=demand["origin_w"])[0]
             if demand["scale"]:
