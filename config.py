@@ -139,14 +139,15 @@ DEMAND_LODES_OD = False
 # PRIORI from geometry and road class, NEVER tuned against the held-out PBOT counts, so
 # the validation stays an honest test. Set the fraction to 0.0 to disable (reproduces
 # the local-only gravity runs, e.g. powell_no2).
-THROUGH_TRAFFIC_FRACTION = 0.0
+THROUGH_TRAFFIC_FRACTION = 0.30
 # Jul 1 through-traffic experiment: an a-priori 30% through-trip share (RUN_NAME
 # "powell_through", seed 42) raised the traffic-count rank correlation from 0.328 to
 # 0.387 (activity 0.195 -> 0.270), the predicted direction: feeding the arterials with
 # regional traffic and starving the side-street shortcuts. The 0.30 was set a priori,
-# NOT tuned to the held-out PBOT counts. Reproduce by setting this to 0.30 and
-# RUN_NAME="powell_through". Left at 0.0 so powell_no2 stays the local-only baseline
-# until the fraction is set with Christof/Nik.
+# NOT tuned to the held-out PBOT counts. Set to 0.30 (Jul 2) so the closure sweep and
+# the abstract's numbers all come from ONE model that matches the powell_through
+# validation run (Spearman 0.39). The 0.0 local-only gravity setting reproduces the
+# older powell_no2 baseline. Making 0.30 the permanent default is a Christof/Nik call.
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
