@@ -32,3 +32,9 @@ reference/
 # Private work-ahead sandbox: exploratory prototypes not ready for the shared repo
 # (e.g. the weather second-surface work). Promote files into src/ when they are ready.
 sandbox/
+
+# Session concurrency guard: a per-working-dir lock (/start-session writes it,
+# /close-session removes it) and any worktrees created for parallel sessions.
+# Session-local state, never commit.
+.claude/.session-lock
+.claude/worktrees/
