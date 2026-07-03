@@ -92,6 +92,20 @@ def main():
 
     abm_change = abm_closed - abm_open
 
+    # Per-arterial NO2 % change, computed from the data so the caption never drifts
+    # from the numbers (single source of truth). Reuses the graph's street names.
+    def _street(d):
+        n = d.get("name")
+        return "" if n is None else (str(n[0]) if isinstance(n, list) else str(n))
+    name_by_edge = {(u, v, k): _street(d) for u, v, k, d in G.edges(keys=True, data=True)}
+    def arterial_pct(target):
+        o = c = 0.0
+        for e, ov, cv in zip(edges, abm_open, abm_closed):
+            if target.lower() in name_by_edge.get(e, "").lower():
+                o += ov; c += cv
+        return 100 * (c - o) / o if o > 0 else float("nan")
+    pk, dv, hl = arterial_pct("Powell"), arterial_pct("Division"), arterial_pct("Holgate")
+
     # --- Static land-use model (a strong, well-fit Rao-style land-use forest, #6) ---
     # landuse_model fits the open surface with built-environment + demographic
     # predictors (out-of-bag R^2 ~0.51 on the log scale, a genuinely good baseline,
@@ -135,8 +149,9 @@ def main():
                  color="#111111", fontsize=20, weight="bold", y=0.99)
     fig.text(0.5, 0.045,
              "Same closure, same scale. The land-use model is blank because a road closure changes no land-use input, "
-             "so its prediction cannot move.\nThe agent model moves NO2 off SE Powell (-82%) onto the parallel arterials "
-             "SE Division (+132%) and SE Holgate (+54%). The black block marks the closure.",
+             "so its prediction cannot move.\nThe agent model moves NO2 off SE Powell "
+             f"({pk:+.0f}%) onto the parallel arterials "
+             f"SE Division ({dv:+.0f}%) and SE Holgate ({hl:+.0f}%). The black block marks the closure.",
              color="#222222", fontsize=12, ha="center", va="top")
 
     fig.subplots_adjust(left=0.02, right=0.90, top=0.88, bottom=0.16, wspace=0.04)
