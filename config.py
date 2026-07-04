@@ -167,8 +167,11 @@ BUFFER_RADII_M = (100, 200, 400, 800, 1200)
 N_VEHICLES = 500
 N_STEPS = 3600                # example: one simulated hour at one-second steps
 CHECKPOINT_EVERY = 300        # save state every 300 steps, so a crash loses at most this much work
-RUN_NAME = "powell_no2"       # names the output files; change it for each new experiment
-                              # (this run: spillback + HBEFA3 NOx -> NO2 surface)
+# Pinned to the run behind every number cited in the SIGSPATIAL abstract (30%
+# through-traffic, seed 42). The Jul 4 audit found this pointing at the older
+# pre-through-traffic run ("powell_no2"), which made the committed repo unable to
+# reproduce the published figure, baseline R^2, and exposure counts as committed.
+RUN_NAME = "powell_through"   # names the output files; change it for each new experiment
 # Jun 29 saturation-vs-rank test: re-ran at N_VEHICLES=240 (RUN_NAME "powell_n240")
 # to see if unsaturating raised the traffic-count rank correlation. It did NOT
 # (rho 0.328 -> 0.329), so the weak ordering is about demand STRUCTURE/routing, not

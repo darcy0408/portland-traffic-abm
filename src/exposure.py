@@ -42,8 +42,11 @@ from matplotlib.colors import TwoSlopeNorm
 
 
 # Default input surfaces produced by the closure experiment (python src/generate.py closure).
-OPEN_PATH = os.path.join(config.PROCESSED_DIR, "powell_no2_open_segments.parquet")
-CLOSED_PATH = os.path.join(config.PROCESSED_DIR, "powell_no2_closed_segments.parquet")
+# Follow config.RUN_NAME so the defaults reproduce the cited numbers (the Jul 4 audit
+# found these hardcoded to the older powell_no2 run, which yields 11,060/12,488
+# instead of the cited 11,154/12,394 from powell_through).
+OPEN_PATH = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_open_segments.parquet")
+CLOSED_PATH = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_closed_segments.parquet")
 # Default exposure buffer radius. Each block group "breathes" the NO2 on segments
 # whose midpoint sits within this many meters of its centroid. 400 m is one of
 # Rao's buffer radii (config.BUFFER_RADII_M) and is a reasonable local-walk scale.

@@ -70,8 +70,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import predictors   # reuse the midpoint + local-projection helpers (do not edit it)
 
-# Paths to the read-only inputs.
-OPEN_SURFACE_PATH = os.path.join(config.PROCESSED_DIR, "powell_no2_open_segments.parquet")
+# Paths to the read-only inputs. The target surface follows config.RUN_NAME so the
+# baseline is always fit to the same run the rest of the pipeline cites (the Jul 4
+# audit found this hardcoded to the older powell_no2 run while the closure numbers
+# came from powell_through).
+OPEN_SURFACE_PATH = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_open_segments.parquet")
 BG_PATH = os.path.join(config.PROCESSED_DIR, "landuse_bg.parquet")
 
 # Road-class grouping. "Major" is the arterial/through-traffic spine that carries

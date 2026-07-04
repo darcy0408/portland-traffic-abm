@@ -19,6 +19,7 @@ First run `python src/traffic_counts.py` to pull the counts.
 import os
 import sys
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import osmnx as ox
@@ -29,15 +30,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
 SNAP_MAX_M = 40.0   # a count farther than this from any modeled segment is unmatched
-
-
-def _local_xy(lat, lon):
-    """Project lon/lat to local meters around the study center (small-area flat
-    approximation, same as predictors.py), so nearest-segment search is fast."""
-    lat0, lon0 = config.STUDY_CENTER
-    x = (np.asarray(lon) - lon0) * 111_320.0 * np.cos(np.radians(lat0))
-    y = (np.asarray(lat) - lat0) * 110_540.0
-    return x, y
 
 
 def _spearman(a, b):
@@ -55,21 +47,23 @@ def main(run_name):
     abm = pd.read_parquet(os.path.join(config.PROCESSED_DIR, f"{run_name}_segments.parquet"))
     G = ox.load_graphml(os.path.join(config.NETWORK_DIR, "graph.graphml"))
 
-    # segment midpoints, aligned row-for-row with the ABM table
-    seg_lat = np.array([0.5 * (float(G.nodes[r.u]["y"]) + float(G.nodes[r.v]["y"]))
-                        for r in abm.itertuples()])
-    seg_lon = np.array([0.5 * (float(G.nodes[r.u]["x"]) + float(G.nodes[r.v]["x"]))
-                        for r in abm.itertuples()])
-    sx, sy = _local_xy(seg_lat, seg_lon)
-    cx, cy = _local_xy(counts["lat"].to_numpy(), counts["lon"].to_numpy())
+    # Snap each count point to the nearest segment GEOMETRY (point-to-polyline in a
+    # projected CRS), not to segment midpoints. The old midpoint snap attached ~27%
+    # of counts to the wrong street: a count taken just past an intersection is often
+    # closer to the short cross-street's midpoint than to the long arterial block it
+    # was actually measured on (audit, Jul 4). Geometry snapping drops the
+    # wrong-street rate to ~2% and matches more of the counts.
+    Gp = ox.project_graph(G)
+    pts = gpd.GeoSeries(gpd.points_from_xy(counts["lon"], counts["lat"]),
+                        crs="EPSG:4326").to_crs(Gp.graph["crs"])
+    ne, nd = ox.distance.nearest_edges(Gp, pts.x.to_numpy(), pts.y.to_numpy(),
+                                       return_dist=True)
+    # map each snapped (u, v, key) back to its row in the ABM table
+    key_to_row = {(r.u, r.v, r.key): i for i, r in enumerate(abm.itertuples())}
+    seg = np.array([key_to_row.get(tuple(uvk), -1) for uvk in ne])
 
-    # nearest segment for each count point (brute force; ~2k x ~3k is cheap)
-    d2 = (cx[:, None] - sx[None, :]) ** 2 + (cy[:, None] - sy[None, :]) ** 2
-    nearest = d2.argmin(axis=1)
-    dist = np.sqrt(d2[np.arange(len(cx)), nearest])
-
-    matched = counts.assign(seg=nearest, snap_m=dist)
-    matched = matched[matched["snap_m"] <= SNAP_MAX_M]
+    matched = counts.assign(seg=seg, snap_m=np.asarray(nd, dtype=float))
+    matched = matched[(matched["snap_m"] <= SNAP_MAX_M) & (matched["seg"] >= 0)]
 
     # one row per segment that got at least one count: mean real ADT vs the model's
     # measures on that segment
