@@ -229,6 +229,12 @@ def build_features(G, seg_df, radii=None):
       own_length        the segment's own length in meters (single col)
       own_is_major      1 if the segment is itself a major road, else 0 (single col)
       own_rank          the segment's own road-class rank, 0..6 (single col)
+
+    NOTE: this per-segment demo path still attributes each edge to one midpoint
+    (all-or-nothing buffer inclusion), matching the committed powell_through-era
+    baseline it was fit on. The forest-comparison path (build_site_features) uses
+    length-weighted true-geometry attribution instead; harmonizing this path is a
+    flag-at-merge decision because it would shift the committed static baseline.
     """
     radii = config.BUFFER_RADII_M if radii is None else radii
 
@@ -300,42 +306,78 @@ def build_site_features(G, sites, radii=None):
 
     `sites` is a DataFrame with columns site_id, lat, lon. Features (each over every
     buffer radius): pop_buf, jobs_buf, majrdlen_buf, minrdlen_buf, nodes_buf, plus a
-    single dist_major (meters to the nearest major-road midpoint). The per-segment
+    single dist_major (meters to the nearest major road). The per-segment
     "own road" features (own_length/own_is_major/own_rank) are dropped: a sampler
     point does not sit on one specific edge, and dist_major already encodes arterial
     proximity. Every feature is permanent built environment, so it is closure-
     invariant exactly as in the per-segment case.
+
+    Geometry: road length and dist_major are computed from points sampled every
+    20 m along each edge's true OSM geometry, so majrdlen_buf{r} is the actual
+    meters of road inside the buffer (length-weighted overlap) and dist_major is
+    the distance to the nearest point ON the road line (within ~10 m), not to a
+    midpoint that can sit 200 m away on a long arterial. Known limitation, stated
+    not hidden: population and jobs remain POINT MASSES at block-group centroids,
+    so pop_buf/jobs_buf at 100-200 m are all-or-nothing on those centroids. That
+    degrades only the land-use forest's smallest buffers, i.e. it biases the
+    comparison TOWARD the ABM winning; disclose it wherever the comparison is
+    cited (proper areal weighting needs BG polygons, a possible upgrade).
     """
     radii = config.BUFFER_RADII_M if radii is None else radii
 
     c_lat = sites["lat"].to_numpy(float)        # center points: the sampler sites
     c_lon = sites["lon"].to_numpy(float)
+    cx, cy = predictors._local_xy(c_lat, c_lon)
 
     bg = pd.read_parquet(BG_PATH)               # population / jobs masses
     bg_lat, bg_lon = bg["lat"].to_numpy(float), bg["lon"].to_numpy(float)
     pop, jobs = bg["population"].to_numpy(float), bg["jobs"].to_numpy(float)
 
-    e_lat, e_lon, e_len, e_major = _edge_geometry(G)
-    maj_len = np.where(e_major, e_len, 0.0)
-    min_len = np.where(e_major, 0.0, e_len)
+    # Roads as sampled points along their true geometry, each carrying its share
+    # of the edge's length (see predictors._edge_sample_points).
+    edge_ids, e_len, e_major = [], [], []
+    for u, v, k, d in G.edges(keys=True, data=True):
+        edge_ids.append((u, v, k))
+        e_len.append(float(d.get("length", 0.0)))
+        e_major.append(_highway_class(d.get("highway")) == "major")
+    e_len = np.array(e_len)
+    e_major = np.array(e_major, dtype=bool)
+    ex, ey, seg_idx, frac = predictors._edge_sample_points(G, edge_ids)
+    pt_len = frac * e_len[seg_idx]                    # meters of road per point
+    pt_maj = np.where(e_major[seg_idx], pt_len, 0.0)
+    pt_min = np.where(e_major[seg_idx], 0.0, pt_len)
+    maj_mask = e_major[seg_idx]
 
     n_lat, n_lon = _node_coords(G)
     ones = np.ones_like(n_lat)
 
     pop_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, pop, radii)
     job_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, jobs, radii)
-    maj_sums = _cross_buffer_sums(c_lat, c_lon, e_lat, e_lon, maj_len, radii)
-    min_sums = _cross_buffer_sums(c_lat, c_lon, e_lat, e_lon, min_len, radii)
     node_sums = _cross_buffer_sums(c_lat, c_lon, n_lat, n_lon, ones, radii)
+
+    # Road-length buffers and distance-to-major over the sampled road points,
+    # chunked over sites (full site-by-point matrix is large at metro scale).
+    maj_sums = {r: [] for r in radii}
+    min_sums = {r: [] for r in radii}
+    dist_major = []
+    chunk = 64
+    for s0 in range(0, len(cx), chunk):
+        s1 = min(s0 + chunk, len(cx))
+        d2 = (cx[s0:s1, None] - ex[None, :]) ** 2 + (cy[s0:s1, None] - ey[None, :]) ** 2
+        for r in radii:
+            within = d2 <= float(r) ** 2
+            maj_sums[r].append(within @ pt_maj)
+            min_sums[r].append(within @ pt_min)
+        dist_major.append(np.sqrt(d2[:, maj_mask].min(axis=1)))
 
     cols = {}
     for r in radii:
         cols[f"pop_buf{r}"] = pop_sums[r]
         cols[f"jobs_buf{r}"] = job_sums[r]
-        cols[f"majrdlen_buf{r}"] = maj_sums[r]
-        cols[f"minrdlen_buf{r}"] = min_sums[r]
+        cols[f"majrdlen_buf{r}"] = np.concatenate(maj_sums[r])
+        cols[f"minrdlen_buf{r}"] = np.concatenate(min_sums[r])
         cols[f"nodes_buf{r}"] = node_sums[r]
-    cols["dist_major"] = _nearest_distance(c_lat, c_lon, e_lat[e_major], e_lon[e_major])
+    cols["dist_major"] = np.concatenate(dist_major)
 
     return pd.DataFrame(cols, index=sites.index)
 

@@ -34,9 +34,13 @@ for d in (NETWORK_DIR, RAW_DIR, PROCESSED_DIR, FIGURES_DIR):
 # Center sits on SE Powell Blvd by Cleveland High School (Powell & SE 26th).
 # Widen the radius toward the full city later, and bump RUN_NAME so you do not
 # overwrite earlier results.
-STUDY_AREA_LABEL = "SE Powell Blvd corridor (Cleveland HS center, 1.5 km radius)"
+STUDY_AREA_LABEL = "SE Portland 5 km (Cleveland HS center, scale-up toward full metro)"
 STUDY_CENTER = (45.49854, -122.63862)   # (latitude, longitude)
-STUDY_RADIUS_M = 1500                    # meters from center; 1.5 km -> ~3 km square
+STUDY_RADIUS_M = 5000                    # meters from center; benchmarked Jun 29 at
+                                         # 9,015 nodes / 25,991 edges, 68 Rao sites,
+                                         # ~10-20 min per simulated hour. The 1.5 km
+                                         # Powell window (1500) is the committed
+                                         # baseline that reproduces powell_through.
 NETWORK_TYPE = "drive"
 
 # --- Car-following (Intelligent Driver Model) ---
@@ -107,6 +111,9 @@ LODES_YEAR = 2021   # LEHD LODES8 workplace-jobs vintage; 2021 avoids the 2020 a
 # lengths), NOT tuned against the held-out PBOT counts, so the validation stays an
 # honest test. Revisit at the calibration gate with Christof. Set to None to disable
 # decay (origins and destinations drawn independently).
+# Kept at 1500 for the 5 km scale-up: the a-priori rationale is now "short end of
+# urban trip lengths" alone (it no longer matches the study radius). A knob for
+# the Christof calibration gate, not retuned here.
 GRAVITY_DECAY_SCALE_M = 1500.0
 
 # --- Real origin-destination demand from LODES (Jul 2) ---
@@ -148,6 +155,9 @@ THROUGH_TRAFFIC_FRACTION = 0.30
 # the abstract's numbers all come from ONE model that matches the powell_through
 # validation run (Spearman 0.39). The 0.0 local-only gravity setting reproduces the
 # older powell_no2 baseline. Making 0.30 the permanent default is a Christof/Nik call.
+# Carried over unchanged for the 5 km scale-up. In a wider window more trips are
+# internal, so the true through share should be LOWER than the corridor's 0.30;
+# kept as-is so only one variable (network size) changes in this first run.
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
@@ -164,14 +174,20 @@ BUFFER_RADII_M = (100, 200, 400, 800, 1200)
 # --- Simulation parameters ---
 # N_VEHICLES and the network size are the two knobs to scale for the runtime
 # benchmark (Christof, Jun 22): turn them up and watch how wall time grows.
-N_VEHICLES = 500
+# Scaled by study-area ratio for the 5 km run: the Jun 26 AADT calibration
+# recommended 240 vehicles for the 1.5 km window (matches Powell AADT/24
+# directional); (5000/1500)^2 = 11.1x the area gives ~2,700. Set a priori from
+# geometry, NOT tuned to the held-out PBOT counts. The demand density of the
+# wider area (less uniformly dense than the corridor) is a calibration question
+# for Christof at the scale-up gate. The 1.5 km baseline value was 500.
+N_VEHICLES = 2700
 N_STEPS = 3600                # example: one simulated hour at one-second steps
 CHECKPOINT_EVERY = 300        # save state every 300 steps, so a crash loses at most this much work
-# Pinned to the run behind every number cited in the SIGSPATIAL abstract (30%
-# through-traffic, seed 42). The Jul 4 audit found this pointing at the older
-# pre-through-traffic run ("powell_no2"), which made the committed repo unable to
-# reproduce the published figure, baseline R^2, and exposure counts as committed.
-RUN_NAME = "powell_through"   # names the output files; change it for each new experiment
+# metro5k: the exploratory 5 km scale-up run (worktree metro5k-scaleup). The
+# committed-repo baseline behind every number cited in the SIGSPATIAL abstract is
+# "powell_through" (1.5 km, N_VEHICLES=500, 30% through-traffic, seed 42); do not
+# reuse that name here or its saved results could be overwritten.
+RUN_NAME = "metro5k"          # names the output files; change it for each new experiment
 # Jun 29 saturation-vs-rank test: re-ran at N_VEHICLES=240 (RUN_NAME "powell_n240")
 # to see if unsaturating raised the traffic-count rank correlation. It did NOT
 # (rho 0.328 -> 0.329), so the weak ordering is about demand STRUCTURE/routing, not

@@ -16,8 +16,12 @@ EVALUATION: spatial block cross-validation (Roberts et al. 2017). Air-pollution
 sites near each other are not independent: a random train/test split lets a test
 site lean on a training neighbor a few hundred meters away and inflates the score.
 We instead bin sites into a spatial grid and hold out WHOLE blocks at a time, so
-every test site is spatially separated from the training set. This is the same
-fair-evaluation discipline applied to both forests.
+a test site never leans on a training neighbor inside its own block. Sites near a
+block BOUNDARY can still have a training neighbor in the adjacent block; that is
+inherent to grid-block CV, and the control is choosing block_m at least as large
+as the NO2 spatial-autocorrelation range (why block_m is a knob to set with
+Christof). The same discipline applies identically to both forests, so the
+comparison stays fair either way.
 
 This module runs NO simulation. It READS an ABM run's saved per-segment surface,
 the cached graph, the land-use block-group parquet, and the (gitignored) Rao data.
@@ -81,7 +85,12 @@ def assemble(run_name=None, season="summer", year=None, average_rounds=True):
     lu = landuse_model.build_site_features(G, tgt)
 
     on_net = abm[f"n_seg_buf{max(config.BUFFER_RADII_M)}"].to_numpy() > 0
-    abm_cols = [c for c in abm.columns if "buf" in c and not c.startswith("n_seg")]
+    # Explicit allowlist, not a substring test: only these traffic-descriptor
+    # families may enter the ABM feature set. If a future buffered column is
+    # emissions-derived (e.g. nox_buf*) it is excluded by default, so the
+    # no-target-leakage rule is enforced here, not just by convention upstream.
+    _abm_ok = ("activity_buf", "throughput_buf", "meanspeed_buf")
+    abm_cols = [c for c in abm.columns if c.startswith(_abm_ok)]
 
     keep = on_net
     return {
@@ -134,6 +143,10 @@ def compare(run_name=None, block_m=2000, n_splits=5, season="summer", year=None)
         "abm": data["X_abm"],
         "combined": pd.concat([data["X_lu"], data["X_abm"]], axis=1),
     }
+    # The fold count is capped at the number of occupied blocks, so record the k
+    # actually used; citing "5-fold" when only 4 blocks exist would be wrong.
+    k_effective = min(n_splits, n_blocks)
+
     results = {}
     for name, X in feature_sets.items():
         yhat = block_cv_predict(X.to_numpy(), y, groups, n_splits=n_splits)
@@ -142,6 +155,7 @@ def compare(run_name=None, block_m=2000, n_splits=5, season="summer", year=None)
     return {
         "run_name": run_name or config.RUN_NAME,
         "n_sites": len(y), "n_blocks": int(n_blocks), "block_m": block_m,
+        "n_folds": int(k_effective),
         "season": season, "year": year, "scores": results,
     }
 
@@ -150,7 +164,7 @@ def _print_report(res):
     print(f"\nModel-to-model NO2 comparison on '{res['run_name']}' "
           f"({res['season']}{'/'+str(res['year']) if res['year'] else ''})")
     print(f"  {res['n_sites']} sites in {res['n_blocks']} spatial blocks "
-          f"of {res['block_m']} m; spatial block cross-validation")
+          f"of {res['block_m']} m; {res['n_folds']}-fold spatial block cross-validation")
     print(f"  {'predictor set':<12} {'R^2':>7} {'RMSE(ppb)':>11} {'Spearman':>9}")
     for name, s in res["scores"].items():
         print(f"  {name:<12} {s['r2']:>7.3f} {s['rmse']:>11.2f} {s['spearman']:>9.3f}")
@@ -158,14 +172,16 @@ def _print_report(res):
 
 if __name__ == "__main__":
     run = sys.argv[1] if len(sys.argv) > 1 else config.RUN_NAME
-    # On the small Powell network there are too few sites/blocks at 2 km to CV, so
-    # __main__ uses a small block size purely to exercise the machinery end to end.
-    # The numbers here are NOT meaningful; this is a plumbing check until the network
-    # grows to hold enough sampler sites (see module docstring).
+    # Real configuration: 2 km blocks (Roberts CV; block_m is a knob to set with
+    # Christof, not tuned to win). On a network too small to hold enough sampler
+    # sites this degrades to a plumbing check at a smaller block size, clearly
+    # labeled as uninterpretable.
     try:
+        res = compare(run_name=run)
+        _print_report(res)
+    except ValueError as e:
+        print(f"Cannot cross-validate at 2 km blocks: {e}")
+        print("Falling back to a small-block PLUMBING CHECK; numbers not meaningful.")
         res = compare(run_name=run, block_m=500, n_splits=4)
         _print_report(res)
         print("\n[plumbing check only: site/block count is too small to interpret]")
-    except ValueError as e:
-        print(f"Cannot cross-validate yet: {e}")
-        print("This is expected on the 1.5 km network; grow it first.")
