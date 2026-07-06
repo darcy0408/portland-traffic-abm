@@ -34,13 +34,17 @@ for d in (NETWORK_DIR, RAW_DIR, PROCESSED_DIR, FIGURES_DIR):
 # Center sits on SE Powell Blvd by Cleveland High School (Powell & SE 26th).
 # Widen the radius toward the full city later, and bump RUN_NAME so you do not
 # overwrite earlier results.
-STUDY_AREA_LABEL = "SE Portland 5 km (Cleveland HS center, scale-up toward full metro)"
+STUDY_AREA_LABEL = "Portland metro 20 km (Cleveland HS center, full-metro Rao comparison)"
 STUDY_CENTER = (45.49854, -122.63862)   # (latitude, longitude)
-STUDY_RADIUS_M = 5000                    # meters from center; benchmarked Jun 29 at
-                                         # 9,015 nodes / 25,991 edges, 68 Rao sites,
-                                         # ~10-20 min per simulated hour. The 1.5 km
-                                         # Powell window (1500) is the committed
-                                         # baseline that reproduces powell_through.
+STUDY_RADIUS_M = 20000                   # meters from center. 20 km captures ~90% of
+                                         # Rao's 352 metro sites (316) from this center;
+                                         # recentering does not help (sites are already
+                                         # centered here). The 5 km scale (5000; 9,015
+                                         # nodes / 25,991 edges, 91 summer sites, 113 s/hr)
+                                         # is the prior exploratory step, cached in
+                                         # graph_metro5k_backup.graphml. The 1.5 km Powell
+                                         # window (1500) is the committed baseline that
+                                         # reproduces powell_through.
 NETWORK_TYPE = "drive"
 
 # --- Car-following (Intelligent Driver Model) ---
@@ -130,7 +134,9 @@ GRAVITY_DECAY_SCALE_M = 1500.0
 # most corridor traffic is through-traffic or has one end outside the window; the OD
 # payoff grows with the study area, so this pairs naturally with the metro scale-up.
 # Left off so powell_no2 stays the gravity baseline until set with Christof/Nik.
-DEMAND_LODES_OD = False
+DEMAND_LODES_OD = True        # ON for the 20 km metro run: at metro scale the internal OD is
+                              # rich (531k commuters, 1003 BGs) so real commute flows now drive
+                              # demand. Off at corridor scale (see caveat above). metro20k run.
 
 # --- Through-traffic (regional cordon demand, Jul 1) ---
 # The gravity model above makes every trip start AND end inside the 1.5 km circle.
@@ -146,7 +152,7 @@ DEMAND_LODES_OD = False
 # PRIORI from geometry and road class, NEVER tuned against the held-out PBOT counts, so
 # the validation stays an honest test. Set the fraction to 0.0 to disable (reproduces
 # the local-only gravity runs, e.g. powell_no2).
-THROUGH_TRAFFIC_FRACTION = 0.30
+THROUGH_TRAFFIC_FRACTION = 0.15
 # Jul 1 through-traffic experiment: an a-priori 30% through-trip share (RUN_NAME
 # "powell_through", seed 42) raised the traffic-count rank correlation from 0.328 to
 # 0.387 (activity 0.195 -> 0.270), the predicted direction: feeding the arterials with
@@ -156,8 +162,12 @@ THROUGH_TRAFFIC_FRACTION = 0.30
 # validation run (Spearman 0.39). The 0.0 local-only gravity setting reproduces the
 # older powell_no2 baseline. Making 0.30 the permanent default is a Christof/Nik call.
 # Carried over unchanged for the 5 km scale-up. In a wider window more trips are
-# internal, so the true through share should be LOWER than the corridor's 0.30;
-# kept as-is so only one variable (network size) changes in this first run.
+# internal, so the true through share should be LOWER than the corridor's 0.30.
+# metro20k (20 km): re-derived a priori to 0.15. LODES OD is now ON and supplies
+# 531k real internal commuters, so the window internalizes ~90% of metro activity;
+# 0.15 is the residual interstate/freight/non-commute regional flow that still feeds
+# the freeways. Halved from the corridor value on that scale argument, NOT tuned to
+# held-out counts. Revisit with Christof at the scale-up gate.
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
@@ -180,14 +190,19 @@ BUFFER_RADII_M = (100, 200, 400, 800, 1200)
 # geometry, NOT tuned to the held-out PBOT counts. The demand density of the
 # wider area (less uniformly dense than the corridor) is a calibration question
 # for Christof at the scale-up gate. The 1.5 km baseline value was 500.
-N_VEHICLES = 2700
+N_VEHICLES = 16500            # 20 km a-priori scaling. Raw area scaling (240*(20/1.5)^2 = 42.7k)
+                              # over-counts: the outer metro has far fewer roads per km^2 (the
+                              # 20 km graph is 7x the 5 km node count, not 16x the area). So scale
+                              # by road size instead: 2700 * (159410/25991 edges) = 16.5k keeps the
+                              # 5 km run's per-edge vehicle density. A priori from geometry, NOT
+                              # tuned to held-out counts.
 N_STEPS = 3600                # example: one simulated hour at one-second steps
 CHECKPOINT_EVERY = 300        # save state every 300 steps, so a crash loses at most this much work
 # metro5k: the exploratory 5 km scale-up run (worktree metro5k-scaleup). The
 # committed-repo baseline behind every number cited in the SIGSPATIAL abstract is
 # "powell_through" (1.5 km, N_VEHICLES=500, 30% through-traffic, seed 42); do not
 # reuse that name here or its saved results could be overwritten.
-RUN_NAME = "metro5k"          # names the output files; change it for each new experiment
+RUN_NAME = "metro20k"         # names the output files; change it for each new experiment
 # Jun 29 saturation-vs-rank test: re-ran at N_VEHICLES=240 (RUN_NAME "powell_n240")
 # to see if unsaturating raised the traffic-count rank correlation. It did NOT
 # (rho 0.328 -> 0.329), so the weak ordering is about demand STRUCTURE/routing, not
