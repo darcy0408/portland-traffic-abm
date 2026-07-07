@@ -126,14 +126,18 @@ def _score(y, yhat):
     }
 
 
-def compare(run_name=None, block_m=2000, n_splits=5, season="summer", year=None):
+def compare(run_name=None, block_m=2000, n_splits=5, season="summer", year=None,
+            data=None):
     """Run the full comparison for one ABM run and return a results dict.
 
     block_m: spatial-block side in meters (Roberts CV). Should reflect the range of
         spatial autocorrelation in NO2; 2 km is a sensible default for an urban LUR
         and a knob to set with Christof, not tuned to win.
+    data: a dict from assemble(), to reuse across block sizes without rebuilding
+        the buffer features (they are the slow part and do not depend on block_m).
     """
-    data = assemble(run_name=run_name, season=season, year=year)
+    if data is None:
+        data = assemble(run_name=run_name, season=season, year=year)
     y, lat, lon = data["y"], data["lat"], data["lon"]
     groups = spatial_blocks(lat, lon, block_m)
     n_blocks = len(np.unique(groups))
@@ -158,6 +162,34 @@ def compare(run_name=None, block_m=2000, n_splits=5, season="summer", year=None)
         "n_folds": int(k_effective),
         "season": season, "year": year, "scores": results,
     }
+
+
+def shuffle_control(data, block_m=2000, n_splits=5, n_shuffles=10):
+    """Adversarial control for the combined forest's lift over land use alone.
+
+    Permute the ABM feature ROWS across sites (breaking the site alignment while
+    keeping every marginal distribution and the feature count identical), refit
+    the combined forest, and score it the same way. If the true combined score
+    beats land-use alone only because extra columns help a forest overfit, the
+    shuffled runs will show the same lift; if the lift needs the ABM values to be
+    attached to the RIGHT sites, shuffling collapses it back to land-use alone.
+
+    First run Jul 6 was ad hoc; this committed version makes it reproducible.
+    Seeded from config.RANDOM_SEED. Returns the shuffled-combined R^2 list.
+    """
+    y, lat, lon = data["y"], data["lat"], data["lon"]
+    groups = spatial_blocks(lat, lon, block_m)
+    rng = np.random.default_rng(config.RANDOM_SEED)
+
+    r2s = []
+    for _ in range(n_shuffles):
+        perm = rng.permutation(len(y))
+        X_shuf = pd.concat(
+            [data["X_lu"].reset_index(drop=True),
+             data["X_abm"].iloc[perm].reset_index(drop=True)], axis=1)
+        yhat = block_cv_predict(X_shuf.to_numpy(), y, groups, n_splits=n_splits)
+        r2s.append(float(r2_score(y, yhat)))
+    return r2s
 
 
 def _print_report(res):
