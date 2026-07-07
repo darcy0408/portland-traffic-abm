@@ -176,7 +176,17 @@ def main(run_name):
     cbar.ax.xaxis.set_tick_params(color="white")
     plt.setp(plt.getp(cbar.ax.axes, "xticklabels"), color="white")
 
-    # scatter: the Spearman picture
+    # scatter: the Spearman picture.
+    # NOTE on the horizontal bands of dots (Nik asked about these Jul 6): they are
+    # ties, not a bug and not a rendering artifact. Model throughput is a whole-number
+    # count of vehicles crossing a segment in the simulated hour, and at a few hundred
+    # vehicles many quiet streets carry the SAME small integer (e.g. ~20 segments each
+    # with throughput 2, ~19 with 0). pandas .rank() gives every tied value the same
+    # average rank, so they share a y-coordinate and line up on one horizontal row.
+    # The bands cluster low because the small values are the most common. Spearman is
+    # defined to handle ties this way, so rho already accounts for it. The only honest
+    # takeaway is a resolution limit: at this vehicle count the model cannot finely
+    # separate quiet streets from each other. More vehicles / a longer run spreads them out.
     ax_sc.set_facecolor(BG)
     ax_sc.scatter(ranks_real, ranks_model, s=22, c="#f2b134", alpha=0.8,
                   edgecolors="none")
