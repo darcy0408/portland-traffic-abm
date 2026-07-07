@@ -294,7 +294,50 @@ def build_features(G, seg_df, radii=None):
     return pd.DataFrame(cols, index=seg_df.index)
 
 
-def build_site_features(G, sites, radii=None):
+def _areal_buffer_sums(c_lat, c_lon, bg_gdf, radii):
+    """Areal-weighted population and jobs within each buffer radius of each center.
+
+    For every center and radius r, each block group contributes its mass times the
+    fraction of its (land) area inside the circle: mass * area(bg AND circle) / area(bg).
+    Uniform density within a block group is the standard areal-weighting assumption;
+    the cartographic-boundary polygons are shoreline-clipped, so river area does not
+    dilute a waterfront block group. This replaces the all-or-nothing centroid rule
+    whose ~24%-scale feature errors were the same bug class as the two point-snapping
+    bugs (Jul 4, Jul 5), here at block-group scale.
+
+    Returns ({r: pop_array}, {r: jobs_array}) aligned to the centers.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+    from shapely.strtree import STRtree
+    import landuse_data
+
+    pts = gpd.GeoSeries([Point(lon, lat) for lat, lon in zip(c_lat, c_lon)],
+                        crs="EPSG:4326").to_crs(landuse_data.AREA_CRS)
+    geoms = bg_gdf.geometry.values
+    tree = STRtree(geoms)
+    area = bg_gdf["area_m2"].to_numpy(float)
+    pop = bg_gdf["population"].to_numpy(float)
+    jobs = bg_gdf["jobs"].to_numpy(float)
+
+    pop_out = {r: np.zeros(len(pts)) for r in radii}
+    job_out = {r: np.zeros(len(pts)) for r in radii}
+    rmax = float(max(radii))
+    for i, pt in enumerate(pts):
+        # one spatial-index query at the largest radius, reused for the smaller ones
+        cand = tree.query(pt.buffer(rmax), predicate="intersects")
+        for r in radii:
+            circle = pt.buffer(float(r))
+            for j in cand:
+                inter = geoms[j].intersection(circle).area
+                if inter > 0.0:
+                    w = inter / area[j]
+                    pop_out[r][i] += pop[j] * w
+                    job_out[r][i] += jobs[j] * w
+    return pop_out, job_out
+
+
+def build_site_features(G, sites, radii=None, demog="centroid"):
     """Build the Rao-style land-use feature matrix at a set of POINTS (the
     passive-sampler sites), one row per site in `sites` order.
 
@@ -316,12 +359,18 @@ def build_site_features(G, sites, radii=None):
     20 m along each edge's true OSM geometry, so majrdlen_buf{r} is the actual
     meters of road inside the buffer (length-weighted overlap) and dist_major is
     the distance to the nearest point ON the road line (within ~10 m), not to a
-    midpoint that can sit 200 m away on a long arterial. Known limitation, stated
-    not hidden: population and jobs remain POINT MASSES at block-group centroids,
-    so pop_buf/jobs_buf at 100-200 m are all-or-nothing on those centroids. That
-    degrades only the land-use forest's smallest buffers, i.e. it biases the
-    comparison TOWARD the ABM winning; disclose it wherever the comparison is
-    cited (proper areal weighting needs BG polygons, a possible upgrade).
+    midpoint that can sit 200 m away on a long arterial.
+
+    demog selects how population and jobs are attributed:
+      "centroid" (default): the original OR-only point masses at block-group
+        centroids, all-or-nothing vs the radius. Kept as the default so every
+        committed comparison number stays reproducible. Two known biases, both
+        flattering the ABM: small buffers are all-or-nothing on centroids, and
+        the ~40 Rao sites on the WA side see no population or jobs at all.
+      "areal": block-group POLYGONS from both OR and WA, each contributing mass
+        in proportion to its area inside the buffer (landuse_data.landuse_polygons
+        + _areal_buffer_sums). This removes both biases; it touches only the
+        feature side and never the sim's landuse_bg.parquet demand input.
     """
     radii = config.BUFFER_RADII_M if radii is None else radii
 
@@ -329,9 +378,12 @@ def build_site_features(G, sites, radii=None):
     c_lon = sites["lon"].to_numpy(float)
     cx, cy = predictors._local_xy(c_lat, c_lon)
 
-    bg = pd.read_parquet(BG_PATH)               # population / jobs masses
-    bg_lat, bg_lon = bg["lat"].to_numpy(float), bg["lon"].to_numpy(float)
-    pop, jobs = bg["population"].to_numpy(float), bg["jobs"].to_numpy(float)
+    if demog not in ("centroid", "areal"):
+        raise ValueError(f"demog must be 'centroid' or 'areal', got {demog!r}")
+    if demog == "centroid":
+        bg = pd.read_parquet(BG_PATH)           # population / jobs point masses
+        bg_lat, bg_lon = bg["lat"].to_numpy(float), bg["lon"].to_numpy(float)
+        pop, jobs = bg["population"].to_numpy(float), bg["jobs"].to_numpy(float)
 
     # Roads as sampled points along their true geometry, each carrying its share
     # of the edge's length (see predictors._edge_sample_points).
@@ -351,8 +403,13 @@ def build_site_features(G, sites, radii=None):
     n_lat, n_lon = _node_coords(G)
     ones = np.ones_like(n_lat)
 
-    pop_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, pop, radii)
-    job_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, jobs, radii)
+    if demog == "centroid":
+        pop_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, pop, radii)
+        job_sums = _cross_buffer_sums(c_lat, c_lon, bg_lat, bg_lon, jobs, radii)
+    else:
+        import landuse_data
+        bg_poly = landuse_data.landuse_polygons()
+        pop_sums, job_sums = _areal_buffer_sums(c_lat, c_lon, bg_poly, radii)
     node_sums = _cross_buffer_sums(c_lat, c_lon, n_lat, n_lon, ones, radii)
 
     # Road-length buffers and distance-to-major over the sampled road points,

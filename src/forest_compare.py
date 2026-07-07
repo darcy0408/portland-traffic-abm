@@ -70,19 +70,24 @@ def spatial_blocks(lat, lon, block_m):
     return ids
 
 
-def assemble(run_name=None, season="summer", year=None, average_rounds=True):
+def assemble(run_name=None, season="summer", year=None, average_rounds=True,
+             demog="centroid"):
     """Build the aligned comparison table for one ABM run.
 
     Returns a dict with: site_ids, y (NO2 ppb), X_abm, X_lu (DataFrames), lat, lon,
     and the names of each feature block. Sites with no simulated network within the
     largest buffer are dropped (a site outside the network gets all-zero ABM
-    features and cannot be described by the ABM, so it is not a fair test point)."""
+    features and cannot be described by the ABM, so it is not a fair test point).
+
+    demog: 'centroid' (original point-mass pop/jobs) or 'areal' (polygon overlap,
+    OR+WA); see landuse_model.build_site_features. Only the land-use features
+    change; the ABM features and site set are identical either way."""
     run_name = config.RUN_NAME if run_name is None else run_name
     tgt = rao_data.rao_targets(season=season, year=year, average_rounds=average_rounds)
 
     abm = predictors.build_site_predictors(tgt, run_name=run_name)
     G = predictors.load_network()
-    lu = landuse_model.build_site_features(G, tgt)
+    lu = landuse_model.build_site_features(G, tgt, demog=demog)
 
     on_net = abm[f"n_seg_buf{max(config.BUFFER_RADII_M)}"].to_numpy() > 0
     # Explicit allowlist, not a substring test: only these traffic-descriptor
