@@ -182,6 +182,26 @@ THROUGH_TRAFFIC_FRACTION = 0.15
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
+# --- Multi-lane capacity experiment (lanes-experiment worktree, Jul 10) ---
+# The base model gives every directed segment ONE following lane, which caps a
+# signalized segment near 1,070 veh/hr, below Powell's real peak (see
+# calibrate_demand.py). This experiment tests how much that ceiling matters by
+# giving each segment its real OSM-tagged lane count as VIRTUAL lanes: a car
+# follows the car N positions ahead in the segment queue instead of the car
+# directly ahead, so N cars can move abreast and queue discharge scales with N.
+# No lane-change or merge behavior is modeled; virtual lanes assume perfect,
+# frictionless lane use, so the capacity gain is an UPPER BOUND on what real
+# lanes would add. Lane counts come from the OSM 'lanes' tag: list values (from
+# merged edges) take the minimum (a road narrowing to 2 lanes carries what the
+# 2-lane bottleneck allows), two-way streets halve the tag (OSM counts both
+# directions; our graph has one directed edge per direction), untagged edges
+# default to 1. All a priori from map data, never tuned to the held-out PBOT
+# counts. Off by default: the single-lane model is the project's committed
+# spec; this flag exists to produce EVIDENCE for the rank-vs-absolute-scale
+# question (Nik Jul 8, Christof Jul 19), not to change the model.
+LANES_ENABLED = False
+LANES_MAX = 3         # per-direction cap; keeps a mistagged edge from getting absurd capacity
+
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular
 # buffers of increasing radius around it, so a point "sees" its neighborhood and

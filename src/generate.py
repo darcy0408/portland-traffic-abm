@@ -137,6 +137,44 @@ def _default_kph(highway):
     return DEFAULT_KPH.get(highway, 40)
 
 
+def _parse_lanes(data):
+    """Per-direction lane count for one directed edge, from the OSM 'lanes' tag.
+
+    Three rules, all a priori from map data (see config LANES_ENABLED):
+      - list values (OSMnx merged stretches with different counts) take the MIN:
+        a road that narrows from 3 lanes to 2 carries what the 2-lane bottleneck
+        allows, like the narrowest point of a pipe;
+      - OSM 'lanes' counts BOTH directions on a two-way street, and our directed
+        graph carries the same tag on each direction's edge, so halve it unless
+        the street is one-way;
+      - untagged edges (mostly residentials) default to 1, and everything is
+        clamped to [1, LANES_MAX] so a mistagged edge cannot go wild.
+    """
+    if not config.LANES_ENABLED:
+        return 1
+    raw = data.get("lanes")
+    if raw is None:
+        return 1
+    vals = raw if isinstance(raw, list) else [raw]
+    counts = []
+    for x in vals:
+        try:
+            counts.append(int(float(str(x).strip())))
+        except ValueError:
+            continue                      # unreadable tag piece: ignore it
+    if not counts:
+        return 1
+    n = min(counts)                       # bottleneck rule for merged edges
+    oneway = data.get("oneway")
+    if isinstance(oneway, list):
+        oneway = oneway[0]
+    is_oneway = (oneway is True) or (str(oneway).strip().lower()
+                                     in ("yes", "true", "1", "-1"))
+    if not is_oneway:
+        n = n // 2                        # split the two-way total per direction
+    return max(1, min(n, config.LANES_MAX))
+
+
 # --- road closure -----------------------------------------------------------
 # A closure removes street segments from the graph before routing, so vehicles
 # reroute around the gap. This is the mentor's Jun 23 idea: the case where the ABM
@@ -195,6 +233,8 @@ def prepare_network(G):
         # makes drivers prefer faster arterials over short slow side streets, which
         # is how real trips concentrate on the main roads the city counts as busy.
         data["travel_time_s"] = data["length"] / data["v0_mps"]
+        # per-direction lane count (1 unless the lanes experiment is on)
+        data["n_lanes"] = _parse_lanes(data)
     return G
 
 
@@ -558,7 +598,7 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None):
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
-                  fleet_ctx=None):
+                  fleet_ctx=None, lanes=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -580,6 +620,19 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     rather than crossing into a segment with no room at its entrance. Together these
     let a jam longer than one block back up through the upstream intersection
     instead of vanishing at the segment boundary.
+
+    Virtual lanes (`lanes`, the multi-lane capacity experiment): with N lanes on a
+    segment, a car follows the car N positions ahead in the segment's queue; the
+    N-1 cars in between are conceptually beside it in other lanes. The front N
+    cars all brake for the stop line independently, so N cars queue abreast and
+    signal discharge scales with N. The spillback rules generalize the same way:
+    the entrance of an N'-lane segment only blocks when its N'th-rearmost car is
+    at the entrance (fewer than N' cars there means a free lane), and the leader
+    seen across the intersection is that N'th-rearmost car (the rearmost car of
+    the emptiest lane). With lanes=None or every count 1, all three rules reduce
+    exactly to the single-lane behavior above. Lane identity is implicit (queue
+    rank mod N) and reshuffles freely between steps, i.e. lane changes are free
+    and perfect, so this measures the capacity ceiling's effect as an UPPER BOUND.
     """
     # group cars by the segment they are on, and sort each group front-to-back
     by_edge = defaultdict(list)
@@ -595,22 +648,29 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         for i, veh in enumerate(group):
             edge = veh["route"][veh["idx"]]
             v0 = edge[4]
-            if i + 1 < len(group):                 # there is a car ahead on this edge
-                lead = group[i + 1]
+            # lanes on this car's segment: its leader is the car n_here positions
+            # ahead in the queue (same virtual lane); n_here=1 is the base model
+            n_here = lanes.get(edge[:3], 1) if lanes else 1
+            if i + n_here < len(group):            # there is a car ahead in this lane
+                lead = group[i + n_here]
                 gap = lead["pos"] - L - veh["pos"]
                 lead_v = lead["v"]
-            else:                                  # no car ahead on this edge
+            else:                                  # no car ahead in this lane
                 # look across the downstream intersection to the next segment on
                 # this car's route. If cars are backed up there, the rearmost one
-                # is our leader, sitting (edge_remaining + its pos) ahead of us.
-                # This is cross-edge spillback: a jam now backs up through the
+                # in the emptiest lane (the n_next'th from the rear) is our leader,
+                # sitting (edge_remaining + its pos) ahead of us. Fewer than n_next
+                # cars there means a lane is free, so nothing blocks. This is
+                # cross-edge spillback: a jam now backs up through the
                 # intersection instead of disappearing at the segment boundary.
                 gap = 1e6
                 lead_v = veh["v"]
                 if veh["idx"] + 1 < len(veh["route"]):
-                    next_group = by_edge.get(veh["route"][veh["idx"] + 1][:3])
-                    if next_group:
-                        rear = next_group[0]       # smallest pos = rearmost car there
+                    next_key = veh["route"][veh["idx"] + 1][:3]
+                    next_group = by_edge.get(next_key)
+                    n_next = lanes.get(next_key, 1) if lanes else 1
+                    if next_group and len(next_group) >= n_next:
+                        rear = next_group[n_next - 1]
                         gap = (edge[3] - veh["pos"]) + rear["pos"] - L
                         lead_v = rear["v"]
 
@@ -656,12 +716,17 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                     signals, node_v, signals["edge_phase"][edge[:3]], t):
                 veh["pos"], veh["v"] = edge[3], 0.0
                 break
-            # do not cross into a full downstream segment: if its rearmost car sits
-            # within a minimum gap of the entrance, hold at the stop line. This is
+            # do not cross into a full downstream segment: if every lane's rearmost
+            # car sits within a minimum gap of the entrance, hold at the stop line
+            # (with n_next lanes, that is the n_next'th-rearmost car; fewer cars
+            # than lanes means a free lane, so entry is never blocked). This is
             # the spillback counterpart to the red-light hold above.
             if veh["idx"] + 1 < len(veh["route"]):
-                next_group = by_edge.get(veh["route"][veh["idx"] + 1][:3])
-                if next_group and next_group[0]["pos"] < L + config.IDM_S0:
+                next_key = veh["route"][veh["idx"] + 1][:3]
+                next_group = by_edge.get(next_key)
+                n_next = lanes.get(next_key, 1) if lanes else 1
+                if (next_group and len(next_group) >= n_next
+                        and next_group[n_next - 1]["pos"] < L + config.IDM_S0):
                     veh["pos"], veh["v"] = edge[3], 0.0
                     break
             # the car has fully traversed this segment: count one vehicle through it.
@@ -691,9 +756,17 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
 
     prepare_network(G)
     signals = prepare_signals(G)
+    # per-segment virtual-lane counts (all 1 unless config.LANES_ENABLED); dict
+    # keyed like by_edge so step_vehicles can look lanes up per segment
+    lanes = {(u, v, k): d.get("n_lanes", 1)
+             for u, v, k, d in G.edges(keys=True, data=True)}
     if verbose:
         src = "OSM-tagged" if signals["tagged"] else "degree>=4 fallback"
         print(f"{len(signals['nodes'])} signalized intersections ({src})")
+        if config.LANES_ENABLED:
+            multi = sum(1 for n in lanes.values() if n > 1)
+            print(f"lanes experiment ON: {multi} of {len(lanes)} segments get >1 "
+                  f"virtual lane (max {max(lanes.values())})")
     nodes = list(G.nodes)
     rng = random.Random(config.RANDOM_SEED)   # own stream, so routes are reproducible
     nox_coeffs = emissions.active_coeffs()    # HBEFA3 row for the configured class, fetched once
@@ -729,7 +802,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     for step in range(state["step"], n_steps):
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
-                      signals, demand, through, fleet_ctx)
+                      signals, demand, through, fleet_ctx, lanes)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
