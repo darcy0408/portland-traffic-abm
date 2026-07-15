@@ -190,7 +190,10 @@ def main(run_name):
     ax_sc.set_facecolor(BG)
     ax_sc.scatter(ranks_real, ranks_model, s=22, c="#f2b134", alpha=0.8,
                   edgecolors="none")
-    lim = [0, n + 1]
+    # margin past the rank range so the corner dots' highlight rings sit fully
+    # inside the axes (Powell ranks at the extreme corner; without this its ring
+    # is clipped by the plot edge / any downstream image crop)
+    lim = [-14, n + 15]
     ax_sc.plot(lim, lim, ls="--", color="#888", lw=1.2)   # perfect-agreement line
     # least-squares trend through the rank cloud
     b, a = np.polyfit(ranks_real, ranks_model, 1)
@@ -200,8 +203,10 @@ def main(run_name):
     # dots sit high on the plot, so drop their labels below to clear the title
     for i, role, col, dx, ha in [(hit_i, "hit", HIT_COL, -10, "right"),
                                  (miss_i, "miss", MISS_COL, 10, "left")]:
+        # clip_on=False: Powell ranks at the very top-right CORNER of the plot, so a
+        # clipped ring is invisible; let it draw over the axes boundary instead
         ax_sc.scatter([ranks_real[i]], [ranks_model[i]], s=140, facecolors="none",
-                      edgecolors=col, linewidths=2.4, zorder=5)
+                      edgecolors=col, linewidths=2.4, zorder=5, clip_on=False)
         ax_sc.annotate(f"{_short(seg_names[i])} ({role})",
                        (ranks_real[i], ranks_model[i]), textcoords="offset points",
                        xytext=(dx, -16), ha=ha, color=col, fontsize=10, weight="bold",
