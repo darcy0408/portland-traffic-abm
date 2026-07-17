@@ -108,6 +108,14 @@ LODES_YEAR = 2021   # LEHD LODES8 workplace-jobs vintage; 2021 avoids the 2020 a
 # honest test. Revisit at the calibration gate with Christof. Set to None to disable
 # decay (origins and destinations drawn independently).
 GRAVITY_DECAY_SCALE_M = 1500.0
+# EXPLORATORY (branch experiment/decay, Jul 17): src/calibrate_decay.py derives this
+# scale from the LODES OD commute flows (measured data, independent of the held-out
+# PBOT counts). Like-for-like fit on the within-window OD: 1082 m, close to the 1500 m
+# guess. Caveat: the 1.5 km window truncates long commutes; the untruncated fit
+# (window homes, workplaces to 30 km) is ~8.8 km, so 1082 m is a window-conditional
+# value, not a behavioral constant. src/run_decayfit.py runs the fitted value under
+# RUN_NAME powell_through_decayfit without touching this default. Whether to adopt
+# the fitted value is a Christof calibration-gate decision; see DECAY_RESULTS.md.
 
 # --- Real origin-destination demand from LODES (Jul 2) ---
 # The gravity model above is a GUESS at the home->work distribution: it multiplies a
