@@ -151,6 +151,23 @@ THROUGH_TRAFFIC_FRACTION = 0.30
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
+# --- Directional AM/PM commute demand (Jul 17 experiment, worktree experiment/ampm) ---
+# The gravity draw above sends every local trip home->work (origins weighted by
+# population, destinations by jobs) at every hour, so 8 am and 5 pm look identical.
+# Real commuting is directional: morning flows run home->work and evening flows run
+# work->home. With this flag on, the `day` experiment keeps the AM commute window on
+# the existing home->work draw, REVERSES the draw during the PM commute window
+# (origins weighted by jobs, destinations by population, same distance decay), and
+# leaves every other hour exactly as before. Single-hour runs are unaffected.
+# The hour windows are set A PRIORI from the standard weekday commute peak periods
+# used in US traffic engineering (AM peak 6:00-9:00, PM peak 15:00-18:00, the
+# FHWA-style three-hour peaks), NOT from the PBOT counts or any model output, so the
+# held-out count validation stays an honest test. Default False so all committed
+# runs (powell_through, powell_no2_day) reproduce unchanged.
+DEMAND_DIRECTIONAL = False
+AM_PEAK_HOURS = (6, 7, 8)      # hours 6:00-8:59, the home->work commute window
+PM_PEAK_HOURS = (15, 16, 17)   # hours 15:00-17:59, the work->home commute window
+
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular
 # buffers of increasing radius around it, so a point "sees" its neighborhood and

@@ -408,6 +408,7 @@ def build_demand_weights(G, nodes):
           + (f", decay scale {scale:.0f} m" if scale else ", no distance decay"))
     return {
         "origin_w": origin_w.tolist(),    # list for random.choices (origins)
+        "origin_w_arr": origin_w,         # numpy array, for the reversed (PM) decay math
         "dest_w": dest_w,                 # numpy array for the per-trip decay math
         "dest_w_list": dest_w.tolist(),   # list for the no-decay path
         "node_x": node_x, "node_y": node_y,
@@ -460,13 +461,17 @@ def build_through_context(G, nodes):
             "bx": np.array(bx), "by": np.array(by), "fraction": frac}
 
 
-def make_vehicle(G, nodes, rng, vid, demand=None, through=None):
+def make_vehicle(G, nodes, rng, vid, demand=None, through=None, direction="home_work"):
     """Create one vehicle with an origin, destination, and shortest-time route.
     With a `demand` context, the origin is drawn in proportion to population and the
     destination in proportion to jobs, with a distance-decay pull toward nearer jobs;
     without one, both are uniform random. With a `through` context, a fraction of
     trips instead enter and leave on the network perimeter, modeling regional
-    through-traffic. Returns None if no route is found after a few tries."""
+    through-traffic. `direction` is the commute direction of local demand trips:
+    "home_work" is the standard draw (population origins, jobs destinations), and
+    "work_home" swaps the two mass surfaces so the same gravity math runs in reverse
+    (the PM commute; see config.DEMAND_DIRECTIONAL). Through trips and uniform-random
+    trips have no direction. Returns None if no route is found after a few tries."""
     for _ in range(25):
         if through is not None and rng.random() < through["fraction"]:
             # THROUGH trip: enter on a perimeter node and leave on another, so the
@@ -488,24 +493,40 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None):
             # REAL OD trip: draw a home-BG -> work-BG pair in proportion to the LODES
             # commuter flow, then place each end on a random node inside that block
             # group (the gravity guess is replaced by the measured joint distribution).
+            # In the reversed (PM) direction the same pair runs work -> home.
             pi = rng.choices(range(len(demand["weights"])),
                              weights=demand["weights"])[0]
-            o = rng.choice(demand["bg_nodes"][demand["pairs_h"][pi]])
-            d = rng.choice(demand["bg_nodes"][demand["pairs_w"][pi]])
+            h_bg, w_bg = demand["pairs_h"][pi], demand["pairs_w"][pi]
+            if direction == "work_home":
+                h_bg, w_bg = w_bg, h_bg
+            o = rng.choice(demand["bg_nodes"][h_bg])
+            d = rng.choice(demand["bg_nodes"][w_bg])
         else:
-            o = rng.choices(nodes, weights=demand["origin_w"])[0]
+            # Commute direction of the gravity draw: home_work is the standard
+            # population-origins -> jobs-destinations draw; work_home swaps the two
+            # mass surfaces (jobs-weighted origins, population-weighted destinations)
+            # so the identical gravity math models the evening return commute.
+            if direction == "work_home":
+                o_list = demand["dest_w_list"]     # origins: jobs
+                d_arr = demand["origin_w_arr"]     # destinations: population (decay path)
+                d_list = demand["origin_w"]        # destinations: population (no-decay path)
+            else:
+                o_list = demand["origin_w"]        # origins: population
+                d_arr = demand["dest_w"]           # destinations: jobs (decay path)
+                d_list = demand["dest_w_list"]     # destinations: jobs (no-decay path)
+            o = rng.choices(nodes, weights=o_list)[0]
             if demand["scale"]:
-                # destination weights conditional on this origin: jobs damped by
-                # distance from the origin (gravity deterrence). exp keeps every
-                # weight positive, so there is always something to draw.
+                # destination weights conditional on this origin: the destination
+                # mass damped by distance from the origin (gravity deterrence). exp
+                # keeps every weight positive, so there is always something to draw.
                 oi = demand["index"][o]
                 dx = demand["node_x"] - demand["node_x"][oi]
                 dy = demand["node_y"] - demand["node_y"][oi]
                 dist = np.sqrt(dx * dx + dy * dy)
-                w = demand["dest_w"] * np.exp(-dist / demand["scale"])
+                w = d_arr * np.exp(-dist / demand["scale"])
                 d = rng.choices(nodes, weights=w.tolist())[0]
             else:
-                d = rng.choices(nodes, weights=demand["dest_w_list"])[0]
+                d = rng.choices(nodes, weights=d_list)[0]
         if o == d:
             continue
         try:
@@ -522,7 +543,8 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None):
 
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
-                  nox_coeffs, G, nodes, rng, signals, demand=None, through=None):
+                  nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
+                  direction="home_work"):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -635,7 +657,8 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             else:
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady
-                fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through)
+                fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through,
+                                     direction)
                 if fresh is not None:
                     veh.update(fresh)
                 else:
@@ -643,9 +666,12 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 break
 
 
-def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True):
+def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
+                   direction="home_work"):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
-    per-segment vehicle-seconds of activity, and per-segment NOx grams."""
+    per-segment vehicle-seconds of activity, and per-segment NOx grams.
+    `direction` sets the commute direction of local gravity/OD trips for the whole
+    run ("home_work" is the standard draw; see make_vehicle)."""
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -667,7 +693,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         segment_throughput = {edge: 0.0 for edge in G.edges(keys=True)}
         vehicles = []
         for vid in range(n_vehicles):
-            veh = make_vehicle(G, nodes, rng, vid, demand, through)
+            veh = make_vehicle(G, nodes, rng, vid, demand, through, direction)
             if veh is not None:
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
@@ -688,7 +714,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     for step in range(state["step"], n_steps):
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
-                      signals, demand, through)
+                      signals, demand, through, direction)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -811,15 +837,33 @@ def run_day_experiment(G):
     profile = demand_data.hourly_demand_profile()
     src = "real PORTAL data" if demand_data.is_using_real_data() else "SYNTHETIC fallback"
     print(f"Time-of-day demand shape: {src}. "
-          f"Daily-average population {config.N_VEHICLES} vehicles.\n")
+          f"Daily-average population {config.N_VEHICLES} vehicles.")
+    if config.DEMAND_DIRECTIONAL:
+        # Directional commute demand (config.DEMAND_DIRECTIONAL): AM peak hours run
+        # the standard home->work gravity draw, PM peak hours run it reversed
+        # (work->home), all other hours keep the existing draw. Windows are the a
+        # priori standard commute peaks, never taken from the PBOT counts.
+        print(f"Directional AM/PM commute demand ON: home->work in hours "
+              f"{config.AM_PEAK_HOURS}, reversed work->home in hours "
+              f"{config.PM_PEAK_HOURS}, standard draw otherwise.")
+    print()
 
     frames = []
     for h in range(24):
         n_h = max(1, round(config.N_VEHICLES * profile[h] * 24))
+        if config.DEMAND_DIRECTIONAL and h in config.PM_PEAK_HOURS:
+            direction = "work_home"
+        else:
+            # AM peak hours and off-peak hours both use the standard home->work
+            # draw; the AM window needs no special case because the existing draw
+            # already IS the morning commute direction.
+            direction = "home_work"
         totals, nox, thru = run_simulation(
-            G, n_vehicles=n_h, use_checkpoint=False, verbose=False)
+            G, n_vehicles=n_h, use_checkpoint=False, verbose=False,
+            direction=direction)
         no2_total = config.F_NO2 * sum(nox.values())
-        print(f"[hour {h:02d}:00]  {n_h:>4} vehicles   network NO2 {no2_total:8.1f} g")
+        tag = " (reversed)" if direction == "work_home" else ""
+        print(f"[hour {h:02d}:00]  {n_h:>4} vehicles   network NO2 {no2_total:8.1f} g{tag}")
         for (u, v, k), val in totals.items():
             frames.append({"u": u, "v": v, "key": k, "value": val,
                            "nox_g": nox[(u, v, k)], "throughput": thru[(u, v, k)],
