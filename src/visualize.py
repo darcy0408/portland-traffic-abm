@@ -144,7 +144,7 @@ def plot_no2_map(G, df):
 
 
 def plot_closure_diff(G):
-    """Before/after closure map (Christof, Jun 23): where did NO2 move when the
+    """Before/after closure map (mentor request, Jun 23): where did NO2 move when the
     road closed? Differences the '_open' and '_closed' runs the closure experiment
     saved and colors each segment by NO2_closed - NO2_open.
 
@@ -219,7 +219,7 @@ def _load_scenario(name):
 
 
 def plot_scenarios():
-    """Turn the validation test-bench traces into one evidence sheet (Christof,
+    """Turn the validation test-bench traces into one evidence sheet (the mentor,
     Jun 24): four panels, each a small scenario whose outcome you can check by eye.
     This is the visual half of 'show me it works'; scenarios.py is the numeric half.
 

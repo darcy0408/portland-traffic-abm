@@ -122,7 +122,7 @@ def compare(run_name=None, block_m=2000, n_splits=5, season="summer", year=None)
 
     block_m: spatial-block side in meters (Roberts CV). Should reflect the range of
         spatial autocorrelation in NO2; 2 km is a sensible default for an urban LUR
-        and a knob to set with Christof, not tuned to win.
+        and a knob to set with the mentor, not tuned to win.
     """
     data = assemble(run_name=run_name, season=season, year=year)
     y, lat, lon = data["y"], data["lat"], data["lon"]

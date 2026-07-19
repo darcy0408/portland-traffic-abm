@@ -25,7 +25,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import generate
 
-# Twelve seeds for the robustness spread (bumped from 6 on Jul 2 after Christof noted
+# Twelve seeds for the robustness spread (bumped from 6 on Jul 2 after the mentor noted
 # six is a small number to call something "robust"). 42 is the project default (the
 # cited run); the rest are arbitrary fixed values so the sweep itself is reproducible.
 SEEDS = [42, 7, 13, 21, 99, 2024, 1, 5, 8, 100, 314, 777]

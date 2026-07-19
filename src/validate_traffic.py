@@ -1,4 +1,4 @@
-"""Validate the ABM's traffic pattern against real PBOT counts (Christof, Jun 25).
+"""Validate the ABM's traffic pattern against real PBOT counts (mentor request, Jun 25).
 
 Pairs each real count point (from traffic_counts.py) with the nearest street
 segment in the model, then asks the honest first question: does the ABM put heavy

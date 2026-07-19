@@ -1,6 +1,6 @@
 """Through-traffic BEFORE/AFTER SCATTER (Jul 1).
 
-Christof cares about the POINTS, not the maps: whether the streets fall on the
+the mentor cares about the POINTS, not the maps: whether the streets fall on the
 agreement line. This shows the same Spearman scatter twice, side by side, WITHOUT
 through-traffic (baseline) and WITH it, so the effect on the point cloud is visible.
 Each dot is one of the matched street segments; the dashed line is perfect agreement

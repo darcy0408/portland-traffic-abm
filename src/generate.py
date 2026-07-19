@@ -138,7 +138,7 @@ def _default_kph(highway):
 
 # --- road closure -----------------------------------------------------------
 # A closure removes street segments from the graph before routing, so vehicles
-# reroute around the gap. This is Christof's Jun 23 idea: the case where the ABM
+# reroute around the gap. This is the mentor's Jun 23 idea: the case where the ABM
 # beats a static land-use model, because the land use is unchanged but the traffic
 # moves. See config.CLOSURE for the zone definition.
 
@@ -704,7 +704,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
 
 
 def benchmark(G):
-    """Early computational-complexity read (Christof, Jun 22): hold the network
+    """Early computational-complexity read (mentor request, Jun 22): hold the network
     fixed and watch wall time grow with vehicle count. Small steps so it is fast."""
     print(f"Runtime read on the Powell network ({G.number_of_nodes()} nodes, "
           f"{G.number_of_edges()} edges):")
@@ -735,7 +735,7 @@ def save_results(segment_totals, segment_nox, segment_throughput):
 
 
 def run_closure_experiment(G):
-    """Before/after closure experiment (Christof, Jun 23).
+    """Before/after closure experiment (mentor request, Jun 23).
 
     Runs the SAME demand on the network twice: once open, once with config.CLOSURE
     applied, and saves both result files (RUN_NAME + '_open' and '_closed'). The
@@ -780,7 +780,7 @@ def run_closure_experiment(G):
 
 def run_day_experiment(G):
     """24-hour time-of-day experiment: the temporal dimension a static surface
-    cannot produce (Christof's brainstorm direction, Jun 26).
+    cannot produce (the mentor's brainstorm direction, Jun 26).
 
     Rao et al. produce a single long-term-average NO2 surface. The ABM runs second
     by second, so it can produce one surface PER HOUR of the day. We drive that with

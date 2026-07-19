@@ -33,7 +33,7 @@ which gives the vehicle-type mix, the gasoline/diesel split (the `avft` table), 
 model-year/age distribution. Recipe and table names are in DATASETS.md section 7. Map
 each MOVES (source type, fuel, age->Euro standard) bucket onto an HBEFA3 class, sum the
 populations into shares, and drop them in here. How finely to resolve the diesel/heavy-duty
-share is a Christof calibration decision, because those classes dominate per-vehicle NOx.
+share is a the mentor calibration decision, because those classes dominate per-vehicle NOx.
 """
 import os
 import sys
@@ -128,12 +128,12 @@ DEFAULT_FLEET = [
 #     to LDV_D. Genuine heavy multi-axle is ~0.05% (HDV, a sliver). A small transit-bus share is
 #     kept explicit because TriMet runs Powell frequently and buses are NOx-heavy (buses are
 #     2-axle, so they hide inside this count; naming them is deliberate). The exact LDV/HDV/Bus
-#     split inside the 5.4% is a Christof calibration knob.
+#     split inside the 5.4% is a the mentor calibration knob.
 #   - EV ~3%: zero tailpipe NOx (mapped to the BEV zero row).
 # The NOx-critical buckets are the diesel cars (5%) and the commercial/bus diesel (~5.4%, now
 # mostly light-commercial per the Powell class count): together the majority of fleet NOx, kept
 # as distinct classes on purpose. Motorcycles (~1% of traffic) are folded into old gasoline as a
-# documented simplification (no MC class extracted; minor NOx). These shares are the Christof
+# documented simplification (no MC class extracted; minor NOx). These shares are the the mentor
 # calibration knob; tighten further with the MOVES 41051 age table and the layer-253 axle split.
 PORTLAND_FLEET = [
     ("PC_G_EU6", 0.33),    # newest gasoline passenger car (Tier 3 ~ Euro 6)

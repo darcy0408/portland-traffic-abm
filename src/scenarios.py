@@ -1,12 +1,12 @@
-"""Validation test-bench for the ABM (Christof, Jun 24).
+"""Validation test-bench for the ABM (mentor request, Jun 24).
 
-Christof's guidance: you do not have to understand every line the model is made
+the mentor's guidance: you do not have to understand every line the model is made
 of, but you must be able to SHOW it works. So this script runs a handful of
 small, hand-checkable scenarios through the real simulation kernel (the same
 idm_acceleration and step_vehicles that generate.py uses, never a reimplementation)
 and reports, for each, what the output MUST be and what it actually was.
 
-The scenarios are exactly the ones Christof named:
+The scenarios are exactly the ones the mentor named:
   1. one car on an open road        -> accelerates to the limit and holds
   2. two cars, one behind the other -> the follower keeps a safe gap, no overlap
   3. one car at a red light         -> stops at the line, goes on green
@@ -202,7 +202,7 @@ def _run_on_network(G, n_vehicles, n_steps):
 
 
 def scenario_saturation(G):
-    print("\n4) SATURATION (Christof's 'place a thousand cars')")
+    print("\n4) SATURATION (the mentor's 'place a thousand cars')")
     print("   Same network, light load vs heavy load. Expect: under heavy load the")
     print("   mean speed collapses and many cars are stopped. Congestion is an")
     print("   emergent result of the interaction, not something coded in by hand.")

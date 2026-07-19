@@ -1,8 +1,8 @@
-"""Traffic-layer validation FIGURE (Christof, Jun 29): show the model's traffic
+"""Traffic-layer validation FIGURE (mentor request, Jun 29): show the model's traffic
 next to the real Portland counts on the same streets, so the match can be judged
 by eye, before any NO2.
 
-Christof's ask: validate the traffic foundation first. Lead with "do the cars go
+the mentor's ask: validate the traffic foundation first. Lead with "do the cars go
 where the real counts say cars go?", not with the pollution surface downstream of
 it. This script answers that with three panels read from saved files (no sim run):
 
@@ -177,7 +177,7 @@ def main(run_name):
     plt.setp(plt.getp(cbar.ax.axes, "xticklabels"), color="white")
 
     # scatter: the Spearman picture.
-    # NOTE on the horizontal bands of dots (Nik asked about these Jul 6): they are
+    # NOTE on the horizontal bands of dots (the mentor asked about these Jul 6): they are
     # ties, not a bug and not a rendering artifact. Model throughput is a whole-number
     # count of vehicles crossing a segment in the simulated hour, and at a few hundred
     # vehicles many quiet streets carry the SAME small integer (e.g. ~20 segments each

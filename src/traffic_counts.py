@@ -1,6 +1,6 @@
-"""Pull real PBOT traffic-volume counts for validating the ABM (Christof, Jun 25).
+"""Pull real PBOT traffic-volume counts for validating the ABM (mentor request, Jun 25).
 
-Christof's Jun 25 email: validate the ABM against real traffic counts the city has
+the mentor's Jun 25 email: validate the ABM against real traffic counts the city has
 already collected. This module pulls the City of Portland (PBOT) "Traffic Volume
 Counts" layer, point ADT (average daily traffic) counts on city streets, from the
 PortlandMaps ArcGIS REST service, restricted to the Powell study area. No scraper
