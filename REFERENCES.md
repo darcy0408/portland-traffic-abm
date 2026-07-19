@@ -1,12 +1,12 @@
 # References
 
 Working bibliography for the Portland Traffic ABM. These are the references
-Christof sent (Jun 15, 2026), annotated with the role each one plays in the
+the mentor sent (Jun 15, 2026), annotated with the role each one plays in the
 project. Keep this current as you read. A clean, complete bibliography is part of
 doing the work credibly, and it makes the final chapter's reference list one step
 away.
 
-Tip: also track these in a reference manager (Christof recommended Zotero or
+Tip: also track these in a reference manager (the mentor recommended Zotero or
 Mendeley) so citations and the bibliography stay in sync as you write.
 
 ## The baseline and its lineage

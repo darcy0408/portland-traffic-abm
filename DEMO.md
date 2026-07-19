@@ -1,6 +1,6 @@
-# Demo runbook (for Christof)
+# Demo runbook (for the mentor)
 
-Everything Christof has asked for, in the order to show it, with the one command
+Everything the mentor has asked for, in the order to show it, with the one command
 to run and the one thing to say for each. The runs are fast (the whole demo runs
 live in under a minute), but every figure is also pre-saved in `outputs/figures/`
 as a backup, so nothing depends on a live run succeeding.

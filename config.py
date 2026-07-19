@@ -41,7 +41,7 @@ NETWORK_TYPE = "drive"
 
 # --- Car-following (Intelligent Driver Model) ---
 # These shape how every vehicle accelerates and brakes. Values are the standard
-# IDM defaults from the traffic-flow literature; tune them later with Christof
+# IDM defaults from the traffic-flow literature; tune them later with the mentor
 # once we can see the dynamics. Units are SI: meters, seconds, m/s, m/s^2.
 IDM_A_MAX  = 1.5    # comfortable acceleration when the road ahead is open
 IDM_B_COMF = 2.0    # comfortable braking when closing on a slower car
@@ -70,15 +70,15 @@ EMISSION_CLASS = "PC_D_EU4"   # passenger car, diesel, Euro 4 (HBEFA3); diesel =
 # per segment; the NO2 surface is NO2 = F_NO2 * NOx, applied later in analysis and
 # visualization. Keeping it here (not baked into the sim) means it can be retuned
 # without rerunning the expensive run. Central literature value ~0.30; plausible
-# range 0.20-0.30 (EMEP/EEA Guidebook; Carslaw et al. 2016). Raise with Christof
+# range 0.20-0.30 (EMEP/EEA Guidebook; Carslaw et al. 2016). Raise with the mentor
 # when we set calibration gates.
 F_NO2 = 0.30
 
-# --- Road closure scenario (Christof, Jun 23) ---
+# --- Road closure scenario (mentor request, Jun 23) ---
 # A closure removes street segments from the network before routing, so vehicles
 # must find a different way around the gap. This is the experiment a static
 # land-use model cannot do: the land use is unchanged, but the traffic, and the
-# NO2 and noise surfaces, shift. (Christof's examples: a bridge maintenance
+# NO2 and noise surfaces, shift. (the mentor's examples: a bridge maintenance
 # closure, the planned I-5 lane closure that pushes traffic onto I-205, marathon
 # street closures.)
 # CLOSURE is a (lat, lon, radius_m) zone; every street segment whose midpoint
@@ -105,7 +105,7 @@ LODES_YEAR = 2021   # LEHD LODES8 workplace-jobs vintage; 2021 avoids the 2020 a
 # big job center. This is the classic gravity-model deterrence term. The value is set
 # a priori (comparable to the study-area radius and the short end of urban trip
 # lengths), NOT tuned against the held-out PBOT counts, so the validation stays an
-# honest test. Revisit at the calibration gate with Christof. Set to None to disable
+# honest test. Revisit at the calibration gate with the mentor. Set to None to disable
 # decay (origins and destinations drawn independently).
 GRAVITY_DECAY_SCALE_M = 1500.0
 
@@ -122,7 +122,7 @@ GRAVITY_DECAY_SCALE_M = 1500.0
 # 1.5 km Powell scale the internal OD is thin (~575 commuters, 210 BG pairs), because
 # most corridor traffic is through-traffic or has one end outside the window; the OD
 # payoff grows with the study area, so this pairs naturally with the metro scale-up.
-# Left off so powell_no2 stays the gravity baseline until set with Christof/Nik.
+# Left off so powell_no2 stays the gravity baseline until set with the mentors.
 DEMAND_LODES_OD = False
 
 # --- Through-traffic (regional cordon demand, Jul 1) ---
@@ -147,7 +147,7 @@ THROUGH_TRAFFIC_FRACTION = 0.30
 # NOT tuned to the held-out PBOT counts. Set to 0.30 (Jul 2) so the closure sweep and
 # the abstract's numbers all come from ONE model that matches the powell_through
 # validation run (Spearman 0.39). The 0.0 local-only gravity setting reproduces the
-# older powell_no2 baseline. Making 0.30 the permanent default is a Christof/Nik call.
+# older powell_no2 baseline. Making 0.30 the permanent default is a the mentors call.
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
@@ -163,7 +163,7 @@ BUFFER_RADII_M = (100, 200, 400, 800, 1200)
 
 # --- Simulation parameters ---
 # N_VEHICLES and the network size are the two knobs to scale for the runtime
-# benchmark (Christof, Jun 22): turn them up and watch how wall time grows.
+# benchmark (mentor request, Jun 22): turn them up and watch how wall time grows.
 N_VEHICLES = 500
 N_STEPS = 3600                # example: one simulated hour at one-second steps
 CHECKPOINT_EVERY = 300        # save state every 300 steps, so a crash loses at most this much work

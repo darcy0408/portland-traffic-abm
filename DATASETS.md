@@ -1,7 +1,7 @@
 # Datasets
 
 Public data the project needs, with where to get it and how usable it is. Built
-from a research pass on Jun 22 (Christof's "spend ~30% finding the critical
+from a research pass on Jun 22 (the mentor's "spend ~30% finding the critical
 datasets" ask). Synthetic stand-ins are fine for the prototype; this is the map of
 what to wire in for realism later. Nothing here is downloaded yet.
 
@@ -109,7 +109,7 @@ emission-factor source, and a rule mapping speed+accel to a rate.
   category and "traffic situation" (area x road type x speed limit x level of
   service), with NO2 given as a % of NOx. **Commercial, paid, no free version**
   (INFRAS). Native granularity is a congestion bin, not per-instant. https://www.hbefa.net/
-- **US EPA MOVES** (US-native, for calibration with Christof) — official US model
+- **US EPA MOVES** (US-native, for calibration with the mentor) — official US model
   carrying the Oregon fleet mix. Internally bins running NOx by operating mode
   (VSP + speed). Free, public domain. Getting per-opMode rates means querying its
   default database; or export a g/mile-vs-speed curve. https://www.epa.gov/moves
@@ -188,7 +188,7 @@ a clean held-out test set.
   NAAQS. Neither is on Powell. Two points for the whole metro is far too sparse to validate
   a street-segment surface, which is exactly why the project is framed model-to-model. At
   most, pull the SE Lafayette annual mean from EPA AQS as a single-point magnitude sanity
-  check, stated honestly as such (a Christof decision, not the spine). Pre-generated CSVs:
+  check, stated honestly as such (a mentor decision, not the spine). Pre-generated CSVs:
   https://aqs.epa.gov/aqsweb/airdata/download_files.html  Plan PDF (network plan, not
   measurements) is the primary source: see REFERENCES.md [6].
 
@@ -227,7 +227,7 @@ if they are even gettable for a remote student. Result: one is gated, one is bui
     "trucks" are mostly light-commercial diesel, with transit buses hidden in the 2-axle count.
     PORTLAND_FLEET now reflects this. Endpoint (same no-key REST pattern as traffic_counts.py):
     https://www.portlandmaps.com/od/rest/services/COP_OpenData_Transportation/MapServer/253/query
-  - Open knob (Christof decision): how finely to resolve the diesel / heavy-duty / bus split
+  - Open knob (mentor decision): how finely to resolve the diesel / heavy-duty / bus split
     inside that 5.4%, since those dominate per-vehicle NOx. The MOVES `avft` table for 41051 and
     the layer-253 axle split settle it locally.
 - **Real time-of-day volumes: already prototyped.** The `day` mode (24 hourly runs scaled by
