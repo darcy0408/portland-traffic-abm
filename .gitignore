@@ -38,3 +38,19 @@ sandbox/
 # Session-local state, never commit.
 .claude/.session-lock
 .claude/worktrees/
+
+# Private working notes, drafts, and unreviewed results: kept on local disk at
+# Documents/portland-abm-private, never in this public repo.
+.claude/
+CHAPTER*.md
+PROGRESS.md
+SESSION_NOTES.md
+RESULTS_LEDGER.md
+ROADMAP.md
+SIGSPATIAL_*.md
+LITERATURE_SWEEP_*.md
+*_RESULTS.md
+SCALEUP_*.md
+LANES_EXPERIMENT.md
+NOISE_TNM_DESIGN.md
+paper/
