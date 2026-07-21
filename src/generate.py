@@ -34,6 +34,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 import emissions
+import fleet
 import landuse_data
 import lodes_od
 import demand_data
@@ -460,13 +461,39 @@ def build_through_context(G, nodes):
             "bx": np.array(bx), "by": np.array(by), "fraction": frac}
 
 
-def make_vehicle(G, nodes, rng, vid, demand=None, through=None):
+def build_fleet_context():
+    """Precompute the mixed-fleet pieces (config.FLEET_MIXED): the sourced Multnomah
+    mix, a class -> coefficient lookup, and a DEDICATED seeded RNG stream for the
+    class draws. The separate stream (RANDOM_SEED + 2, alongside the +1 signal
+    stream) matters: drawing classes from the trip RNG would shift every later
+    origin/destination draw, changing traffic itself. With its own stream the
+    routes, activity, and throughput stay bit-identical to the same-seed
+    single-class run, so a fleet-vs-diesel comparison isolates emissions only.
+    Returns None when the flag is off (single-class path, unchanged behavior)."""
+    if not config.FLEET_MIXED:
+        return None
+    mix = fleet.PORTLAND_FLEET
+    fleet.validate(mix)
+    print(f"  mixed fleet ON: {len(mix)} HBEFA3 classes (PORTLAND_FLEET), "
+          "per-vehicle class drawn at spawn")
+    return {
+        "mix": mix,
+        "coeffs": fleet.HBEFA3_NOX,                    # class name -> (f0..f5)
+        "rng": random.Random(config.RANDOM_SEED + 2),  # own stream, reproducible
+    }
+
+
+def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None):
     """Create one vehicle with an origin, destination, and shortest-time route.
     With a `demand` context, the origin is drawn in proportion to population and the
     destination in proportion to jobs, with a distance-decay pull toward nearer jobs;
     without one, both are uniform random. With a `through` context, a fraction of
     trips instead enter and leave on the network perimeter, modeling regional
-    through-traffic. Returns None if no route is found after a few tries."""
+    through-traffic. With a `fleet_ctx` (config.FLEET_MIXED), the vehicle also gets
+    an HBEFA3 emission class drawn from the fleet mix at spawn, and carries that
+    class's coefficients for the whole trip (a respawn draws a fresh class, so the
+    steady-state population tracks the mix shares). Returns None if no route is
+    found after a few tries."""
     for _ in range(25):
         if through is not None and rng.random() < through["fraction"]:
             # THROUGH trip: enter on a perimeter node and leave on another, so the
@@ -517,12 +544,21 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None):
         if len(path) < 2:
             continue
         route = [_edge_between(G, path[i], path[i + 1]) for i in range(len(path) - 1)]
-        return {"id": vid, "route": route, "idx": 0, "pos": 0.0, "v": 0.0}
+        veh = {"id": vid, "route": route, "idx": 0, "pos": 0.0, "v": 0.0}
+        if fleet_ctx is not None:
+            # class drawn AFTER the route succeeds, from the fleet's own RNG stream,
+            # so the draw sequence lines up with spawned vehicles (route retries do
+            # not consume fleet draws) and the trip RNG stream is untouched.
+            cls = fleet.sample_class(fleet_ctx["mix"], fleet_ctx["rng"])
+            veh["eclass"] = cls                        # class name, kept for analysis
+            veh["coeffs"] = fleet_ctx["coeffs"][cls]   # this vehicle's (f0..f5) row
+        return veh
     return None
 
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
-                  nox_coeffs, G, nodes, rng, signals, demand=None, through=None):
+                  nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
+                  fleet_ctx=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -606,7 +642,10 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         # turned into NO2 downstream (NO2 = F_NO2 * NOx), so the fraction stays a
         # tunable knob that does not require rerunning the sim.
         a_real = (v_new - v_old) / dt
-        segment_nox[edge_key] += emissions.nox_g_per_s(v_avg, a_real, nox_coeffs) * dt
+        # mixed fleet: a vehicle carries its own class coefficients from spawn;
+        # otherwise every vehicle emits as the single configured class.
+        segment_nox[edge_key] += emissions.nox_g_per_s(
+            v_avg, a_real, veh.get("coeffs", nox_coeffs)) * dt
 
         # cross into the next segment(s) if we ran past the end of this one
         while veh["pos"] > veh["route"][veh["idx"]][3]:
@@ -635,7 +674,8 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             else:
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady
-                fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through)
+                fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through,
+                                     fleet_ctx)
                 if fresh is not None:
                     veh.update(fresh)
                 else:
@@ -657,6 +697,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     nodes = list(G.nodes)
     rng = random.Random(config.RANDOM_SEED)   # own stream, so routes are reproducible
     nox_coeffs = emissions.active_coeffs()    # HBEFA3 row for the configured class, fetched once
+    fleet_ctx = build_fleet_context()         # mixed-fleet per-vehicle classes (or None)
     demand = build_demand_weights(G, nodes)   # population/jobs gravity trip weights
     through = build_through_context(G, nodes)  # regional through-traffic (cordon) trips
 
@@ -667,7 +708,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         segment_throughput = {edge: 0.0 for edge in G.edges(keys=True)}
         vehicles = []
         for vid in range(n_vehicles):
-            veh = make_vehicle(G, nodes, rng, vid, demand, through)
+            veh = make_vehicle(G, nodes, rng, vid, demand, through, fleet_ctx)
             if veh is not None:
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
@@ -688,7 +729,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     for step in range(state["step"], n_steps):
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
-                      signals, demand, through)
+                      signals, demand, through, fleet_ctx)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)

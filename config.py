@@ -81,6 +81,17 @@ EMISSION_CLASS = "PC_D_EU4"   # passenger car, diesel, Euro 4 (HBEFA3); diesel =
 # range 0.20-0.30 (EMEP/EEA Guidebook; Carslaw et al. 2016). Raise with the mentor
 # when we set calibration gates.
 F_NO2 = 0.30
+# Mixed fleet (exploratory, worktree experiment/fleet). When True, each vehicle is
+# assigned one HBEFA3 class at spawn, drawn from the sourced Multnomah County mix
+# (fleet.PORTLAND_FLEET, 10 classes incl. gasoline majority, diesel minority, light
+# commercial, a bus sliver, and EVs), and emits with its OWN class polynomial each
+# step. The class draw uses its own seeded RNG stream (RANDOM_SEED + 2), so the
+# trip-generation stream is untouched and traffic (routes, activity, throughput) is
+# bit-identical to the same-seed single-class run; only NOx changes. Default False:
+# the single all-diesel EMISSION_CLASS above stays the live behavior, so every
+# committed number reproduces unchanged. Switching this on for cited numbers is a
+# Christof calibration decision (the all-diesel surface is the honest upper bound).
+FLEET_MIXED = False
 
 # --- Road closure scenario (mentor request, Jun 23) ---
 # A closure removes street segments from the network before routing, so vehicles
