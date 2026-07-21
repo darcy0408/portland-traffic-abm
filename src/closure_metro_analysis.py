@@ -42,9 +42,9 @@ MOVERS_ZONE_M = 3000.0      # wider look for where detours land
 TOP_N = 8
 
 
-def load_pair():
-    op = os.path.join(config.PROCESSED_DIR, "metro20k_open_segments.parquet")
-    cp = os.path.join(config.PROCESSED_DIR, "metro20k_closed_segments.parquet")
+def load_pair(base="metro20k"):
+    op = os.path.join(config.PROCESSED_DIR, f"{base}_open_segments.parquet")
+    cp = os.path.join(config.PROCESSED_DIR, f"{base}_closed_segments.parquet")
     o = pd.read_parquet(op)[["u", "v", "key", "nox_g"]].rename(columns={"nox_g": "nox_open"})
     c = pd.read_parquet(cp)[["u", "v", "key", "nox_g"]].rename(columns={"nox_g": "nox_closed"})
     # outer merge: the 24 removed segments exist only in the open half; closed
@@ -54,8 +54,12 @@ def load_pair():
     return df
 
 
-def main():
-    df = load_pair()
+def main(base="metro20k"):
+    # base selects the pair (e.g. "sweepmix_powell_42" for the mixed-fleet seed-42
+    # pair); dirs follow the metro caches wherever they live
+    from mixed_rerun import apply_metro_dirs
+    apply_metro_dirs()
+    df = load_pair(base)
     G = ox.load_graphml(os.path.join(config.NETWORK_DIR, "graph.graphml"))
 
     # street name and midpoint distance-to-closure for every segment
@@ -75,7 +79,7 @@ def main():
     df["no2_delta"] = df["no2_closed"] - df["no2_open"]
 
     net_o, net_c = df["no2_open"].sum(), df["no2_closed"].sum()
-    print(f"metro20k closure (seed {config.RANDOM_SEED}, {len(df)} segments)")
+    print(f"{base} closure ({len(df)} segments)")
     print(f"network total NO2: open {net_o:.1f} g -> closed {net_c:.1f} g "
           f"({100 * (net_c - net_o) / net_o:+.2f}%)\n")
 
@@ -105,4 +109,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "metro20k")

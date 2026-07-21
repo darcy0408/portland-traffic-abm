@@ -51,8 +51,8 @@ def edge_lookup():
     return pd.DataFrame(rows, columns=["u", "v", "key", "street", "dist_m"])
 
 
-def load_pair(seed):
-    base = os.path.join(config.PROCESSED_DIR, f"sweep_powell_{seed}")
+def load_pair(seed, prefix="sweep_powell"):
+    base = os.path.join(config.PROCESSED_DIR, f"{prefix}_{seed}")
     o = pd.read_parquet(f"{base}_open_segments.parquet")[["u", "v", "key", "nox_g"]]
     c = pd.read_parquet(f"{base}_closed_segments.parquet")[["u", "v", "key", "nox_g"]]
     df = (o.rename(columns={"nox_g": "nox_open"})
@@ -62,11 +62,21 @@ def load_pair(seed):
     return df.fillna({"nox_open": 0.0, "nox_closed": 0.0})
 
 
-def main():
+def main(prefix="sweep_powell"):
+    # a prefix argument selects a sweep variant (e.g. "sweepmix_powell" for the
+    # mixed-fleet sweep); the data dirs follow the metro caches (worktree when
+    # running from the main checkout, defaults when running inside the worktree)
+    from mixed_rerun import apply_metro_dirs
+    apply_metro_dirs()
     edges = edge_lookup()
     per_seed = []
     for seed in SEEDS:
-        df = load_pair(seed).merge(edges, on=["u", "v", "key"], how="left")
+        pair = os.path.join(config.PROCESSED_DIR, f"{prefix}_{seed}")
+        if not (os.path.exists(f"{pair}_open_segments.parquet")
+                and os.path.exists(f"{pair}_closed_segments.parquet")):
+            print(f"[warn] seed {seed}: pair incomplete, skipping")
+            continue
+        df = load_pair(seed, prefix).merge(edges, on=["u", "v", "key"], how="left")
         no2_o = config.F_NO2 * df["nox_open"]
         no2_c = config.F_NO2 * df["nox_closed"]
         row = {"seed": seed,
@@ -79,7 +89,7 @@ def main():
         per_seed.append(row)
 
     t = pd.DataFrame(per_seed)
-    print(f"metro20k Powell closure, {len(t)} seeds, near zone <= {NEAR_ZONE_M / 1000:.1f} km")
+    print(f"{prefix} closure, {len(t)} seeds, near zone <= {NEAR_ZONE_M / 1000:.1f} km")
     print(t.to_string(index=False, float_format=lambda x: f"{x:+.1f}"))
     print("\nacross seeds (mean +/- std):")
     for col in ARTERIALS + ["net_pct"]:
@@ -88,4 +98,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "sweep_powell")
