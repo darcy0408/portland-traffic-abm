@@ -1,10 +1,13 @@
-"""EXPLORATORY mixed-fleet experiment (worktree experiment/fleet only).
+"""Mixed-fleet experiment (originally exploratory; the mixed fleet was approved
+as the live setting Jul 20 and config.FLEET_MIXED now defaults True).
 
-Question: the live sim emits every vehicle as one all-diesel class (PC_D_EU4),
-which fleet_preview.py predicted overstates network NOx roughly 4x. Does switching
+Question: with every vehicle emitted as one all-diesel class (PC_D_EU4), which
+fleet_preview.py predicted overstates network NOx roughly 4x, does switching
 the LIVE simulation to the sourced Multnomah mixed fleet (config.FLEET_MIXED)
 change the NO2 map's SHAPE, or only its SCALE? If only scale, the closure
 DIFFERENCE result (the project's centerpiece) is insensitive to the fleet choice.
+Answer (Jul 17 run): scale, not shape. All-diesel overstates NOx 3.76x; the
+per-segment shape agreement is Spearman 0.926.
 
 Two modes, kept in one file so the experiment is one self-contained recipe:
 
