@@ -35,6 +35,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import emissions
 import fleet
+import drivers
 import landuse_data
 import lodes_od
 import demand_data
@@ -523,7 +524,25 @@ def build_fleet_context():
     }
 
 
-def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None):
+def build_driver_context():
+    """Precompute the driver-heterogeneity pieces (config.DRIVER_HETEROGENEITY):
+    the per-parameter sigmas and a DEDICATED seeded RNG stream (RANDOM_SEED + 3,
+    alongside the +1 signal and +2 fleet streams) for the per-vehicle IDM draws.
+    The separate stream is what keeps the trip, route, and fleet draws bit-identical
+    to the homogeneous run, so turning heterogeneity on changes only the
+    car-following dynamics. Returns None when the flag is off (base model: every
+    vehicle uses the config IDM defaults, unchanged behavior)."""
+    if not config.DRIVER_HETEROGENEITY:
+        return None
+    sig = drivers.sigmas()
+    drivers.validate(sig)
+    active = ", ".join(f"{p}~{s}" for p, s in sig.items() if s > 0) or "nothing (all sigma 0)"
+    print(f"  driver heterogeneity ON: per-vehicle IDM drawn at spawn (varying {active})")
+    return {"rng": random.Random(config.RANDOM_SEED + 3), "sig": sig}
+
+
+def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
+                 driver_ctx=None):
     """Create one vehicle with an origin, destination, and shortest-time route.
     With a `demand` context, the origin is drawn in proportion to population and the
     destination in proportion to jobs, with a distance-decay pull toward nearer jobs;
@@ -532,8 +551,10 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None):
     through-traffic. With a `fleet_ctx` (config.FLEET_MIXED), the vehicle also gets
     an HBEFA3 emission class drawn from the fleet mix at spawn, and carries that
     class's coefficients for the whole trip (a respawn draws a fresh class, so the
-    steady-state population tracks the mix shares). Returns None if no route is
-    found after a few tries."""
+    steady-state population tracks the mix shares). With a `driver_ctx`
+    (config.DRIVER_HETEROGENEITY), the vehicle also gets its own IDM parameter set
+    drawn from the driver mix at spawn, carried on veh["idm"] for the whole trip.
+    Returns None if no route is found after a few tries."""
     for _ in range(25):
         if through is not None and rng.random() < through["fraction"]:
             # THROUGH trip: enter on a perimeter node and leave on another, so the
@@ -592,13 +613,19 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None):
             cls = fleet.sample_class(fleet_ctx["mix"], fleet_ctx["rng"])
             veh["eclass"] = cls                        # class name, kept for analysis
             veh["coeffs"] = fleet_ctx["coeffs"][cls]   # this vehicle's (f0..f5) row
+        if driver_ctx is not None:
+            # per-vehicle IDM params drawn AFTER the route succeeds, from the
+            # driver's own RNG stream, so route retries do not consume driver draws
+            # and the trip stream stays untouched (same discipline as the fleet
+            # class draw above). Carried for the whole trip; a respawn draws afresh.
+            veh["idm"] = drivers.sample(driver_ctx["rng"], driver_ctx["sig"])
         return veh
     return None
 
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
-                  fleet_ctx=None, lanes=None):
+                  fleet_ctx=None, driver_ctx=None, lanes=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -633,6 +660,14 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     exactly to the single-lane behavior above. Lane identity is implicit (queue
     rank mod N) and reshuffles freely between steps, i.e. lane changes are free
     and perfect, so this measures the capacity ceiling's effect as an UPPER BOUND.
+
+    Driver heterogeneity (`driver_ctx`, config.DRIVER_HETEROGENEITY): when a
+    vehicle carries its own IDM parameter set (veh["idm"], drawn at spawn in
+    make_vehicle), its desired speed is that segment's limit scaled by the car's
+    v0_factor, and its a_max/b_comf/T/s0 are the car's own values, so drivers on
+    the same segment accelerate, follow, and top out differently. A vehicle with
+    no "idm" key (the flag off, or every sigma 0) uses the config defaults and the
+    accel call is byte-for-byte the base model.
     """
     # group cars by the segment they are on, and sort each group front-to-back
     by_edge = defaultdict(list)
@@ -647,7 +682,11 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     for group in by_edge.values():
         for i, veh in enumerate(group):
             edge = veh["route"][veh["idx"]]
-            v0 = edge[4]
+            # per-vehicle IDM params if this car is heterogeneous, else the base
+            # model's single config set. idm is None => the config defaults and the
+            # accel call below is byte-for-byte the base kernel.
+            idm = veh.get("idm")
+            v0 = edge[4] * idm["v0_factor"] if idm else edge[4]
             # lanes on this car's segment: its leader is the car n_here positions
             # ahead in the queue (same virtual lane); n_here=1 is the base model
             n_here = lanes.get(edge[:3], 1) if lanes else 1
@@ -682,7 +721,12 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 if stop_gap < gap:                 # the light binds before any car
                     gap, lead_v = stop_gap, 0.0
 
-            accel[veh["id"]] = idm_acceleration(veh["v"], gap, lead_v, v0)
+            if idm is None:
+                accel[veh["id"]] = idm_acceleration(veh["v"], gap, lead_v, v0)
+            else:
+                accel[veh["id"]] = idm_acceleration(
+                    veh["v"], gap, lead_v, v0, a_max=idm["a_max"],
+                    b_comf=idm["b_comf"], T=idm["T"], s0=idm["s0"])
 
     # 2) move everyone, credit the segment they travelled on, advance routes
     for veh in vehicles:
@@ -740,7 +784,7 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady
                 fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through,
-                                     fleet_ctx)
+                                     fleet_ctx, driver_ctx)
                 if fresh is not None:
                     veh.update(fresh)
                 else:
@@ -771,6 +815,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     rng = random.Random(config.RANDOM_SEED)   # own stream, so routes are reproducible
     nox_coeffs = emissions.active_coeffs()    # HBEFA3 row for the configured class, fetched once
     fleet_ctx = build_fleet_context()         # mixed-fleet per-vehicle classes (or None)
+    driver_ctx = build_driver_context()       # per-vehicle IDM heterogeneity (or None)
     demand = build_demand_weights(G, nodes)   # population/jobs gravity trip weights
     through = build_through_context(G, nodes)  # regional through-traffic (cordon) trips
 
@@ -781,7 +826,8 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         segment_throughput = {edge: 0.0 for edge in G.edges(keys=True)}
         vehicles = []
         for vid in range(n_vehicles):
-            veh = make_vehicle(G, nodes, rng, vid, demand, through, fleet_ctx)
+            veh = make_vehicle(G, nodes, rng, vid, demand, through, fleet_ctx,
+                               driver_ctx)
             if veh is not None:
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
@@ -802,7 +848,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     for step in range(state["step"], n_steps):
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
-                      signals, demand, through, fleet_ctx, lanes)
+                      signals, demand, through, fleet_ctx, driver_ctx, lanes)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)

@@ -24,16 +24,30 @@ ported it to the current `step_vehicles` signature (main added `fleet_ctx`;
   discharge 2.00x with 2 lanes (22 vs 11 cars/30 s green), nobody runs the red.
 - Demos in `demos/`.
 
-## Phase 2 — Heterogeneous drivers (NEXT)
+## Phase 2 — Heterogeneous drivers (DONE on this branch)
 Per-vehicle IDM parameters drawn from truncated Gaussians (Treiber & Kesting's
 recommended approach): multiplier on v0 (desired-speed factor), plus draws for
 T, a_max, b_comf, s0. Own seeded RNG stream (same discipline as fleet draws so
 route/fleet streams stay untouched). `DRIVER_HETEROGENEITY` flag, default off.
-- Gate A (inertness): all sigmas 0 → bitwise identical to base.
-- Gate B (dispersion): a platoon released from a line spreads; fastest driver's
-  headway grows; hand-predict the spread from the drawn v0 range.
-- Interesting output: speed VARIANCE per segment — CNOSSOS noise is nonlinear
-  in speed, so variance should move the noise surface even at equal means.
+- `src/drivers.py`: `sample()` draws each parameter as a factor N(1, sigma)
+  truncated to [1-2σ, 1+2σ] (clamped); sigma=0 returns exactly 1.0 with no draw
+  consumed, so all-zero is provably inert. Sigmas live in config.py
+  (`DRIVER_SIGMA_*`, default v0 0.12 / a,b,T 0.15 / s0 0.10).
+- `src/generate.py`: `build_driver_context()` (own stream RANDOM_SEED + 3, beside
+  +1 signals / +2 fleet), draw in `make_vehicle` AFTER route success (retries
+  don't consume driver draws), applied in `step_vehicles` (per-vehicle v0_factor ×
+  segment limit, and the car's own a_max/b_comf/T/s0). idm=None ⇒ byte-for-byte
+  the base kernel.
+- Gates green: `python src/driver_scenarios.py` →
+  A (inertness) all-sigma-0 draw equals the config defaults and trajectories are
+  bitwise identical to the base kernel; B (dispersion) 12 free drivers each settle
+  to v0×factor to 1e-9, speed variance 2.44 (m/s)², fastest/slowest separate 1850 m
+  vs 1896 m hand-predicted (−2.4%), and zero-sigma leaves no spread at all.
+- Base gates unaffected (flag off default): scenarios.py 4/4, lanes_scenarios.py 2/2.
+- Remaining (needs a deliberate run, not built yet): the speed-VARIANCE-per-segment
+  readout on a full run — CNOSSOS noise is nonlinear in speed, so variance should
+  move the noise surface even at equal means. This is the payoff figure; it needs
+  an authoritative seeded run (flag on) and belongs behind a run decision.
 
 ## Phase 3 — MOBIL lane changing
 True lane identity per car (replacing the free-reshuffle virtual lanes),

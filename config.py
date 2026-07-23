@@ -202,6 +202,33 @@ THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyo
 LANES_ENABLED = False
 LANES_MAX = 3         # per-direction cap; keeps a mistagged edge from getting absurd capacity
 
+# --- Driver heterogeneity (traffic-realism Phase 2) ---
+# The base model gives every vehicle the single IDM parameter set above, so a
+# segment's cars are dynamically identical and its speed VARIANCE is zero. With
+# this flag on, each vehicle draws its OWN IDM parameters at spawn: a
+# multiplicative factor per parameter, N(1, sigma) truncated to [1-2*sigma,
+# 1+2*sigma], centered on the config defaults (Treiber & Kesting's recommended
+# heterogeneity method; src/drivers.py). The draws use a DEDICATED seeded RNG
+# stream (RANDOM_SEED + 3, alongside +1 signals and +2 fleet), so traffic
+# (routes, activity, throughput) stays bit-identical to the same-seed homogeneous
+# run and only the car-following dynamics change. Off by default: the committed
+# spec is the homogeneous model; this flag exists to QUANTIFY the
+# homogeneous-driver limitation -- a nonzero per-segment speed spread, which the
+# CNOSSOS noise model (nonlinear in speed) turns into a shift in the noise surface
+# even at equal mean speed -- not to change the cited numbers. With every sigma 0
+# the machinery is provably inert (bitwise identical to the base model:
+# src/driver_scenarios.py Gate A). Sigmas are a-priori literature-range spreads,
+# NOT tuned against the held-out counts; revisit with the mentor at a calibration
+# gate. Each is a FRACTIONAL sd (0.12 = ~12% spread), and must stay < 0.5.
+DRIVER_HETEROGENEITY = False
+DRIVER_SIGMA_V0 = 0.12   # desired-speed multiplier spread. The dominant knob: it sets
+                         # how far a platoon disperses and the per-segment speed spread
+                         # (~+-24% of the limit at the 2-sigma truncation bound).
+DRIVER_SIGMA_A  = 0.15   # comfortable-acceleration spread
+DRIVER_SIGMA_B  = 0.15   # comfortable-braking spread
+DRIVER_SIGMA_T  = 0.15   # safe-time-headway spread
+DRIVER_SIGMA_S0 = 0.10   # jam-spacing (standstill gap) spread
+
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular
 # buffers of increasing radius around it, so a point "sees" its neighborhood and
