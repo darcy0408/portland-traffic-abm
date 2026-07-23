@@ -202,6 +202,31 @@ THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyo
 LANES_ENABLED = False
 LANES_MAX = 3         # per-direction cap; keeps a mistagged edge from getting absurd capacity
 
+# --- MOBIL lane changing (traffic-realism Phase 3) ---
+# Phase 1 (LANES_ENABLED) models a segment's lanes as VIRTUAL lanes with implicit,
+# freely-reshuffling identity: a frictionless upper bound on capacity, no real
+# passing. Phase 3 gives each vehicle a REAL lane index on its segment and decides
+# changes with MOBIL (Kesting, Treiber & Helbing 2007, "General lane-changing model
+# MOBIL for car-following models"). A vehicle changes to an adjacent lane iff it is
+# SAFE (the prospective new follower brakes no harder than MOBIL_B_SAFE) AND the
+# INCENTIVE holds (its own IDM acceleration gain exceeds the politeness-weighted
+# disadvantage it imposes on its old and new followers, by more than
+# MOBIL_A_THRESHOLD). Overtaking then EMERGES: a fast car stuck behind a slow one
+# pulls out, passes, and merges back only when doing so helps without cutting anyone
+# off. The three lane modes are mutually exclusive and both others stay unchanged:
+# base (single file), LANES_ENABLED (Phase 1 virtual lanes), MOBIL_ENABLED (this).
+# Off by default; the committed spec is the single-lane model. All accelerations are
+# the SAME idm_acceleration kernel, so MOBIL adds a lane-change decision on top of
+# the verified car-following, never a second physics. Standard literature values
+# below; a-priori, not tuned to the held-out counts. See src/mobil.py.
+MOBIL_ENABLED = False
+MOBIL_POLITENESS = 0.2      # p: weight on the (dis)advantage a change does to others.
+                            # 0 = selfish (change whenever it helps me), ~0.5 = polite.
+MOBIL_A_THRESHOLD = 0.2     # m/s^2: minimum net acceleration gain to bother changing.
+                            # Hysteresis: stops cars flip-flopping between equal lanes.
+MOBIL_B_SAFE = 4.0          # m/s^2: the hardest deceleration a change may impose on the
+                            # new follower. A change forcing harder braking is unsafe.
+
 # --- Driver heterogeneity (traffic-realism Phase 2) ---
 # The base model gives every vehicle the single IDM parameter set above, so a
 # segment's cars are dynamically identical and its speed VARIANCE is zero. With

@@ -49,13 +49,64 @@ route/fleet streams stay untouched). `DRIVER_HETEROGENEITY` flag, default off.
   move the noise surface even at equal means. This is the payoff figure; it needs
   an authoritative seeded run (flag on) and belongs behind a run decision.
 
-## Phase 3 — MOBIL lane changing
-True lane identity per car (replacing the free-reshuffle virtual lanes),
+## Phase 3 — MOBIL lane changing (IN PROGRESS on this branch)
+True lane identity per car (replacing Phase 1's free-reshuffle virtual lanes),
 IDM+MOBIL (Kesting/Treiber/Helbing 2007): incentive criterion (accel gain vs
-politeness x imposed braking) + safety criterion (b_safe). Passing emerges.
-- Gate: fast driver stuck behind slow one — overtakes on 2 lanes, cannot on 1.
-- Gate: virtual-lane mode remains available and unchanged (upper bound vs
-  MOBIL's realistic friction is itself a result worth plotting).
+politeness x imposed braking) + safety criterion (b_safe). Passing emerges. Three
+lane modes now coexist, mutually exclusive, the other two unchanged: base (single
+file) / `LANES_ENABLED` virtual lanes / `MOBIL_ENABLED` explicit lanes.
+
+### Increment 1 — DONE: the MOBIL decision core (isolated, gated)
+- `config.py`: `MOBIL_ENABLED` (default False), `MOBIL_POLITENESS` 0.2,
+  `MOBIL_A_THRESHOLD` 0.2 m/s^2, `MOBIL_B_SAFE` 4.0 m/s^2 (a-priori literature
+  values, not tuned to held-out counts).
+- `src/mobil.py`: the PURE decision. `wants_change(self_before, self_after,
+  old_pair, new_pair, params) -> (change, margin)`. Safety = new follower brakes
+  no harder than b_safe; incentive = own IDM-accel gain - p*(followers' braking
+  loss) > a_thr. Every acceleration is a real `generate.idm_acceleration`; this
+  module recomputes NO physics (the caller passes the six accels in), so the
+  car-following kernel stays single-sourced. Absent follower = None (0 loss;
+  missing new follower => trivially safe). Returns the margin so the caller can
+  pick the best of several candidate lanes.
+- `src/mobil_scenarios.py`: gate, all 4 PASS. Fast car stuck behind a crawler with
+  a clear lane changes (margin +8.2); an unsafe cut-in is vetoed (new follower
+  -inf); an already-free car stays (margin 0); and politeness works — the same
+  safe change is taken when selfish (p=0, margin +0.89) and declined when polite
+  (p=0.5, margin -0.22). Numbers match hand-calculation.
+
+### Increment 2 — NEXT: wire explicit lane identity into step_vehicles
+Data model (design, not yet built):
+- Each vehicle carries `veh["lane"]` = its integer lane index on its CURRENT
+  segment (0 = rightmost). On crossing into a new segment, clamp the index to the
+  new segment's lane count (default keep index; if the new road is narrower, drop
+  to the highest lane that exists). Per-segment lane counts reuse Phase 1's
+  `_parse_lanes` / `n_lanes` (OSM `lanes` tag) — MOBIL just needs the counts.
+- Neighbour finding per step: within a segment, partition cars by `lane`; within a
+  lane, sort by `pos` -> each car's same-lane leader/follower. For a candidate
+  target lane, the leader is the nearest car ahead IN THAT LANE and the new
+  follower the nearest behind. Car-following (the accel + move in step_vehicles)
+  then runs WITHIN lanes: leader = same-lane car ahead, not queue-rank-mod-N.
+- Lane-change pass, BEFORE the accel/move pass, from the SAME frozen snapshot the
+  IDM already uses (honest simultaneous update): for each car on a >1-lane MOBIL
+  segment, compute the six IDM accels for each adjacent candidate lane, call
+  `mobil.wants_change`, and if the best safe candidate clears the threshold, set
+  `veh["lane"]`. At most one lane change per car per step. Residual same-gap
+  conflicts (two cars eyeing one gap) are rare and the next step's IDM brakes any
+  overlap; document this as a known simplification (a full model would add a
+  gap-acceptance tie-break). Optionally evaluate MOBIL every K steps, not every
+  step, for speed — a documented knob.
+- Keep it a SEPARATE branch in step_vehicles gated on `MOBIL_ENABLED`, so the base
+  and virtual-lane (`lanes=...`) paths stay byte-for-byte unchanged and their
+  gates (scenarios.py 4/4, lanes_scenarios.py 2/2) stay green. MOBIL and virtual
+  lanes are mutually exclusive; refuse both flags on at once.
+Gates to add (`src/mobil_network_scenarios.py` or extend the existing gate):
+- Fast driver stuck behind a slow one on a 2-lane segment OVERTAKES (ends ahead),
+  and on a 1-lane segment CANNOT (ends behind, blocked). The headline emergence.
+- Inertness: `MOBIL_ENABLED` on with every segment 1 lane == the base kernel,
+  bitwise (a car with nowhere to change behaves exactly single-file).
+- The Phase 1 virtual-lane mode still passes its own gate unchanged (the
+  frictionless virtual lane is the capacity upper bound; MOBIL's realistic
+  friction sits below it — that contrast is a result worth plotting).
 
 ## Phase 4 — Signal timing
 - Webster's formula per intersection: cycle + green split from modeled approach
