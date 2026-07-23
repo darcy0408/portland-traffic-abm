@@ -73,7 +73,7 @@ def _advance(vehicles, signals, n_steps, t0, lanes, seg_thru):
     for s in range(n_steps):
         step_vehicles(vehicles, config.DT, (t0 + s) * config.DT, seg_tot,
                       seg_nox, seg_thru, coeffs, None, [], random.Random(0),
-                      signals, None, None, lanes)
+                      signals, None, None, lanes=lanes)
 
 
 def scenario_equivalence():

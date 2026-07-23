@@ -83,7 +83,8 @@ def run(n_lanes):
     for s in range(60 * steps_per_s):          # 30 s red + 30 s green
         t = (t0 + s) * config.DT
         step_vehicles(vehs, config.DT, t, seg_tot, seg_nox, thru, coeffs,
-                      None, [], random.Random(0), signals, None, None, lanes)
+                      None, [], random.Random(0), signals, None, None,
+                      lanes=lanes)
         snap(t + config.DT)
     return frames
 

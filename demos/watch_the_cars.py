@@ -112,7 +112,7 @@ def main():
     for step in range(WARMUP_S + RECORD_S):
         g.step_vehicles(vehicles, config.DT, step * config.DT, seg_tot, seg_nox,
                         seg_thru, coeffs, G, nodes, rng, signals, demand,
-                        through, lanes)
+                        through, lanes=lanes)
         if step < WARMUP_S:
             continue
         by_edge = defaultdict(list)
