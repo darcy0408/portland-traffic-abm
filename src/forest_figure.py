@@ -133,8 +133,10 @@ def main():
     with open(res_path, "w") as f:
         json.dump(numbers, f, indent=2)
     print(f"numbers -> {res_path}")
-    fig_path = os.path.join(config.FIGURES_DIR, "forest_compare_r2.png")
-    draw(numbers, fig_path)
+    # PNG for quick viewing, PDF (vector) for the chapter, per the Jul 22
+    # lecture guidance (vector formats for plots).
+    draw(numbers, os.path.join(config.FIGURES_DIR, "forest_compare_r2.png"))
+    draw(numbers, os.path.join(config.FIGURES_DIR, "forest_compare_r2.pdf"))
 
 
 if __name__ == "__main__":
