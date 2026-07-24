@@ -70,7 +70,7 @@ route/fleet streams stay untouched). `DRIVER_HETEROGENEITY` flag, default off.
   move the noise surface even at equal means. This is the payoff figure; it needs
   an authoritative seeded run (flag on) and belongs behind a run decision.
 
-## Phase 3 — MOBIL lane changing (IN PROGRESS on this branch)
+## Phase 3 — MOBIL lane changing (DONE on this branch)
 True lane identity per car (replacing Phase 1's free-reshuffle virtual lanes),
 IDM+MOBIL (Kesting/Treiber/Helbing 2007): incentive criterion (accel gain vs
 politeness x imposed braking) + safety criterion (b_safe). Passing emerges. Three
@@ -95,8 +95,43 @@ file) / `LANES_ENABLED` virtual lanes / `MOBIL_ENABLED` explicit lanes.
   safe change is taken when selfish (p=0, margin +0.89) and declined when polite
   (p=0.5, margin -0.22). Numbers match hand-calculation.
 
-### Increment 2 — NEXT: wire explicit lane identity into step_vehicles
-Data model (design, not yet built):
+### Increment 2 — DONE: explicit lane identity wired into step_vehicles
+Built as designed below, with the numbers it produced:
+- `build_mobil_context(G)` returns None when `MOBIL_ENABLED` is off, and REFUSES
+  to run alongside `LANES_ENABLED` (the two are different models of the same
+  thing; running both would double-count lanes). `step_vehicles` refuses
+  `lanes=` and `mobil_ctx=` together for the same reason. `_parse_lanes` now
+  reads the OSM tag for EITHER flag — same physical fact, different use.
+- Per-lane neighbour finding is shared by all three modes through
+  `_lane_queues`: virtual lanes are `group[r::N]` (so the queue successor is
+  exactly the old follow-N-ahead leader, `group[i+N]`), explicit lanes partition
+  on `veh["lane"]`, and N = 1 returns the single group unsliced. Base and Phase 1
+  behavior is therefore unchanged by construction, not just by intent.
+- Gates green: `python src/mobil_network_scenarios.py` → 3/3.
+  A (overtaking EMERGES) a 1.35x driver released 30 m behind a 0.55x driver on a
+  6 km segment ends 4,367 m along in lane 1 with 2 lanes — a 2,525 m lead — and
+  1,824 m along, 19 m BEHIND, when the same run has 1 lane. Nothing says
+  "overtake": MOBIL finds the lane safe and worth taking and the IDM does the
+  rest. B (inertness) MOBIL on with every segment 1 lane is bitwise identical to
+  the feature off, while the same cars on 2 lanes do diverge (so the check can
+  fail). C (clamping) a car in lane 2 entering a 1-lane segment lands in lane 0.
+- Base gates unaffected: scenarios 4/4, lanes 2/2, driver 3/3, mobil 4/4, and the
+  pinned kernel regression (`kernel_regression.py`) is bit-identical — that last
+  one is what actually proves the neighbour-finding refactor changed no physics,
+  since the equivalence gates only compare the kernel against itself.
+- End-to-end smoke on the cached 1.5 km corridor (400 vehicles, 300 steps, flag
+  on, no data written): 209 of 2,838 segments have >1 lane, 1,154 lane changes,
+  59 of 400 cars end in lane 1, zero cars in a lane their segment lacks, and no
+  measurable slowdown of the flag-off path (1.54 s vs 1.56 s for 400x600).
+- Known simplifications, all documented at the code: MOBIL's six accelerations
+  use in-lane neighbours only (no red-light or spillback term — those are shared
+  by every lane of a segment and largely cancel in a lane COMPARISON; where they
+  do not, the effect is cars filling the shorter queue at a red, which is what
+  drivers do); two cars may pick the same gap in one step and the next step's IDM
+  brakes the overlap; and a car crossing an intersection keeps its lane index
+  (clamped) rather than choosing the emptiest lane.
+
+Original design (as built):
 - Each vehicle carries `veh["lane"]` = its integer lane index on its CURRENT
   segment (0 = rightmost). On crossing into a new segment, clamp the index to the
   new segment's lane count (default keep index; if the new road is narrower, drop

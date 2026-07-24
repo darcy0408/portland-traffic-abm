@@ -36,6 +36,7 @@ import config
 import emissions
 import fleet
 import drivers
+import mobil
 import landuse_data
 import lodes_od
 import demand_data
@@ -151,7 +152,11 @@ def _parse_lanes(data):
       - untagged edges (mostly residentials) default to 1, and everything is
         clamped to [1, LANES_MAX] so a mistagged edge cannot go wild.
     """
-    if not config.LANES_ENABLED:
+    # Both lane modes need the same physical fact (how many lanes this direction
+    # has); they differ only in what they DO with it -- virtual follow-N-ahead
+    # lanes (Phase 1) or explicit per-car lane identity with MOBIL (Phase 3).
+    # With both flags off every count is 1 and the model is single file.
+    if not (config.LANES_ENABLED or config.MOBIL_ENABLED):
         return 1
     raw = data.get("lanes")
     if raw is None:
@@ -545,6 +550,160 @@ def build_driver_context():
     return {"rng": random.Random(config.RANDOM_SEED + 3), "sig": sig}
 
 
+def build_mobil_context(G):
+    """Precompute the MOBIL pieces (config.MOBIL_ENABLED): the parameter bundle and
+    the per-segment lane counts, keyed like by_edge. Returns None when the flag is
+    off (base model, or Phase 1's virtual lanes, both untouched by MOBIL).
+
+    MOBIL and the virtual-lane experiment are two different models of the same
+    thing and are mutually exclusive: Phase 1 makes lane identity implicit and
+    frictionless (an upper bound on capacity), Phase 3 makes it explicit and pays
+    the real cost of finding a gap. Running both at once would double-count lanes,
+    so it is refused here rather than silently producing a hybrid."""
+    if not config.MOBIL_ENABLED:
+        return None
+    if config.LANES_ENABLED:
+        raise ValueError(
+            "LANES_ENABLED and MOBIL_ENABLED are mutually exclusive lane models: "
+            "virtual follow-N-ahead lanes (Phase 1) vs explicit per-car lanes with "
+            "MOBIL (Phase 3). Turn one off in config.py.")
+    lanes = {(u, v, k): d.get("n_lanes", 1)
+             for u, v, k, d in G.edges(keys=True, data=True)}
+    multi = sum(1 for n in lanes.values() if n > 1)
+    print(f"  MOBIL lane changing ON: explicit lane identity, {multi} of "
+          f"{len(lanes)} segments have >1 lane (politeness "
+          f"{config.MOBIL_POLITENESS}, threshold {config.MOBIL_A_THRESHOLD} m/s^2, "
+          f"b_safe {config.MOBIL_B_SAFE} m/s^2)")
+    return {"params": mobil.params_from_config(config), "lanes": lanes}
+
+
+def _veh_idm_accel(veh, leader, edge, L):
+    """One IDM acceleration for `veh` with `leader` (a vehicle dict, or None for a
+    clear road) ahead of it on the SAME segment. Mirrors the accel pass's
+    conventions exactly -- no leader means a huge gap at the car's own speed, and a
+    heterogeneous car uses its own drawn parameters -- so MOBIL's six accelerations
+    come from the one verified kernel and never a second physics."""
+    idm = veh.get("idm")
+    v0 = edge[4] * idm["v0_factor"] if idm else edge[4]
+    if leader is None:
+        gap, lead_v = 1e6, veh["v"]
+    else:
+        gap, lead_v = leader["pos"] - L - veh["pos"], leader["v"]
+    if idm is None:
+        return idm_acceleration(veh["v"], gap, lead_v, v0)
+    return idm_acceleration(veh["v"], gap, lead_v, v0, a_max=idm["a_max"],
+                            b_comf=idm["b_comf"], T=idm["T"], s0=idm["s0"])
+
+
+def _lane_queues(group, n_lanes, explicit):
+    """Split one segment's cars (already sorted back-to-front by pos) into per-lane
+    queues, each still sorted back-to-front, so a car's leader is simply the next
+    entry in its own queue.
+
+    explicit=False is Phase 1's VIRTUAL lanes: lane identity is queue rank mod N,
+    so lane r is group[r::N] and the successor of group[i] in its queue is exactly
+    group[i + N] -- the follow-N-ahead rule, unchanged.
+    explicit=True is Phase 3: each car carries its own veh["lane"], clamped
+    defensively here in case a segment narrowed or a checkpoint predates the flag.
+    With N = 1 both produce the single queue [group], i.e. the base model."""
+    if n_lanes == 1:
+        # the overwhelmingly common case, and the base model's only case: the whole
+        # group is one queue. Returned as-is rather than sliced, because group[::1]
+        # would copy every segment's car list on every step.
+        return [group]
+    if not explicit:
+        return [group[r::n_lanes] for r in range(n_lanes)]
+    queues = [[] for _ in range(n_lanes)]
+    for veh in group:
+        queues[min(veh.get("lane", 0), n_lanes - 1)].append(veh)
+    return queues
+
+
+def _next_segment_rear(next_group, n_next, veh_lane, explicit):
+    """The car whose back a crossing vehicle will meet in the next segment, or None
+    if the lane it is entering is clear.
+
+    Virtual lanes: the n_next'th car from the rear, i.e. the rearmost car of the
+    emptiest lane (fewer cars there than lanes means a lane is free).
+    Explicit lanes: the rearmost car of the lane this vehicle will ACTUALLY enter,
+    which is its own index clamped to the new segment's width (the same rule the
+    crossing itself applies).
+    With n_next = 1 both reduce to next_group[0], the base model's rearmost car."""
+    if explicit:
+        target = min(veh_lane, n_next - 1)
+        for other in next_group:                # ascending by pos: first = rearmost
+            if min(other.get("lane", 0), n_next - 1) == target:
+                return other
+        return None
+    return next_group[n_next - 1] if len(next_group) >= n_next else None
+
+
+def _mobil_lane_pass(by_edge, mobil_ctx, L):
+    """Decide every car's lane for this step, from the frozen snapshot.
+
+    Runs BEFORE the acceleration pass and reads only pre-move positions, so the
+    decision is simultaneous in the same sense the IDM already is: no car reacts to
+    a change another car made this step. Returns a list of (vehicle, new lane) for
+    the cars that move, which the caller applies all at once.
+
+    For each car and each ADJACENT lane that exists, the six MOBIL accelerations
+    are evaluated from real in-lane neighbours and handed to mobil.wants_change;
+    the safe candidate with the largest margin wins, and a car changes at most one
+    lane per step.
+
+    Two documented simplifications. (1) The accelerations use in-lane neighbours
+    only -- no red-light or spillback term. Those boundary conditions are shared by
+    every lane of a segment, so they largely cancel in a lane COMPARISON; where
+    they do not (an empty adjacent lane at a red) the effect is cars filling the
+    shorter queue, which is what real drivers do, and the accel pass still stops
+    everyone at the line. (2) Two cars may pick the same gap in one step; the next
+    step's IDM brakes the overlap. A fuller model would add a gap-acceptance
+    tie-break."""
+    params = mobil_ctx["params"]
+    lane_counts = mobil_ctx["lanes"]
+    decisions = []
+    for key, group in by_edge.items():
+        n_lanes = lane_counts.get(key, 1)
+        if n_lanes < 2:
+            continue                            # nowhere to go: single-file segment
+        edge = group[0]["route"][group[0]["idx"]]     # one segment, one geometry
+        queues = _lane_queues(group, n_lanes, explicit=True)
+        for lane_idx, queue in enumerate(queues):
+            for i, veh in enumerate(queue):
+                own_leader = queue[i + 1] if i + 1 < len(queue) else None
+                own_follower = queue[i - 1] if i > 0 else None
+                self_before = _veh_idm_accel(veh, own_leader, edge, L)
+                if own_follower is None:
+                    old_pair = None             # nobody behind: this change costs no one
+                else:
+                    old_pair = (_veh_idm_accel(own_follower, veh, edge, L),
+                                _veh_idm_accel(own_follower, own_leader, edge, L))
+                best_lane, best_margin = None, float("-inf")
+                for cand in (lane_idx - 1, lane_idx + 1):
+                    if not 0 <= cand < n_lanes:
+                        continue
+                    # nearest car ahead of and behind this car IN THE TARGET LANE
+                    new_leader, new_follower = None, None
+                    for other in queues[cand]:
+                        if other["pos"] > veh["pos"]:
+                            new_leader = other
+                            break
+                        new_follower = other
+                    self_after = _veh_idm_accel(veh, new_leader, edge, L)
+                    if new_follower is None:
+                        new_pair = None         # empty gap behind: trivially safe
+                    else:
+                        new_pair = (_veh_idm_accel(new_follower, new_leader, edge, L),
+                                    _veh_idm_accel(new_follower, veh, edge, L))
+                    change, margin = mobil.wants_change(self_before, self_after,
+                                                        old_pair, new_pair, params)
+                    if change and margin > best_margin:
+                        best_lane, best_margin = cand, margin
+                if best_lane is not None:
+                    decisions.append((veh, best_lane))
+    return decisions
+
+
 def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
                  driver_ctx=None):
     """Create one vehicle with an origin, destination, and shortest-time route.
@@ -629,7 +788,7 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
-                  fleet_ctx=None, driver_ctx=None, lanes=None):
+                  fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -672,7 +831,22 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     the same segment accelerate, follow, and top out differently. A vehicle with
     no "idm" key (the flag off, or every sigma 0) uses the config defaults and the
     accel call is byte-for-byte the base model.
+
+    Explicit lanes (`mobil_ctx`, config.MOBIL_ENABLED): each car carries a real
+    lane index veh["lane"] on its current segment (0 = rightmost), kept when it
+    crosses into the next segment and clamped if that road is narrower. Its leader
+    is the nearest car ahead IN ITS OWN LANE, so a fast car behind a slow one is
+    genuinely blocked until it changes lanes -- and a lane-change pass runs first,
+    from the same frozen snapshot, deciding changes with MOBIL. Overtaking is
+    therefore emergent, not coded. Mutually exclusive with `lanes` above: virtual
+    lanes are the frictionless upper bound, MOBIL pays the real cost of a gap.
     """
+    if lanes is not None and mobil_ctx is not None:
+        raise ValueError("virtual lanes (lanes=) and explicit MOBIL lanes "
+                         "(mobil_ctx=) are mutually exclusive lane models")
+    explicit = mobil_ctx is not None
+    lane_counts = mobil_ctx["lanes"] if explicit else lanes
+
     # group cars by the segment they are on, and sort each group front-to-back
     by_edge = defaultdict(list)
     for veh in vehicles:
@@ -680,57 +854,70 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     for group in by_edge.values():
         group.sort(key=lambda x: x["pos"])
 
-    # 1) compute accelerations from the frozen snapshot
     L = config.VEHICLE_LENGTH_M
+
+    # 0) MOBIL only: decide lane changes from the frozen snapshot, then apply them
+    # all at once, so the accel pass below sees each car in the lane it chose.
+    if explicit:
+        for veh, new_lane in _mobil_lane_pass(by_edge, mobil_ctx, L):
+            veh["lane"] = new_lane
+
+    # 1) compute accelerations from the frozen snapshot
     accel = {}
-    for group in by_edge.values():
-        for i, veh in enumerate(group):
-            edge = veh["route"][veh["idx"]]
-            # per-vehicle IDM params if this car is heterogeneous, else the base
-            # model's single config set. idm is None => the config defaults and the
-            # accel call below is byte-for-byte the base kernel.
-            idm = veh.get("idm")
-            v0 = edge[4] * idm["v0_factor"] if idm else edge[4]
-            # lanes on this car's segment: its leader is the car n_here positions
-            # ahead in the queue (same virtual lane); n_here=1 is the base model
-            n_here = lanes.get(edge[:3], 1) if lanes else 1
-            if i + n_here < len(group):            # there is a car ahead in this lane
-                lead = group[i + n_here]
-                gap = lead["pos"] - L - veh["pos"]
-                lead_v = lead["v"]
-            else:                                  # no car ahead in this lane
-                # look across the downstream intersection to the next segment on
-                # this car's route. If cars are backed up there, the rearmost one
-                # in the emptiest lane (the n_next'th from the rear) is our leader,
-                # sitting (edge_remaining + its pos) ahead of us. Fewer than n_next
-                # cars there means a lane is free, so nothing blocks. This is
-                # cross-edge spillback: a jam now backs up through the
-                # intersection instead of disappearing at the segment boundary.
-                gap = 1e6
-                lead_v = veh["v"]
-                if veh["idx"] + 1 < len(veh["route"]):
-                    next_key = veh["route"][veh["idx"] + 1][:3]
-                    next_group = by_edge.get(next_key)
-                    n_next = lanes.get(next_key, 1) if lanes else 1
-                    if next_group and len(next_group) >= n_next:
-                        rear = next_group[n_next - 1]
-                        gap = (edge[3] - veh["pos"]) + rear["pos"] - L
-                        lead_v = rear["v"]
+    for key, group in by_edge.items():
+        # lanes on this segment. Virtual lanes (Phase 1) make identity implicit --
+        # queue rank mod N -- so a car's leader is the car N positions ahead;
+        # explicit lanes (Phase 3) put each car in its own queue. Either way the
+        # per-lane queues below turn the leader into "the next car in my queue",
+        # and with N = 1 both are the single-file base model.
+        n_here = lane_counts.get(key, 1) if lane_counts else 1
+        for queue in _lane_queues(group, n_here, explicit):
+            for i, veh in enumerate(queue):
+                edge = veh["route"][veh["idx"]]
+                # per-vehicle IDM params if this car is heterogeneous, else the base
+                # model's single config set. idm is None => the config defaults and the
+                # accel call below is byte-for-byte the base kernel.
+                idm = veh.get("idm")
+                v0 = edge[4] * idm["v0_factor"] if idm else edge[4]
+                if i + 1 < len(queue):             # there is a car ahead in this lane
+                    lead = queue[i + 1]
+                    gap = lead["pos"] - L - veh["pos"]
+                    lead_v = lead["v"]
+                else:                              # no car ahead in this lane
+                    # look across the downstream intersection to the next segment on
+                    # this car's route. If cars are backed up there, the rearmost one
+                    # in the lane this car will enter is our leader, sitting
+                    # (edge_remaining + its pos) ahead of us; a free lane there means
+                    # nothing blocks. This is cross-edge spillback: a jam now backs up
+                    # through the intersection instead of disappearing at the segment
+                    # boundary.
+                    gap = 1e6
+                    lead_v = veh["v"]
+                    if veh["idx"] + 1 < len(veh["route"]):
+                        next_key = veh["route"][veh["idx"] + 1][:3]
+                        next_group = by_edge.get(next_key)
+                        n_next = lane_counts.get(next_key, 1) if lane_counts else 1
+                        rear = (_next_segment_rear(next_group, n_next,
+                                                   veh.get("lane", 0), explicit)
+                                if next_group else None)
+                        if rear is not None:
+                            gap = (edge[3] - veh["pos"]) + rear["pos"] - L
+                            lead_v = rear["v"]
 
-            # a red light at the downstream node is a stopped leader at the line
-            node_v = edge[1]
-            if node_v in signals["nodes"] and not is_green(
-                    signals, node_v, signals["edge_phase"][edge[:3]], t):
-                stop_gap = edge[3] - veh["pos"]
-                if stop_gap < gap:                 # the light binds before any car
-                    gap, lead_v = stop_gap, 0.0
+                # a red light at the downstream node is a stopped leader at the line
+                node_v = edge[1]
+                if node_v in signals["nodes"] and not is_green(
+                        signals, node_v, signals["edge_phase"][edge[:3]], t):
+                    stop_gap = edge[3] - veh["pos"]
+                    if stop_gap < gap:             # the light binds before any car
+                        gap, lead_v = stop_gap, 0.0
 
-            if idm is None:
-                accel[veh["id"]] = idm_acceleration(veh["v"], gap, lead_v, v0)
-            else:
-                accel[veh["id"]] = idm_acceleration(
-                    veh["v"], gap, lead_v, v0, a_max=idm["a_max"],
-                    b_comf=idm["b_comf"], T=idm["T"], s0=idm["s0"])
+                if idm is None:
+                    accel[veh["id"]] = idm_acceleration(veh["v"], gap, lead_v, v0)
+                else:
+                    accel[veh["id"]] = idm_acceleration(
+                        veh["v"], gap, lead_v, v0, a_max=idm["a_max"],
+                        b_comf=idm["b_comf"], T=idm["T"], s0=idm["s0"])
 
     # 2) move everyone, credit the segment they travelled on, advance routes
     for veh in vehicles:
@@ -772,15 +959,17 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             if veh["idx"] + 1 < len(veh["route"]):
                 next_key = veh["route"][veh["idx"] + 1][:3]
                 next_group = by_edge.get(next_key)
-                n_next = lanes.get(next_key, 1) if lanes else 1
+                n_next = lane_counts.get(next_key, 1) if lane_counts else 1
                 # the minimum gap is this driver's OWN jam distance when the car is
                 # heterogeneous (config.IDM_S0 otherwise), matching the s0 the accel
                 # pass above used for the same car. A driver who keeps a shorter jam
                 # distance should also squeeze into a tighter entrance.
                 veh_idm = veh.get("idm")
                 s0_here = veh_idm["s0"] if veh_idm else config.IDM_S0
-                if (next_group and len(next_group) >= n_next
-                        and next_group[n_next - 1]["pos"] < L + s0_here):
+                rear = (_next_segment_rear(next_group, n_next,
+                                           veh.get("lane", 0), explicit)
+                        if next_group else None)
+                if rear is not None and rear["pos"] < L + s0_here:
                     veh["pos"], veh["v"] = edge[3], 0.0
                     break
             # the car has fully traversed this segment: count one vehicle through it.
@@ -790,6 +979,14 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             veh["pos"] -= edge[3]
             if veh["idx"] + 1 < len(veh["route"]):
                 veh["idx"] += 1
+                if explicit:
+                    # keep the lane index across the intersection, dropping to the
+                    # highest lane that exists if the new road is narrower (a car
+                    # leaving a 3-lane arterial for a 1-lane street ends up in
+                    # lane 0). The choice of which lane to enter is deliberately
+                    # simple; a fuller model would pick the emptiest.
+                    n_new = lane_counts.get(veh["route"][veh["idx"]][:3], 1)
+                    veh["lane"] = min(veh.get("lane", 0), n_new - 1)
             else:
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady
@@ -797,6 +994,10 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                                      fleet_ctx, driver_ctx)
                 if fresh is not None:
                     veh.update(fresh)
+                    if explicit:
+                        # fresh carries no lane key, so without this the car would
+                        # keep a stale index from the route it just finished
+                        veh["lane"] = 0
                 else:
                     veh["pos"], veh["v"] = edge[3], 0.0
                 break
@@ -814,6 +1015,9 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     # keyed like by_edge so step_vehicles can look lanes up per segment
     lanes = {(u, v, k): d.get("n_lanes", 1)
              for u, v, k, d in G.edges(keys=True, data=True)}
+    mobil_ctx = build_mobil_context(G)         # explicit per-car lanes (or None)
+    if mobil_ctx is not None:
+        lanes = None       # mutually exclusive: MOBIL owns the lane counts instead
     if verbose:
         src = "OSM-tagged" if signals["tagged"] else "degree>=4 fallback"
         print(f"{len(signals['nodes'])} signalized intersections ({src})")
@@ -862,7 +1066,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
                       signals, demand, through, fleet_ctx=fleet_ctx,
-                      driver_ctx=driver_ctx, lanes=lanes)
+                      driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
