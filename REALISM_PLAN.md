@@ -65,10 +65,12 @@ route/fleet streams stay untouched). `DRIVER_HETEROGENEITY` flag, default off.
   INITIAL population and no consumed trip/route/fleet draw; the realized traffic
   then diverges, and that divergence is the effect being measured.
 - Base gates unaffected (flag off default): scenarios.py 4/4, lanes_scenarios.py 2/2.
-- Remaining (needs a deliberate run, not built yet): the speed-VARIANCE-per-segment
-  readout on a full run — CNOSSOS noise is nonlinear in speed, so variance should
-  move the noise surface even at equal means. This is the payoff figure; it needs
-  an authoritative seeded run (flag on) and belongs behind a run decision.
+- Payoff readout DONE Jul 24 — see "Realism payoff readout" below. Headline:
+  heterogeneity adds ~+1.0 km/h to the median per-segment speed SD and a modest
+  +0.06 dB(A) to the median mean-vs-distribution noise delta; the LARGER finding
+  is that the base run's own congestion-induced speed variance already shifts
+  CNOSSOS by up to ~6.5 dB(A) on slow congested segments, an ABM-only signal no
+  static mean-speed model carries.
 
 ## Phase 3 — MOBIL lane changing (DONE on this branch)
 True lane identity per car (replacing Phase 1's free-reshuffle virtual lanes),
@@ -164,16 +166,79 @@ Gates to add (`src/mobil_network_scenarios.py` or extend the existing gate):
   frictionless virtual lane is the capacity upper bound; MOBIL's realistic
   friction sits below it — that contrast is a result worth plotting).
 
+## Realism payoff readout (DONE Jul 24 — the deferred run decision, executed)
+
+First full authoritative runs with any realism flag on. Four sequential seeded
+corridor runs (seed 42, 1.5 km cached graph, 500 vehicles, 3600 steps,
+powell_through demand settings overridden visibly in `src/realism_runs.py`;
+the checked-in config stays metro20k). New opt-in per-segment speed moments
+(v_sum/v2_sum) in `generate.py` feed the readout; all six gates plus the
+pinned kernel regression re-verified green/bit-identical after that edit.
+Analysis is `src/realism_readout.py` (reads the four parquets, never re-runs).
+
+| run             | flags         | mean km/h | throughput | med speed SD |
+|-----------------|---------------|-----------|------------|--------------|
+| realism_base    | none          | 28.35     | 169,697    | 4.9 km/h     |
+| realism_drivers | heterogeneity | 27.61     | 165,313    | 5.9 km/h     |
+| realism_mobil   | MOBIL         | 30.15     | 180,461    | 4.9 km/h     |
+| realism_both    | both          | 29.54     | 176,784    | 6.0 km/h     |
+
+- Phase 2 payoff: evaluating CNOSSOS at the mean speed vs a 3-point
+  Gauss-Hermite quadrature over N(mean, var) understates noise by median
+  +0.11 dB(A) in the BASE run already (signals/queues make speed variance even
+  with identical drivers), up to ~6.5 dB(A) on slow congested segments
+  (~20 km/h mean, 14-20 km/h SD: Holgate, Gladstone, Milwaukie). Heterogeneity
+  adds +0.06 dB(A) median on top (690 -> 750 segments over 0.5 dB). The honest
+  headline is therefore CONGESTION-induced variance — an ABM-only signal — with
+  driver heterogeneity a modest amplifier at these a-priori sigmas.
+- Phase 3 payoff: MOBIL raises total throughput +6.34% (+10,764 veh/hr),
+  gains concentrated on Powell's multi-lane segments (+54 to +64 veh/hr each;
+  top segment 987 -> 1,049). ZERO segments lose throughput (1,663 gain, 1,175
+  tie — verified independently); single-lane segments gain via network effects
+  (faster trips -> more respawns). Per-segment rank order essentially unmoved
+  (Spearman 0.9989), consistent with the Phase 1 finding that capacity does not
+  limit validation. MOBIL's +6.3% sits well below the frictionless virtual-lane
+  upper bound (Phase 1 measured 2.0x discharge), the predicted contrast.
+- Interaction (first measurement): throughput is almost perfectly additive
+  (r=0.9999, median |actual-predicted| = 0.000 veh/hr; network total off by
+  +707 of 176k). Mean speed interacts mildly (r=0.984, median 0.24 km/h): the
+  flags couple through speed dynamics, not volumes.
+- Caveats (also printed by the script): corridor scale only; a-priori
+  uncalibrated sigmas/MOBIL parameters; two-moment Gaussian approximation in
+  the noise quadrature; heterogeneity's effect is always the DELTA over the
+  base run's own spread.
+
 ## Phase 4 — Signal timing
-- Webster's formula per intersection: cycle + green split from modeled approach
-  volumes (replaces uniform 60 s / 50%).
+
+### Increment 1 — DONE Jul 24: Webster decision core (isolated, gated)
+- `src/webster.py`: pure two-phase Webster (1958): y_i from the critical
+  approach (scalar or iterable, max governs), C0 = (1.5L+5)/(1-Y) clamped to
+  [30, 120] s, green split proportional to y with a 7 s min-green floor;
+  degenerate cases Y=0 -> (min cycle, 0.5) and Y>=1 -> max cycle. Returned
+  split = fraction of the CYCLE the EW phase holds (sums to 1 with NS,
+  directly comparable to SIGNAL_GREEN_SPLIT). No config/generate imports —
+  same purity discipline as mobil.py increment 1.
+- `config.py`: WEBSTER_ENABLED (default False) + SAT_FLOW 1900, LOST_TIME 4 s,
+  CYCLE_MIN/MAX 30/120 s, MIN_GREEN 7 s — standard a-priori values, not tuned
+  to held-out counts.
+- Gate `src/webster_scenarios.py` 5/5, expectations derived independently with
+  exact Fractions: symmetric 400/400 -> split exactly 0.5, C0 29.36 s clamps
+  to 30; asymmetric 700/300 -> split 2117/3230 ≈ 0.6554 asserted to 1e-9;
+  oversaturated -> 120 s fallback; min-green floor raises a 20 veh/h approach
+  to exactly 7 s; iterable [300,700] bitwise-equals scalar 700.
+
+### Increment 2 — NEXT: wire Webster into the simulation
+- Approach volumes per signalized intersection from the modeled flows (a
+  measurement pass or a prior run's throughput), feeding cycle_and_split per
+  intersection in prepare_signals when WEBSTER_ENABLED.
 - Yellow + all-red clearance intervals.
 - Green-wave offsets along Powell (progression at the corridor speed limit).
 - Portland runs SCATS (adaptive, no public plans) — PBOT signal timing cards
   are public-records-requestable if we ever want ground truth; Webster is the
   standard research fallback.
 - Gate: single intersection with asymmetric demand → Webster gives the heavy
-  approach more green; corridor demo shows a platoon riding the green wave.
+  approach more green (through the REAL kernel this time); inertness — flag
+  off bitwise unchanged; corridor demo shows a platoon riding the green wave.
 
 ## Phase 5 — Menu (pick per session)
 - Truck/bus dynamics: fleet.py classes get length + accel envelopes (fleet
