@@ -788,7 +788,8 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
 
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
-                  fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None):
+                  fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None,
+                  speed_stats=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -932,6 +933,16 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         # credit this segment with one vehicle-second of activity (a raw exposure
         # measure, kept alongside the emission total)
         segment_totals[edge_key] += dt
+        # opt-in speed moments (realism readout): time-weighted sums so that at
+        # analysis time v_sum/value is the segment's mean speed over the run and
+        # v2_sum/value - mean^2 its variance. CNOSSOS noise is nonlinear in
+        # speed, so the VARIANCE (not just the mean) moves the noise surface --
+        # the Phase 2 heterogeneity payoff. Pure measurement: nothing here feeds
+        # back into the dynamics, so passing speed_stats cannot change any
+        # trajectory (the kernel-regression gate still proves it bit-identical).
+        if speed_stats is not None:
+            speed_stats["v_sum"][edge_key] += v_avg * dt
+            speed_stats["v2_sum"][edge_key] += v_avg * v_avg * dt
         # and with this vehicle's NOx for the step: the HBEFA3 rate at the step's
         # average speed and its realized acceleration, integrated over dt. NOx is
         # turned into NO2 downstream (NO2 = F_NO2 * NOx), so the fraction stays a
@@ -1003,9 +1014,15 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 break
 
 
-def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True):
+def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
+                   speed_stats=None):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
-    per-segment vehicle-seconds of activity, and per-segment NOx grams."""
+    per-segment vehicle-seconds of activity, and per-segment NOx grams.
+
+    speed_stats (opt-in, realism readout): pass an empty dict and it is filled
+    in place with per-segment time-weighted speed sums, keys "v_sum" and
+    "v2_sum" (see step_vehicles). Existing callers pass nothing and see the
+    exact prior behavior and the same 3-tuple return."""
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -1047,6 +1064,12 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         state = {"step": 0, "segment_totals": segment_totals,
                  "segment_nox": segment_nox,
                  "segment_throughput": segment_throughput, "vehicles": vehicles}
+        if speed_stats is not None:
+            # the caller's dict gets the per-edge accumulators; stored in state
+            # so a checkpoint resume keeps the partial sums
+            speed_stats["v_sum"] = {edge: 0.0 for edge in G.edges(keys=True)}
+            speed_stats["v2_sum"] = {edge: 0.0 for edge in G.edges(keys=True)}
+            state["speed_stats"] = speed_stats
     else:
         print(f"Resuming from step {state['step']}")
         segment_totals = state["segment_totals"]
@@ -1057,6 +1080,19 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                               or {edge: 0.0 for edge in G.edges(keys=True)})
         state["segment_throughput"] = segment_throughput
         vehicles = state["vehicles"]
+        if speed_stats is not None:
+            saved = state.get("speed_stats")
+            if saved:
+                # resume: adopt the checkpointed partial sums into the caller's dict
+                speed_stats.update(saved)
+            else:
+                # the checkpoint predates the request for speed stats: the sums
+                # would cover only the remaining steps, i.e. be WRONG for the whole
+                # run. Refuse rather than silently produce a partial readout.
+                raise SystemExit(
+                    "checkpoint for this run has no speed_stats; delete the "
+                    "checkpoint (or run without speed_stats) to proceed")
+            state["speed_stats"] = speed_stats
 
     t0 = time.perf_counter()
     for step in range(state["step"], n_steps):
@@ -1066,7 +1102,8 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
                       signals, demand, through, fleet_ctx=fleet_ctx,
-                      driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx)
+                      driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx,
+                      speed_stats=speed_stats)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -1091,7 +1128,7 @@ def benchmark(G):
                        use_checkpoint=False, verbose=True)
 
 
-def save_results(segment_totals, segment_nox, segment_throughput):
+def save_results(segment_totals, segment_nox, segment_throughput, speed_stats=None):
     """Write final per-segment results as one tidy table.
     parquet keeps data types and stays compact. Switch to .to_csv if you ever
     want a file you can open and read by eye.
@@ -1100,12 +1137,21 @@ def save_results(segment_totals, segment_nox, segment_throughput):
     from HBEFA3; throughput = number of vehicles that fully traversed the segment
     (the model analog of a real traffic count, for validation against PBOT ADT).
     The NO2 surface is NO2 = config.F_NO2 * nox_g, applied at analysis time so the
-    fraction can be retuned without rerunning the simulation."""
-    rows = [{"u": u, "v": v, "key": k, "value": val,
+    fraction can be retuned without rerunning the simulation.
+
+    speed_stats (opt-in, from run_simulation): adds v_sum and v2_sum columns, the
+    time-weighted speed sums whose analysis-time quotients give each segment's
+    mean speed (v_sum/value) and speed variance (v2_sum/value - mean^2)."""
+    keys = list(segment_totals.keys())
+    rows = [{"u": u, "v": v, "key": k, "value": segment_totals[(u, v, k)],
              "nox_g": segment_nox[(u, v, k)],
              "throughput": segment_throughput[(u, v, k)]}
-            for (u, v, k), val in segment_totals.items()]
+            for (u, v, k) in keys]
     df = pd.DataFrame(rows)
+    if speed_stats is not None:
+        # aligned to `keys`, the same iteration order the rows were built from
+        df["v_sum"] = [speed_stats["v_sum"][e] for e in keys]
+        df["v2_sum"] = [speed_stats["v2_sum"][e] for e in keys]
     out = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_segments.parquet")
     df.to_parquet(out)
     print(f"Saved {len(df)} segment results to {out} "
