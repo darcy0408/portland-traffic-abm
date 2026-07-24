@@ -33,11 +33,17 @@ DISCIPLINE (mirrors fleet.py, so the two heterogeneity layers behave alike)
   base model, bitwise unchanged, so no cited number moves.
 - Drawn from a DEDICATED seeded RNG stream (config.RANDOM_SEED + 3), separate from
   the trip stream (SEED), the signal stream (SEED + 1) and the fleet stream
-  (SEED + 2). Turning heterogeneity on therefore does not shift a single
-  trip/route/fleet draw: traffic (routes, activity, throughput) stays
-  bit-identical to the same-seed homogeneous run and ONLY the car-following
-  dynamics change, so a heterogeneous-vs-homogeneous comparison isolates driver
-  behavior.
+  (SEED + 2). Turning heterogeneity on therefore consumes no trip/route/fleet
+  draw: the same seed gives the same INITIAL vehicle population (identical spawn
+  order, origins, destinations, routes) and leaves every other stream aligned.
+  It does NOT leave the realized traffic identical, and must not be described
+  that way: changed dynamics change when vehicles finish their trips, which
+  shifts respawn timing, which hands later vehicles different trip draws. That
+  divergence is the effect being measured, not a leak -- the stream separation
+  buys a controlled comparison (same starting population, one mechanism changed),
+  not a fixed traffic realization. Contrast fleet.py, where the same discipline
+  DOES leave traffic bit-identical, because fleet draws touch only emission
+  chemistry and never the dynamics.
 - With every sigma 0 each factor is EXACTLY 1.0 (no rng draw consumed), so the
   drawn parameter set is exactly the config defaults and the machinery is provably
   inert (Gate A: src/driver_scenarios.py).

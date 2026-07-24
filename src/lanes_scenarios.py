@@ -97,33 +97,42 @@ def scenario_discharge():
     print("   40 cars queued at a red light; count how many cross during one")
     print("   30 s green. Hand prediction: ~13-15 single-lane (a car per ~2 s")
     print("   after startup lag), about twice that with 2 virtual lanes.")
-    crossed = {}
-    front_two_at_line = None
+    crossed, held, on_red, front_gap = {}, {}, {}, {}
     for n_lanes in (1, 2):
         lanes = {(1, 2, 0): n_lanes, (2, 3, 0): n_lanes}
         vehs = _queued_vehicles(40)
         thru = defaultdict(float)
         # red phase first (t = 30..60): the queue must hold at the line
         _advance(vehs, _signal_at_2(), 30, t0=30, lanes=lanes, seg_thru=thru)
-        held = thru[(1, 2, 0)] == 0
-        if n_lanes == 2:
-            # under red, 2 lanes should re-form the single-file queue two
-            # abreast: the front TWO cars both sit at the stop line
-            front = sorted(vehs, key=lambda v: v["pos"])[-2:]
-            front_two_at_line = all(v["pos"] > 390.0 for v in front)
+        on_red[n_lanes] = thru[(1, 2, 0)]
+        held[n_lanes] = on_red[n_lanes] == 0
+        # Queue GEOMETRY at the end of the red, which is what distinguishes the
+        # two modes and is hand-predictable: single file leaves the front two
+        # cars one equilibrium spacing apart (L + s0 = 7 m), while 2 lanes puts
+        # them ABREAST -- both at the stop line, a near-zero longitudinal gap.
+        front = sorted(vehs, key=lambda v: v["pos"])[-2:]
+        front_gap[n_lanes] = front[1]["pos"] - front[0]["pos"]
         # one full green (t = 60..90): count cars that cross node 2
         _advance(vehs, _signal_at_2(), 30, t0=60, lanes=lanes, seg_thru=thru)
         crossed[n_lanes] = thru[(1, 2, 0)]
-        print(f"   {n_lanes} lane(s): held at red = {held}, "
+        print(f"   {n_lanes} lane(s): held at red = {held[n_lanes]}, "
+              f"front-two gap at the line = {front_gap[n_lanes]:.2f} m, "
               f"crossed on green = {int(crossed[n_lanes])}")
 
     ok = []
-    ok.append(_check("nobody runs the red", True, "0 crossings during red (both runs)"))
+    ok.append(_check("nobody runs the red", all(held.values()),
+                     f"crossings during red: {int(on_red[1])} single-lane, "
+                     f"{int(on_red[2])} with 2 lanes (both must be 0)"))
     ok.append(_check("single-lane discharge near the hand prediction",
                      10 <= crossed[1] <= 18, f"{int(crossed[1])} cars (expected ~13-15)"))
-    ok.append(_check("two cars queue abreast at the line under red",
-                     bool(front_two_at_line),
-                     "front two cars both within 10 m of the line"))
+    # Both halves are asserted: single file must NOT be abreast (gap = the 7 m
+    # equilibrium spacing) and 2 lanes MUST be (gap < 1 m). A lanes
+    # implementation that silently stayed single-file fails the second half.
+    ok.append(_check("two cars queue abreast at the line under red (and only "
+                     "with 2 lanes)",
+                     front_gap[2] < 1.0 and front_gap[1] > 5.0,
+                     f"front-two gap {front_gap[2]:.2f} m with 2 lanes vs "
+                     f"{front_gap[1]:.2f} m single file (equilibrium L+s0 = 7 m)"))
     ratio = crossed[2] / max(crossed[1], 1)
     ok.append(_check("2-lane discharge is about double", 1.6 <= ratio <= 2.4,
                      f"{int(crossed[2])} vs {int(crossed[1])} cars = {ratio:.2f}x"))

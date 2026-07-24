@@ -234,9 +234,11 @@ MOBIL_B_SAFE = 4.0          # m/s^2: the hardest deceleration a change may impos
 # multiplicative factor per parameter, N(1, sigma) truncated to [1-2*sigma,
 # 1+2*sigma], centered on the config defaults (Treiber & Kesting's recommended
 # heterogeneity method; src/drivers.py). The draws use a DEDICATED seeded RNG
-# stream (RANDOM_SEED + 3, alongside +1 signals and +2 fleet), so traffic
-# (routes, activity, throughput) stays bit-identical to the same-seed homogeneous
-# run and only the car-following dynamics change. Off by default: the committed
+# stream (RANDOM_SEED + 3, alongside +1 signals and +2 fleet), so enabling the
+# flag consumes no trip/route/fleet draw and the same seed reproduces the same
+# INITIAL vehicle population; the realized traffic then diverges (different
+# dynamics -> different finish times -> different respawn timing), which is the
+# effect being measured. Off by default: the committed
 # spec is the homogeneous model; this flag exists to QUANTIFY the
 # homogeneous-driver limitation -- a nonzero per-segment speed spread, which the
 # CNOSSOS noise model (nonlinear in speed) turns into a shift in the noise surface

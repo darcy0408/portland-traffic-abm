@@ -43,6 +43,17 @@ from shapely.geometry import LineString
 import config
 config.LANES_ENABLED = True          # demo only: runtime flip, nothing written
 
+# Corridor configuration, forced at runtime (the mixed_rerun.py pattern; nothing
+# is written to config.py). config.py's defaults are METRO scale -- 16,500
+# vehicles over a 20 km radius -- while this demo animates the 1.5 km corridor
+# graph, so taking the defaults would gridlock 16,500 cars on Powell and
+# contradict the docstring above. These are the published corridor numbers.
+config.N_VEHICLES = 500
+config.STUDY_RADIUS_M = 1500
+config.THROUGH_TRAFFIC_FRACTION = 0.30
+config.DEMAND_GRAVITY = True
+config.DEMAND_LODES_OD = False
+
 import emissions
 import generate as g
 
@@ -59,6 +70,15 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     t_start = time.perf_counter()
     G = g.get_network()
+    # get_network() returns whatever graph is cached, regardless of
+    # STUDY_RADIUS_M, so the override above cannot by itself guarantee the
+    # corridor. Fail loudly rather than animate 500 cars lost on a metro graph.
+    if len(G.nodes) > 5000:
+        raise SystemExit(
+            f"cached graph has {len(G.nodes)} nodes: this is the metro graph, "
+            "not the 1.5 km corridor this demo animates. Point NETWORK_DIR at "
+            "the corridor cache (or delete it and let STUDY_RADIUS_M = 1500 "
+            "redownload) before running.")
     g.prepare_network(G)
     signals = g.prepare_signals(G)
     lanes = {(u, v, k): d.get("n_lanes", 1)

@@ -23,6 +23,15 @@ ported it to the current `step_vehicles` signature (main added `fleet_ctx`;
 - Gates green: `python src/lanes_scenarios.py` → equivalence bitwise PASS,
   discharge 2.00x with 2 lanes (22 vs 11 cars/30 s green), nobody runs the red.
 - Demos in `demos/`.
+- Gate HARDENED Jul 23 (audit items 2-3, see `AUDIT_FINDINGS_JUL23.md`): the
+  red-light check asserted the literal `True` instead of the computed value, and
+  the "two cars abreast" check tested a threshold the cars already satisfied at
+  setup, so both passed no matter what the kernel did. Now the red check asserts
+  the measured crossing count for EACH lane count, and the abreast check asserts
+  the front-two longitudinal gap is < 1 m with 2 lanes AND ~7 m (the L+s0
+  equilibrium) single file. Verified to FAIL against a sabotaged kernel that
+  ignores the lane counts (gap 7.00 m both ways) and against an injected
+  red-light violation.
 
 ## Phase 2 — Heterogeneous drivers (DONE on this branch)
 Per-vehicle IDM parameters drawn from truncated Gaussians (Treiber & Kesting's
@@ -38,11 +47,23 @@ route/fleet streams stay untouched). `DRIVER_HETEROGENEITY` flag, default off.
   don't consume driver draws), applied in `step_vehicles` (per-vehicle v0_factor ×
   segment limit, and the car's own a_max/b_comf/T/s0). idm=None ⇒ byte-for-byte
   the base kernel.
-- Gates green: `python src/driver_scenarios.py` →
+- Gates green: `python src/driver_scenarios.py` → 3/3.
   A (inertness) all-sigma-0 draw equals the config defaults and trajectories are
   bitwise identical to the base kernel; B (dispersion) 12 free drivers each settle
   to v0×factor to 1e-9, speed variance 2.44 (m/s)², fastest/slowest separate 1850 m
-  vs 1896 m hand-predicted (−2.4%), and zero-sigma leaves no spread at all.
+  vs 1896 m hand-predicted (−2.4%), and zero-sigma leaves no spread at all;
+  C (own s0, added Jul 23 with audit item 6) the segment-entry hold uses the car's
+  OWN jam distance, matching its acceleration: with a blocker 6.8 m into the next
+  segment, the default driver (threshold 5+2.0 = 7.0 m) is held and a
+  short-headway driver (s0 1.6, threshold 6.6 m) enters, while the flag-off path
+  is unchanged. Verified to FAIL against the pre-fix kernel.
+- Doc claim CORRECTED Jul 23 (audit item 1): `drivers.py`, `config.py` and
+  `generate.py` had claimed heterogeneity leaves traffic "bit-identical to the
+  same-seed homogeneous run". That is true of `fleet.py` (emission chemistry only)
+  and FALSE here — changed dynamics change finish times, which shift respawn
+  timing, which reassigns trip draws. The separate stream buys an identical
+  INITIAL population and no consumed trip/route/fleet draw; the realized traffic
+  then diverges, and that divergence is the effect being measured.
 - Base gates unaffected (flag off default): scenarios.py 4/4, lanes_scenarios.py 2/2.
 - Remaining (needs a deliberate run, not built yet): the speed-VARIANCE-per-segment
   readout on a full run — CNOSSOS noise is nonlinear in speed, so variance should

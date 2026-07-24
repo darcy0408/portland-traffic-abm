@@ -2,7 +2,7 @@
 
 Same discipline as scenarios.py / lanes_scenarios.py (Christof's Jun 24 ask: show
 it works with values predictable by hand, through the REAL kernel, never a
-reimplementation). Two checks:
+reimplementation). Three checks:
 
   A) INERTNESS. With every driver sigma 0, the heterogeneity machinery must
      reproduce the single-parameter base kernel EXACTLY, position for position:
@@ -20,6 +20,13 @@ reimplementation). Two checks:
      drivers are ~(factor spread) * v0 * t apart. With every sigma 0 all cars share
      one desired speed and there is no spread at all. Predicted speeds are read
      straight from the drawn factors, so every number is checkable by hand.
+
+  C) OWN s0 AT SEGMENT ENTRY. The per-vehicle parameters must be applied
+     CONSISTENTLY: the segment-entry (spillback) hold has its own gap test, and it
+     must use the same s0 the car's acceleration uses, not the config constant.
+     A driver with a shorter jam distance therefore enters a gap the default
+     driver is held out of, with the flag-off path unchanged. (Added Jul 23 with
+     the fix for audit item 6, which found the two places disagreeing.)
 
 Run: python src/driver_scenarios.py
 """
@@ -180,11 +187,58 @@ def scenario_dispersion():
     return all(ok)
 
 
+def scenario_own_s0():
+    print("\nC) THE CAR'S OWN s0 GOVERNS SEGMENT ENTRY")
+    print("   A car crossing into a downstream segment holds at the stop line when")
+    print("   the rearmost car there is closer than L + s0 (L = 5 m). That gap test")
+    print("   must use the DRIVER'S OWN jam distance, the same s0 the acceleration")
+    print("   pass gives it -- otherwise a short-headway driver is held out of a gap")
+    print("   its own car-following would happily accept.")
+    v0 = 50 * KPH
+    # blocker sits at 6.8 m into the next segment: inside the default threshold
+    # (5 + 2.0 = 7.0) but outside a short-headway driver's (5 + 1.6 = 6.6).
+    blocker_pos = 6.8
+    base_thr = config.VEHICLE_LENGTH_M + config.IDM_S0
+    short_s0 = config.IDM_S0 * 0.8
+    short_thr = config.VEHICLE_LENGTH_M + short_s0
+
+    def crossed(idm):
+        """One car at the very end of edge (1,2) with the blocker ahead on (2,3).
+        Returns True if it entered the next segment this step."""
+        mover = {"id": 0, "idx": 0, "pos": 399.9, "v": 5.0,
+                 "route": [_edge(1, 2, 400.0, v0), _edge(2, 3, 600.0, v0)]}
+        if idm is not None:
+            mover["idm"] = idm
+        blocker = {"id": 1, "idx": 0, "pos": blocker_pos, "v": 0.0,
+                   "route": [_edge(2, 3, 600.0, v0)]}
+        vehs = [mover, blocker]
+        _run(vehs, _no_signals(), 1)
+        return mover["idx"] == 1
+
+    default_idm = {"v0_factor": 1.0, "a_max": config.IDM_A_MAX,
+                   "b_comf": config.IDM_B_COMF, "T": config.IDM_T,
+                   "s0": config.IDM_S0}
+    print(f"\n   blocker at {blocker_pos} m; default threshold {base_thr:.1f} m, "
+          f"short-headway (s0 {short_s0:.1f}) threshold {short_thr:.1f} m")
+    ok = []
+    ok.append(_check("flag-off car is held (unchanged base behavior)",
+                     not crossed(None),
+                     f"{blocker_pos} m < {base_thr:.1f} m, so it waits"))
+    ok.append(_check("heterogeneous car with the DEFAULT s0 is held too",
+                     not crossed(default_idm),
+                     "same threshold, same outcome as the base kernel"))
+    ok.append(_check("short-headway driver enters the gap the default refuses",
+                     crossed(dict(default_idm, s0=short_s0)),
+                     f"{blocker_pos} m > {short_thr:.1f} m, so it crosses"))
+    return all(ok)
+
+
 if __name__ == "__main__":
     print("Driver-heterogeneity scenarios  (real kernel, hand-checkable)")
     print("=" * 66)
     results = {"inertness": scenario_inertness(),
-               "dispersion": scenario_dispersion()}
+               "dispersion": scenario_dispersion(),
+               "own_s0": scenario_own_s0()}
     print("\n" + "=" * 66)
     for name, okay in results.items():
         print(f"   {PASS if okay else FAIL}  {name}")

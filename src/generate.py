@@ -528,10 +528,14 @@ def build_driver_context():
     """Precompute the driver-heterogeneity pieces (config.DRIVER_HETEROGENEITY):
     the per-parameter sigmas and a DEDICATED seeded RNG stream (RANDOM_SEED + 3,
     alongside the +1 signal and +2 fleet streams) for the per-vehicle IDM draws.
-    The separate stream is what keeps the trip, route, and fleet draws bit-identical
-    to the homogeneous run, so turning heterogeneity on changes only the
-    car-following dynamics. Returns None when the flag is off (base model: every
-    vehicle uses the config IDM defaults, unchanged behavior)."""
+    The separate stream means enabling heterogeneity consumes no trip/route/fleet
+    draw, so the same seed spawns the same INITIAL population and only the
+    car-following dynamics are changed by hand. The realized traffic does still
+    diverge from the homogeneous run -- different dynamics finish trips at
+    different times, and respawns then take different trip draws -- which is the
+    effect under study, not a seeding leak. Returns None when the flag is off
+    (base model: every vehicle uses the config IDM defaults, unchanged
+    behavior)."""
     if not config.DRIVER_HETEROGENEITY:
         return None
     sig = drivers.sigmas()
@@ -769,8 +773,14 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 next_key = veh["route"][veh["idx"] + 1][:3]
                 next_group = by_edge.get(next_key)
                 n_next = lanes.get(next_key, 1) if lanes else 1
+                # the minimum gap is this driver's OWN jam distance when the car is
+                # heterogeneous (config.IDM_S0 otherwise), matching the s0 the accel
+                # pass above used for the same car. A driver who keeps a shorter jam
+                # distance should also squeeze into a tighter entrance.
+                veh_idm = veh.get("idm")
+                s0_here = veh_idm["s0"] if veh_idm else config.IDM_S0
                 if (next_group and len(next_group) >= n_next
-                        and next_group[n_next - 1]["pos"] < L + config.IDM_S0):
+                        and next_group[n_next - 1]["pos"] < L + s0_here):
                     veh["pos"], veh["v"] = edge[3], 0.0
                     break
             # the car has fully traversed this segment: count one vehicle through it.
@@ -846,9 +856,13 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
 
     t0 = time.perf_counter()
     for step in range(state["step"], n_steps):
+        # the optional context/lane arguments go by KEYWORD at every call site:
+        # they are appended over time (fleet_ctx, then driver_ctx, then lanes), so
+        # positional passing would silently mis-bind the next time one is inserted.
         step_vehicles(vehicles, config.DT, step * config.DT, segment_totals,
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
-                      signals, demand, through, fleet_ctx, driver_ctx, lanes)
+                      signals, demand, through, fleet_ctx=fleet_ctx,
+                      driver_ctx=driver_ctx, lanes=lanes)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
