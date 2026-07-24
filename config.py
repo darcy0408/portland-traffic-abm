@@ -256,6 +256,37 @@ DRIVER_SIGMA_B  = 0.15   # comfortable-braking spread
 DRIVER_SIGMA_T  = 0.15   # safe-time-headway spread
 DRIVER_SIGMA_S0 = 0.10   # jam-spacing (standstill gap) spread
 
+# --- Webster signal timing (traffic-realism Phase 4) ---
+# The base model (SIGNAL_CYCLE_S / SIGNAL_GREEN_SPLIT above) gives every
+# signalized intersection the SAME uniform 60 s cycle split 50/50, regardless of
+# how lopsided its actual approach volumes are. Webster's formula (Webster, F.V.
+# 1958, "Traffic signal settings", Road Research Technical Paper 39 -- the
+# standard research fallback for a location without published signal-timing
+# cards; Portland runs SCATS, an adaptive controller, with no public timing
+# plans) instead derives a per-intersection cycle length and green split from
+# the MODELED approach flows, so a heavy approach gets more green and a light
+# one gets less. See src/webster.py for the pure computation. Off by default:
+# the committed spec is the uniform signal; this flag exists to QUANTIFY that
+# limitation (how much a heavy approach is under-served by a fixed 50/50 split),
+# not to change the cited numbers. Not wired into the simulation yet (increment
+# 1 is the decision core only; increment 2 will wire it into generate.py).
+# All values below are standard a-priori traffic-engineering constants (HCM /
+# Webster's own recommended defaults), NOT tuned to the held-out PBOT counts.
+WEBSTER_ENABLED = False
+WEBSTER_SAT_FLOW = 1900.0    # saturation flow, veh/h per lane (HCM-standard value:
+                              # the maximum discharge rate of a single lane on
+                              # continuous green, once queued traffic is moving).
+WEBSTER_LOST_TIME_S = 4.0    # lost time per phase, s (startup delay as the queue
+                              # gets moving + clearance as it empties; standard value).
+WEBSTER_CYCLE_MIN_S = 30.0   # shortest cycle Webster's formula may return
+WEBSTER_CYCLE_MAX_S = 120.0  # longest cycle Webster's formula may return -- also
+                              # the practical fallback when demand is oversaturated
+                              # and the optimal-cycle formula has no valid answer.
+WEBSTER_MIN_GREEN_S = 7.0    # floor on any phase's green, s -- a pedestrian
+                              # crossing / driver-expectation minimum, not a
+                              # capacity number; Webster's optimum can undercut it
+                              # for a very lightly loaded approach.
+
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular
 # buffers of increasing radius around it, so a point "sees" its neighborhood and
