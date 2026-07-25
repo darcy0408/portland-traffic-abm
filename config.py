@@ -304,6 +304,36 @@ WEBSTER_ALL_RED_S = 1.5      # all-red interval per phase change, s
 # DT s each); flows are averaged over the last half, after the network has filled.
 WEBSTER_WARMUP_STEPS = 1200
 
+# --- Green-wave signal coordination (traffic-realism Phase 4, increment 2b) ---
+# Webster (2a) times each signal INDEPENDENTLY -- every node gets its own cycle
+# fitted to its own approach flows. A progression ("green wave") needs the
+# opposite: a shared cycle across a chain of signals, so a platoon that leaves
+# the first signal's green arrives at each downstream signal during ITS green
+# too. This flag adds that coordination on top of the per-node Webster plans,
+# for ONE named corridor; every other signal in the network keeps its own
+# independent 2a plan, untouched. Requires WEBSTER_ENABLED -- there is no
+# per-node Webster cycle to coordinate without it, so turning this on with
+# Webster off is refused loudly (see generate.prepare_signals), the same
+# refusal style build_mobil_context uses for LANES_ENABLED+MOBIL_ENABLED. Off
+# by default: the committed spec is per-node Webster with no coordination.
+WEBSTER_GREENWAVE_ENABLED = False
+# Case-insensitive substring match against each edge's OSM 'name' tag, which can
+# itself be a list when OSM records more than one name for a way (e.g. a shared
+# state-route designation) -- handled element-wise. Any signalized node touching
+# a matching edge is a candidate chain member. NOTE the Jul 19 audit finding:
+# NONE of the 21 real OSM-tagged signals in the committed 1.5 km corridor graph
+# touch a Powell edge, so on the real cached graph this flag currently finds NO
+# chain at all -- it is exercised end to end only on the synthetic graphs in
+# src/greenwave_scenarios.py. No claim is made anywhere about Powell-scale
+# green-wave effects.
+WEBSTER_GREENWAVE_STREET = "Powell"
+# Progression design speed, km/h -- the speed the coordination band assumes a
+# platoon travels at (NOT each edge's own posted/free-flow speed, which the base
+# IDM still uses for actual car-following). ~50 km/h / 30 mph is the standard
+# urban arterial speed limit and the textbook default design speed for a
+# fixed-time progression band; a-priori, NOT tuned to the held-out PBOT counts.
+WEBSTER_PROGRESSION_SPEED_KPH = 50.0
+
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular
 # buffers of increasing radius around it, so a point "sees" its neighborhood and

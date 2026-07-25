@@ -273,20 +273,76 @@ stays off by default; the committed spec is still the uniform signal.
   when no lane flag is on; the display clearance need not equal Webster's internal
   lost time; offsets only decorrelate the grid (no coordination yet).
 
-### Increment 2b — NEXT: green-wave coordination along Powell
-- Green-wave offsets: a common coordination cycle (Webster gives per-node cycles,
-  but a progression band needs a shared cycle — take the max member cycle) with
-  per-node splits preserved, offsets set by cumulative travel time at the
-  corridor progression speed, so a platoon rides successive greens down Powell.
-- Requires identifying the ordered Powell signal chain in the graph.
-- Portland runs SCATS (adaptive, no public plans) — PBOT signal timing cards
-  are public-records-requestable if we ever want ground truth; Webster is the
-  standard research fallback.
-- Gate/demo: a corridor demo showing a platoon riding the green wave (vs the
-  uncoordinated 2a offsets stopping it at each red).
-- Optional deferred payoff: an authoritative seeded run with WEBSTER_ENABLED to
-  read out how per-node timing shifts segment volumes/speeds vs the uniform
-  signal (a deliberate run decision, like the Phase 2/3 payoff — one sim at a
+### Increment 2b — DONE: green-wave coordination along a named chain (gated, off by default)
+- `config.py`: `WEBSTER_GREENWAVE_ENABLED` (default False, meaningless without
+  `WEBSTER_ENABLED` and refused loudly if set without it — same refusal style as
+  `build_mobil_context` refusing `LANES_ENABLED`+`MOBIL_ENABLED`),
+  `WEBSTER_GREENWAVE_STREET` ("Powell" — case-insensitive substring match against
+  OSM edge `name`, list-valued names handled element-wise),
+  `WEBSTER_PROGRESSION_SPEED_KPH` (50 km/h / ~30 mph — the standard urban arterial
+  speed limit and textbook progression design speed; a-priori, NOT tuned to the
+  held-out PBOT counts).
+- `src/generate.py`: `find_signal_chain(G, signal_nodes, street_name)` finds every
+  signalized node touching a name-matched edge and orders them by projecting each
+  node onto the DOMINANT AXIS of the matched edges (the mean unit bearing vector
+  over all of them) — generic by construction, no assumption about compass
+  direction and no edge-by-edge walk, so it tolerates a corridor that jogs.
+  `apply_greenwave` then gives the chain's members a common coordination cycle =
+  the MAX of their own (already-computed) per-node Webster cycles — the smallest
+  shared cycle that still fits every member's own critical approach — while each
+  member's green SPLIT (a fraction of the cycle) is left exactly as 2a computed
+  it, so its window on the new cycle is automatically that same fraction (no
+  change needed in `is_green`, as specced). Offsets are solved so a platoon
+  leaving member 0's own green start arrives at every downstream member during
+  ITS chain-phase green too: `offset_i = (offset_0 + (g_i - g_0) - cum_travel_i)
+  mod C`, where `g_i` is member i's own window-start position (0 for EW, `split_i
+  * C` for NS) and `cum_travel_i` is the shortest-path travel time from member 0
+  at the progression speed (`_chain_travel_time_s`, shortest-path-by-length, not a
+  same-name-edge walk — real named streets are often split at unsignalized nodes
+  in between). The chain phase at each member — 0 (EW) or 1 (NS) — is read
+  directly from the bearing of the matched edges AT THAT NODE
+  (`_chain_phase_at_node`), never assumed constant along the chain: a corridor
+  can jog and flip which phase serves it at one intersection without the rest of
+  the chain following. An empty or single-node chain (fewer than 2 signalized
+  matches) is handled gracefully — a printed warning, coordination skipped,
+  behavior bitwise identical to 2a.
+- Gate `src/greenwave_scenarios.py` → 3/3, through the REAL kernel on a synthetic
+  3-signal arterial that itself jogs 90 degrees between the 2nd and 3rd signal
+  (so the 3rd sees the chain street as NS while the first two see it as EW),
+  plus an unrelated signalized 4-way that must never be touched: A) PROGRESSION —
+  a platoon released exactly at signal 1's green rides the coordinated wave
+  through signals 2 and 3 with zero stops, while the same platoon under
+  deliberately anti-phased offsets (each downstream member placed at the exact
+  midpoint of ITS OWN red window, not a matter of random-offset luck) stops at
+  both; B) INERTNESS — the flag off reproduces an independently reconstructed 2a
+  plan bitwise, a street matching nothing is equally inert (chain empty, warned),
+  a street matching exactly one signal ("Foster Rd") is likewise inert, and the
+  real chain DOES change the member plan while leaving the unrelated signal
+  untouched (the "gate can fail" proof); C) STRUCTURE — the 3 members share one
+  common cycle equal to the max of their own independently-recomputed Webster
+  cycles, each member's split is preserved exactly, the non-member's cycle/split
+  are untouched, and every offset matches an independently hand-derived
+  travel-time formula (written fresh in the gate, not calling `apply_greenwave`'s
+  own arithmetic back at itself) to 1e-9. Sabotage-tested: zeroing the travel-time
+  offset (`cum_travel = 0.0`) broke PROGRESSION (0 stops → 10) and STRUCTURE
+  (offset mismatch) while leaving INERTNESS green, as expected since that gate
+  doesn't exercise the travel-time formula; reverted and reconfirmed 3/3.
+- Base gates unaffected: scenarios 3/3 (saturation skipped — no cached graph in a
+  worktree, same as every gate run here), lanes 2/2, driver 3/3, mobil 4/4, mobil
+  network 3/3, webster (decision) 5/5, webster network 3/3, kernel_regression
+  bit-identical.
+- Simplifications documented at the code: the chain finder orders members by a
+  geometric axis projection, not a literal edge-sequence walk (robust to OSM
+  splitting one named street into several edges at unsignalized nodes in
+  between); a node touching matched edges of two different phases (a jog's own
+  corner) breaks the tie toward phase 0, arbitrary but deterministic;
+  `WEBSTER_GREENWAVE_STREET` defaults to "Powell" but is verified (Jul 19 audit)
+  to find NO chain at all on the real cached 1.5 km corridor graph — the flag is
+  exercised end to end only on the synthetic graphs in `greenwave_scenarios.py`;
+  no claim is made anywhere about Powell-scale green-wave effects.
+- Deferred payoff (unchanged from the prior note): an authoritative seeded run
+  with WEBSTER_ENABLED to read out how per-node timing shifts segment
+  volumes/speeds vs the uniform signal (a deliberate run decision — one sim at a
   time, pin the seed, figures read the data file).
 
 ## Phase 5 — Menu (pick per session)

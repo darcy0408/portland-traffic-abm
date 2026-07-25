@@ -307,6 +307,167 @@ def build_webster_plans(G, signal_nodes, edge_phase, flows):
     return node_cycle, node_split
 
 
+# --- green-wave coordination (Phase 4, increment 2b) ------------------------
+# 2a gives every signal its OWN Webster cycle. A progression band needs the
+# OPPOSITE -- one shared cycle across a chain of signals -- so the functions
+# below identify an ordered chain of signalized nodes on one named street and
+# recompute a common cycle + travel-time offsets for just those nodes. Every
+# other signal (and, within the chain, every member's own green SPLIT) is left
+# exactly as 2a computed it. See config.WEBSTER_GREENWAVE_* for the flags.
+
+def _matched_edges(G, street_name):
+    """Edge keys (u, v, k) whose OSM 'name' tag contains `street_name` as a
+    case-insensitive substring. OSM 'name' is a plain string, but OSMnx can merge
+    parallel ways into one edge with a LIST of names -- checked element-wise, so
+    either shape works. Returns [] if nothing matches (e.g. the real 1.5 km
+    corridor graph and 'Powell' -- verified Jul 19 that none of its 21 OSM-tagged
+    signals touch a Powell edge; this function returning [] there is correct,
+    not a bug)."""
+    needle = street_name.lower()
+    matched = []
+    for u, v, k, d in G.edges(keys=True, data=True):
+        name = d.get("name")
+        if name is None:
+            continue
+        names = name if isinstance(name, list) else [name]
+        if any(needle in str(nm).lower() for nm in names):
+            matched.append((u, v, k))
+    return matched
+
+
+def find_signal_chain(G, signal_nodes, street_name):
+    """Order the signalized nodes on a named street into a coordination chain.
+
+    A node qualifies as a member iff it is signalized AND touches at least one
+    edge matched by `_matched_edges`. Members are then ordered by projecting
+    each node's (x, y) onto the DOMINANT AXIS of the matched edges -- the mean
+    unit bearing vector over all of them -- rather than assuming the corridor
+    runs due east-west or north-south, or walking a specific edge sequence: a
+    real corridor can jog, and OSM can tag it as several non-contiguous edges
+    sharing a name, so a single geometric projection is more robust than a walk.
+    Returns [] if fewer than 2 signalized nodes match (nothing to coordinate --
+    the caller treats this as "no chain found", not an error) or if the matched
+    edges' bearings cancel to a zero vector (no usable axis, e.g. a name shared
+    equally by a north and a south leg)."""
+    matched = _matched_edges(G, street_name)
+    if not matched:
+        return []
+    members = {n for u, v, k in matched for n in (u, v) if n in signal_nodes}
+    if len(members) < 2:
+        return []
+
+    dx_sum, dy_sum = 0.0, 0.0
+    for u, v, k in matched:
+        x1, y1 = float(G.nodes[u]["x"]), float(G.nodes[u]["y"])
+        x2, y2 = float(G.nodes[v]["x"]), float(G.nodes[v]["y"])
+        dx, dy = x2 - x1, y2 - y1
+        norm = math.hypot(dx, dy) or 1.0
+        dx_sum += dx / norm      # unit vectors, so one long edge cannot dominate
+        dy_sum += dy / norm      # the axis over several short ones
+    axis_norm = math.hypot(dx_sum, dy_sum)
+    if axis_norm == 0.0:
+        return []
+    ax, ay = dx_sum / axis_norm, dy_sum / axis_norm
+    return sorted(members, key=lambda n: float(G.nodes[n]["x"]) * ax
+                                        + float(G.nodes[n]["y"]) * ay)
+
+
+def _chain_phase_at_node(node, edge_phase, matched_edges):
+    """Which phase (0 = EW / 1 = NS) the chain street serves AT this node,
+    read directly from the bearing of the MATCHED edges touching it -- never
+    assumed to be the same phase index as any other member. A corridor can jog,
+    and its local bearing can cross the EW/NS 45-degree boundary at one
+    particular intersection even while the rest of the chain does not (that is
+    the whole reason this is computed per node instead of once for the chain).
+    A node touching matched edges of both phases (a jog's own corner) breaks
+    the tie toward phase 0 -- arbitrary, but deterministic and documented."""
+    phases = [edge_phase[e] for e in matched_edges if node in e[:2]]
+    return 0 if phases.count(0) >= phases.count(1) else 1
+
+
+def _chain_travel_time_s(G, n_from, n_to, progression_speed_mps):
+    """Free-flow travel time (s) from n_from to n_to at the FIXED progression
+    design speed (config.WEBSTER_PROGRESSION_SPEED_KPH -- NOT each edge's own
+    posted limit, which the base IDM still uses for actual car-following; a
+    green-wave band is designed around one assumed platoon speed, the standard
+    textbook construction). Uses the shortest path BY LENGTH over the whole
+    graph rather than requiring a direct edge between the two nodes: a named
+    street's signalized nodes are often not directly joined, because OSM splits
+    a way at ordinary (unsignalized) nodes in between too. Falls back to the
+    straight-line haversine distance if no path exists at all (should not arise
+    between two members of one connected chain; keeps this function total
+    rather than raising)."""
+    try:
+        dist_m = nx.shortest_path_length(G, n_from, n_to, weight="length")
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        y1, x1 = float(G.nodes[n_from]["y"]), float(G.nodes[n_from]["x"])
+        y2, x2 = float(G.nodes[n_to]["y"]), float(G.nodes[n_to]["x"])
+        dist_m = _haversine_m(y1, x1, y2, x2)
+    return dist_m / progression_speed_mps
+
+
+def apply_greenwave(G, signal_nodes, edge_phase, node_cycle, node_split, offset):
+    """Green-wave coordination along config.WEBSTER_GREENWAVE_STREET. MUTATES
+    `node_cycle` and `offset` IN PLACE for the chain's member nodes only --
+    `node_split` and every non-member node are left exactly as 2a computed them.
+    Returns the ordered list of member nodes (empty if nothing to coordinate).
+
+    Common cycle: 2a gives every signal its own Webster cycle; a progression
+    needs one SHARED cycle, so members adopt a common coordination cycle = the
+    MAX of their own (already-computed) Webster cycles. The max is the smallest
+    common cycle that still fits every member's own critical approach -- a
+    smaller shared cycle would undercut whichever member's own Webster plan
+    needed the longest cycle, re-saturating it.
+
+    Green split: each member's split is a FRACTION of the cycle (by
+    construction, see webster.py), so keeping node_split[n] unchanged and only
+    replacing node_cycle[n] with the common cycle already gives that member the
+    same proportional green on the new, generally longer, cycle -- is_green
+    recomputes the window boundary (split * cycle) at call time, so nothing
+    else needs to change for this half of the design.
+
+    Offsets: a platoon leaving member 0's own chain-phase green start should
+    arrive at every downstream member during ITS chain-phase green too. Member
+    i's own green-window-start TIME (mod C) is (g_i - offset_i) mod C, where g_i
+    is the window's own start position on the cycle -- 0 if the chain phase at
+    i is EW (phase 0's window always starts at 0, see is_green), or
+    node_split[i] * C if NS (phase 1's window starts where phase 0's ends).
+    Requiring member i's window-start time to lag member 0's by exactly the
+    cumulative free-flow travel time at the progression speed gives:
+
+        offset_i = (offset_0 + (g_i - g_0) - cum_travel_i) mod C
+
+    with member 0's OWN offset (already drawn by prepare_signals on the uniform
+    per-node cycle) kept as the arbitrary anchor, and cum_travel_0 = 0."""
+    chain = find_signal_chain(G, signal_nodes, config.WEBSTER_GREENWAVE_STREET)
+    if len(chain) < 2:
+        print(f"  green-wave: no chain found for street "
+              f"'{config.WEBSTER_GREENWAVE_STREET}' (need >=2 signalized nodes "
+              f"on a matching street) -- coordination skipped, per-node Webster "
+              f"timing (2a) stands unchanged.")
+        return []
+
+    matched = _matched_edges(G, config.WEBSTER_GREENWAVE_STREET)
+    chain_phase = {n: _chain_phase_at_node(n, edge_phase, matched) for n in chain}
+    common_cycle = max(node_cycle[n] for n in chain)
+    progression_mps = config.WEBSTER_PROGRESSION_SPEED_KPH / 3.6
+
+    n0 = chain[0]
+    offset0 = offset[n0]
+    g0 = 0.0 if chain_phase[n0] == 0 else node_split[n0] * common_cycle
+    for n in chain:
+        node_cycle[n] = common_cycle    # common cycle; node_split[n] untouched
+    for n in chain[1:]:
+        g_i = 0.0 if chain_phase[n] == 0 else node_split[n] * common_cycle
+        cum_travel = _chain_travel_time_s(G, n0, n, progression_mps)
+        offset[n] = (offset0 + (g_i - g0) - cum_travel) % common_cycle
+
+    print(f"  green-wave ON: '{config.WEBSTER_GREENWAVE_STREET}' chain of "
+          f"{len(chain)} signals {chain}, common cycle {common_cycle:.1f}s, "
+          f"progression speed {config.WEBSTER_PROGRESSION_SPEED_KPH:.0f} km/h")
+    return chain
+
+
 def prepare_signals(G, flows=None):
     """Find signalized nodes and precompute each edge's phase and each node's
     cycle offset. Prefers real OSM 'traffic_signals' node tags; if the graph has
@@ -317,7 +478,21 @@ def prepare_signals(G, flows=None):
     gets its own Webster cycle length and green split (node_cycle / node_split), a
     yellow+all-red clearance interval, and a per-node offset drawn on its OWN cycle.
     Off by default: node_cycle stays None and is_green takes the uniform base path,
-    byte-for-byte unchanged."""
+    byte-for-byte unchanged.
+
+    With config.WEBSTER_GREENWAVE_ENABLED on top (increment 2b), the members of
+    one named street's signal chain (config.WEBSTER_GREENWAVE_STREET) additionally
+    get a shared coordination cycle and travel-time offsets on top of their 2a
+    plans -- see `apply_greenwave`. Meaningless without Webster (there is no
+    per-node cycle to coordinate), so it is refused loudly, same style as
+    build_mobil_context refusing LANES_ENABLED+MOBIL_ENABLED together."""
+    if config.WEBSTER_GREENWAVE_ENABLED and not config.WEBSTER_ENABLED:
+        raise ValueError(
+            "WEBSTER_GREENWAVE_ENABLED requires WEBSTER_ENABLED: green-wave "
+            "coordination builds a shared cycle from each member's own Webster "
+            "plan, and there is no Webster plan to coordinate with it off. Turn "
+            "WEBSTER_ENABLED on too, or turn WEBSTER_GREENWAVE_ENABLED off.")
+
     signal_nodes = {n for n, d in G.nodes(data=True)
                     if "traffic_signals" in str(d.get("highway", ""))}
     tagged = len(signal_nodes)
@@ -335,18 +510,27 @@ def prepare_signals(G, flows=None):
         # Webster (increment 2): None unless the flag is on AND flows are supplied,
         # so the default dict drives the uniform base path in is_green unchanged.
         "node_cycle": None, "node_split": None, "clearance": 0.0,
+        # Green-wave (increment 2b): the coordinated chain's member nodes, empty
+        # unless WEBSTER_GREENWAVE_ENABLED found one (see apply_greenwave).
+        "greenwave_chain": [],
     }
     if config.WEBSTER_ENABLED and flows is not None:
         node_cycle, node_split = build_webster_plans(G, signal_nodes, edge_phase, flows)
         # Redraw each offset on the node's OWN cycle length (the base draw used the
-        # uniform cycle). Green-wave coordination is increment 2b; here the offsets
-        # only decorrelate the grid, exactly as the base random offsets do.
+        # uniform cycle). This is still the 2a offset for every node; green-wave
+        # coordination (below) then overwrites cycle+offset for chain members only.
         off_rng = random.Random(config.RANDOM_SEED + 1)
         offset = {n: off_rng.uniform(0.0, node_cycle[n]) for n in signal_nodes}
         sig["offset"] = offset
         sig["node_cycle"] = node_cycle
         sig["node_split"] = node_split
         sig["clearance"] = config.WEBSTER_YELLOW_S + config.WEBSTER_ALL_RED_S
+        if config.WEBSTER_GREENWAVE_ENABLED:
+            # Mutates node_cycle/offset in place for chain members only; both
+            # dicts are the same objects already stored in `sig` above, so no
+            # further reassignment is needed here.
+            sig["greenwave_chain"] = apply_greenwave(
+                G, signal_nodes, edge_phase, node_cycle, node_split, offset)
     return sig
 
 
