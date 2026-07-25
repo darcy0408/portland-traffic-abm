@@ -327,10 +327,13 @@ stays off by default; the committed spec is still the uniform signal.
   offset (`cum_travel = 0.0`) broke PROGRESSION (0 stops → 10) and STRUCTURE
   (offset mismatch) while leaving INERTNESS green, as expected since that gate
   doesn't exercise the travel-time formula; reverted and reconfirmed 3/3.
-- Base gates unaffected: scenarios 3/3 (saturation skipped — no cached graph in a
-  worktree, same as every gate run here), lanes 2/2, driver 3/3, mobil 4/4, mobil
+- Base gates unaffected: scenarios 4/4 (including saturation, re-run on the main
+  worktree with the cached graph), lanes 2/2, driver 3/3, mobil 4/4, mobil
   network 3/3, webster (decision) 5/5, webster network 3/3, kernel_regression
-  bit-identical.
+  bit-identical. Plus a real-graph smoke: on the cached corridor graph the
+  "Powell" chain is empty as expected (no in-graph signal touches Powell), the
+  no-chain path leaves the 2a plans bitwise identical, and the
+  greenwave-without-webster refusal fires.
 - Simplifications documented at the code: the chain finder orders members by a
   geometric axis projection, not a literal edge-sequence walk (robust to OSM
   splitting one named street into several edges at unsignalized nodes in
@@ -340,10 +343,41 @@ stays off by default; the committed spec is still the uniform signal.
   to find NO chain at all on the real cached 1.5 km corridor graph — the flag is
   exercised end to end only on the synthetic graphs in `greenwave_scenarios.py`;
   no claim is made anywhere about Powell-scale green-wave effects.
-- Deferred payoff (unchanged from the prior note): an authoritative seeded run
-  with WEBSTER_ENABLED to read out how per-node timing shifts segment
-  volumes/speeds vs the uniform signal (a deliberate run decision — one sim at a
-  time, pin the seed, figures read the data file).
+### Webster payoff run — DONE Jul 25: the first full authoritative hour with WEBSTER_ENABLED
+One seeded corridor run (`src/webster_runs.py`: 1.5 km, 500 vehicles, 3600 steps,
+seed 42, WEBSTER_ENABLED only, RUN_NAME `realism_webster`), read out against the
+Jul 24 `realism_base` by `src/webster_readout.py` (analysis-only; also dumps the
+plans the run used to `realism_webster_plans.json`). The runs share the
+byte-for-byte same vehicle population (the pre-pass has its own RNG stream), so
+per-segment deltas are cleanly paired. Numbers (corridor scale, one seed):
+- CYCLES: all 21 nodes clamp to the 30 s minimum even at full corridor demand —
+  the smoke session's "full demand will spread the cycles" hypothesis is
+  FALSIFIED at this scale. From webster.py's own math a node unclamps only past
+  ~823 veh/h combined critical flow; the busiest node measures 798 veh/h (3.1%
+  short — close, not distant). The network's 1,008 veh/h peak approach feeds no
+  signal at all (consistent with the Jul 19 no-signals-on-Powell finding).
+- SPLITS are where Webster lives at this scale: 0.367–0.633, 18/21 nodes
+  meaningfully off 50/50 — but 15/21 sit EXACTLY at the 7 s min-green floor, so
+  the asymmetry is mostly floor-pinning, not smooth proportionality.
+- VOLUMES: network throughput −6.18% (169,697 → 159,210) with ZERO winning
+  segments (1,611 losers / 1,227 exact ties; max per-segment delta 0.0) —
+  the 5 s/phase clearance (10 s of every 30 s cycle green for neither phase) is
+  a one-directional capacity price the base's zero-clearance signal never paid.
+  Not a defect: the base's free capacity was the unrealistic part. Rank order
+  essentially unmoved (Spearman 0.9987), consistent with every standing
+  structure-vs-demand finding.
+- SPEEDS/NOISE: median deltas near zero network-wide (noise −0.16 dB(A) median)
+  but heavy local movers: Holgate segments where Webster's tighter capacity
+  creates standing queues swing up to +6.7 dB(A) — one checked segment holds
+  12x the vehicle-seconds at 2.7 km/h vs 35.5 km/h base, and queued crawling
+  traffic is LOUDER because source density dominates the speed effect in
+  CNOSSOS. The hypothesis that clearance raises speed variance at signals was
+  NOT supported (variance falls on signal-adjacent segments — queues compress
+  speeds toward zero); reported as found.
+- Caveats (printed by the readout): corridor scale, one seed, a-priori Webster
+  constants (not calibrated to held-out PBOT counts), two-moment Gaussian
+  noise quadrature, and no repeated-seed variance estimate — single-segment
+  deltas could be seed noise.
 
 ## Phase 5 — Menu (pick per session)
 - Truck/bus dynamics: fleet.py classes get length + accel envelopes (fleet
