@@ -286,6 +286,23 @@ WEBSTER_MIN_GREEN_S = 7.0    # floor on any phase's green, s -- a pedestrian
                               # crossing / driver-expectation minimum, not a
                               # capacity number; Webster's optimum can undercut it
                               # for a very lightly loaded approach.
+# Increment 2 (wired into the simulation). The two constants below are the DISPLAY
+# clearance shown at every phase change -- the yellow then the all-red during which
+# neither phase is green, so a car that reaches the line as its green ends stops
+# rather than sailing through the cross traffic's start. They are the displayed
+# safety interval, kept SEPARATE from WEBSTER_LOST_TIME_S above (which is Webster's
+# capacity parameter inside the cycle-length formula); the two need not be equal and
+# are documented as distinct. Standard ITE values (~3.5 s yellow, ~1.5 s all-red).
+WEBSTER_YELLOW_S = 3.5        # yellow interval per phase change, s
+WEBSTER_ALL_RED_S = 1.5      # all-red interval per phase change, s
+# Measurement pre-pass: Webster needs a per-approach volume (veh/h) to time each
+# intersection, and the base kernel does not produce one as a byproduct. When
+# WEBSTER_ENABLED, a short SEEDED warmup runs first with the uniform base signals
+# (its own RNG stream, so the authoritative run that follows is byte-for-byte the
+# same population it would be with the flag off) and the realized approach crossings
+# over the second half of that window become the flows. This many warmup steps (at
+# DT s each); flows are averaged over the last half, after the network has filled.
+WEBSTER_WARMUP_STEPS = 1200
 
 # --- Rao-style predictors (NO2 comparison, week 6) ---
 # Rao et al. describe every location by aggregating each predictor over circular

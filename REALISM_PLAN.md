@@ -227,18 +227,67 @@ Analysis is `src/realism_readout.py` (reads the four parquets, never re-runs).
   oversaturated -> 120 s fallback; min-green floor raises a 20 veh/h approach
   to exactly 7 s; iterable [300,700] bitwise-equals scalar 700.
 
-### Increment 2 — NEXT: wire Webster into the simulation
-- Approach volumes per signalized intersection from the modeled flows (a
-  measurement pass or a prior run's throughput), feeding cycle_and_split per
-  intersection in prepare_signals when WEBSTER_ENABLED.
-- Yellow + all-red clearance intervals.
-- Green-wave offsets along Powell (progression at the corridor speed limit).
+### Increment 2a — DONE: per-node Webster timing + clearance wired into the kernel
+Built as specced below, minus green-wave coordination (deferred to 2b). The flag
+stays off by default; the committed spec is still the uniform signal.
+- Flows source (the design fork, decided with the user): a MEASUREMENT PRE-PASS.
+  `_measure_approach_flows(G, ...)` runs a short seeded warmup with the uniform
+  base signals on its OWN RNG stream (`RANDOM_SEED + 11`), and the realized
+  approach crossings (the existing `segment_throughput`, one count per traversal
+  into the downstream node) over the LAST HALF of the window become veh/h. Its own
+  stream means the authoritative run that follows is byte-for-byte the same
+  population it would be with the flag off — only the signal timing differs.
+  `config.WEBSTER_WARMUP_STEPS` (default 1200) sets the window.
+- `build_webster_plans(G, signal_nodes, edge_phase, flows)` groups each signal
+  node's incoming edges by phase (0 = EW, 1 = NS), takes the CRITICAL (max)
+  approach flow per phase and that approach's lane count (edge `n_lanes`, = 1 in
+  the base single-lane model), and calls `webster.cycle_and_split` per node →
+  per-node cycle and EW split. `prepare_signals(G, flows=None)` fills
+  `node_cycle` / `node_split` (both None when off), a `clearance` interval, and
+  redraws each offset on the node's OWN cycle. `run_simulation` runs the pre-pass
+  and passes the flows when `WEBSTER_ENABLED`.
+- `is_green` gained a Webster branch: this node's own cycle/split, plus a
+  yellow+all-red CLEARANCE at the end of each phase (neither phase green). The
+  flag-off branch is the byte-for-byte original arithmetic — proven by the
+  inertness gate (0 mismatches over an 8000-sample sweep) and the pinned
+  kernel_regression (still bit-identical).
+- `config.py`: `WEBSTER_YELLOW_S` 3.5, `WEBSTER_ALL_RED_S` 1.5 (display clearance,
+  kept distinct from `WEBSTER_LOST_TIME_S`, the capacity parameter inside the
+  cycle formula), `WEBSTER_WARMUP_STEPS` 1200 — all a-priori.
+- Gate `src/webster_network_scenarios.py` → 3/3, through the REAL kernel on a
+  synthetic four-way intersection: A) asymmetric demand (EW 1000 / NS 150 veh/h)
+  → EW split 0.745 and 16 EW vs 6 NS cars clear C, while the uniform 50/50 control
+  clears 16 vs 16 (the imbalance is Webster's, not the geometry); B) inertness —
+  is_green's flag-off branch equals the original formula bitwise and a base queue
+  is deterministic, while a Webster plan on the starved NS approach diverges (so
+  the gate can fail); C) clearance — both phases read red during each yellow+all-
+  red interval, and a saturated approach clears strictly fewer cars with the
+  clearance than without it (the lost green is real, not cosmetic).
+- Base gates unaffected: scenarios 4/4, lanes 2/2, driver 3/3, mobil 4/4, mobil
+  network 3/3, webster (decision) 5/5, kernel_regression bit-identical. End-to-end
+  smoke on the cached 1.5 km corridor (250 veh, WEBSTER on, no data written):
+  warmup measured 1062 approach flows, 21 OSM-tagged signals got plans, run
+  completed clean. (At this low warmup demand every node clamped to the 30 s
+  minimum cycle — honest, not a defect; full-scale demand spreads the cycles.)
+- Simplifications documented at the code: single-lane critical-approach capacity
+  when no lane flag is on; the display clearance need not equal Webster's internal
+  lost time; offsets only decorrelate the grid (no coordination yet).
+
+### Increment 2b — NEXT: green-wave coordination along Powell
+- Green-wave offsets: a common coordination cycle (Webster gives per-node cycles,
+  but a progression band needs a shared cycle — take the max member cycle) with
+  per-node splits preserved, offsets set by cumulative travel time at the
+  corridor progression speed, so a platoon rides successive greens down Powell.
+- Requires identifying the ordered Powell signal chain in the graph.
 - Portland runs SCATS (adaptive, no public plans) — PBOT signal timing cards
   are public-records-requestable if we ever want ground truth; Webster is the
   standard research fallback.
-- Gate: single intersection with asymmetric demand → Webster gives the heavy
-  approach more green (through the REAL kernel this time); inertness — flag
-  off bitwise unchanged; corridor demo shows a platoon riding the green wave.
+- Gate/demo: a corridor demo showing a platoon riding the green wave (vs the
+  uncoordinated 2a offsets stopping it at each red).
+- Optional deferred payoff: an authoritative seeded run with WEBSTER_ENABLED to
+  read out how per-node timing shifts segment volumes/speeds vs the uniform
+  signal (a deliberate run decision, like the Phase 2/3 payoff — one sim at a
+  time, pin the seed, figures read the data file).
 
 ## Phase 5 — Menu (pick per session)
 - Truck/bus dynamics: fleet.py classes get length + accel envelopes (fleet

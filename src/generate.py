@@ -37,6 +37,7 @@ import emissions
 import fleet
 import drivers
 import mobil
+import webster
 import landuse_data
 import lodes_od
 import demand_data
@@ -251,6 +252,17 @@ def prepare_network(G):
 # green phase at a node is a function of the clock plus a per-node offset (so the
 # whole grid is not synchronized). This is a deliberately simple, transparent
 # model; real per-signal timing plans are not public (see DATASETS.md).
+#
+# By default every signal runs the SAME uniform cycle (config.SIGNAL_CYCLE_S) and
+# an even split (config.SIGNAL_GREEN_SPLIT), regardless of how lopsided its actual
+# approach volumes are. With config.WEBSTER_ENABLED (traffic-realism Phase 4,
+# increment 2) each intersection instead gets its OWN cycle length and green split,
+# derived by Webster's formula (src/webster.py) from the modeled approach flows, so
+# a heavy approach earns more green than a light one; and each phase change shows a
+# yellow + all-red clearance interval during which neither phase is green. The flag
+# is off by default and provably inert when off: with no per-node plan the signal
+# takes the byte-for-byte original uniform code path below (proven by the pinned
+# kernel_regression trajectories and the webster_network_scenarios inertness gate).
 
 
 def _approach_phase(G, u, v):
@@ -262,10 +274,50 @@ def _approach_phase(G, u, v):
     return 0 if 45 <= ang < 135 else 1
 
 
-def prepare_signals(G):
+def build_webster_plans(G, signal_nodes, edge_phase, flows):
+    """Per-node Webster timing from measured approach flows. Returns
+    (node_cycle, node_split) dicts keyed by signalized node.
+
+    For each signalized node, its incoming edges are grouped by phase (0 = EW,
+    1 = NS via `edge_phase`). Webster times each phase from its CRITICAL (heaviest)
+    approach, so per phase we take the maximum approach flow (veh/h from `flows`,
+    default 0 for an approach that never carried a car in the warmup) and the lane
+    count of that critical approach (edge data `n_lanes`, which is 1 in the base
+    single-lane model and the real per-direction count when a lane flag is on).
+    `webster.cycle_and_split` then returns this node's cycle and EW green split;
+    config.WEBSTER_* supplies the saturation flow, lost time, and clamps.
+    """
+    node_cycle, node_split = {}, {}
+    for n in signal_nodes:
+        # per-phase (critical flow, lane count of that critical approach)
+        crit = {0: (0.0, 1), 1: (0.0, 1)}
+        for u, v, k in G.in_edges(n, keys=True):
+            ph = edge_phase[(u, v, k)]
+            q = flows.get((u, v, k), 0.0)
+            if q >= crit[ph][0]:            # >= so a lane count is set even at q==0
+                lanes = G.edges[u, v, k].get("n_lanes", 1)
+                crit[ph] = (q, lanes)
+        cycle, split_ew = webster.cycle_and_split(
+            crit[0][0], crit[1][0], n_lanes_ew=crit[0][1], n_lanes_ns=crit[1][1],
+            sat_flow=config.WEBSTER_SAT_FLOW, lost_time_s=config.WEBSTER_LOST_TIME_S,
+            cycle_min_s=config.WEBSTER_CYCLE_MIN_S, cycle_max_s=config.WEBSTER_CYCLE_MAX_S,
+            min_green_s=config.WEBSTER_MIN_GREEN_S)
+        node_cycle[n] = cycle
+        node_split[n] = split_ew
+    return node_cycle, node_split
+
+
+def prepare_signals(G, flows=None):
     """Find signalized nodes and precompute each edge's phase and each node's
     cycle offset. Prefers real OSM 'traffic_signals' node tags; if the graph has
-    none, falls back to treating every 4-way+ intersection as signalized."""
+    none, falls back to treating every 4-way+ intersection as signalized.
+
+    With config.WEBSTER_ENABLED and a `flows` dict (per-approach veh/h, from the
+    measurement pre-pass or injected by a gate), each signalized node additionally
+    gets its own Webster cycle length and green split (node_cycle / node_split), a
+    yellow+all-red clearance interval, and a per-node offset drawn on its OWN cycle.
+    Off by default: node_cycle stays None and is_green takes the uniform base path,
+    byte-for-byte unchanged."""
     signal_nodes = {n for n, d in G.nodes(data=True)
                     if "traffic_signals" in str(d.get("highway", ""))}
     tagged = len(signal_nodes)
@@ -276,18 +328,52 @@ def prepare_signals(G):
     offset = {n: sig_rng.uniform(0.0, config.SIGNAL_CYCLE_S) for n in signal_nodes}
     edge_phase = {(u, v, k): _approach_phase(G, u, v)
                   for u, v, k in G.edges(keys=True)}
-    return {
+    sig = {
         "nodes": signal_nodes, "offset": offset, "edge_phase": edge_phase,
         "cycle": config.SIGNAL_CYCLE_S, "green_split": config.SIGNAL_GREEN_SPLIT,
         "tagged": tagged,
+        # Webster (increment 2): None unless the flag is on AND flows are supplied,
+        # so the default dict drives the uniform base path in is_green unchanged.
+        "node_cycle": None, "node_split": None, "clearance": 0.0,
     }
+    if config.WEBSTER_ENABLED and flows is not None:
+        node_cycle, node_split = build_webster_plans(G, signal_nodes, edge_phase, flows)
+        # Redraw each offset on the node's OWN cycle length (the base draw used the
+        # uniform cycle). Green-wave coordination is increment 2b; here the offsets
+        # only decorrelate the grid, exactly as the base random offsets do.
+        off_rng = random.Random(config.RANDOM_SEED + 1)
+        offset = {n: off_rng.uniform(0.0, node_cycle[n]) for n in signal_nodes}
+        sig["offset"] = offset
+        sig["node_cycle"] = node_cycle
+        sig["node_split"] = node_split
+        sig["clearance"] = config.WEBSTER_YELLOW_S + config.WEBSTER_ALL_RED_S
+    return sig
 
 
 def is_green(signals, node, phase, t):
     """Is `phase` showing green at this signalized node at time t (seconds)?"""
-    frac = ((t + signals["offset"][node]) % signals["cycle"]) / signals["cycle"]
-    green_phase = 0 if frac < signals["green_split"] else 1
-    return phase == green_phase
+    node_cycle = signals.get("node_cycle")
+    if node_cycle is None:
+        # Uniform base model -- byte-for-byte the original single-cycle signal.
+        frac = ((t + signals["offset"][node]) % signals["cycle"]) / signals["cycle"]
+        green_phase = 0 if frac < signals["green_split"] else 1
+        return phase == green_phase
+    # Webster: this node's own cycle and split, plus a clearance interval at the end
+    # of each phase (yellow + all-red) during which NEITHER phase is green. The EW
+    # phase owns [0, split*cycle); NS owns the rest. A car reaching the line inside
+    # its phase's clearance stops, as at a real yellow-then-red.
+    cycle = node_cycle[node]
+    split = signals["node_split"][node]
+    clr = signals["clearance"]
+    local = (t + signals["offset"][node]) % cycle
+    ew_window = split * cycle
+    if local < ew_window:
+        active, phase_end = 0, ew_window
+    else:
+        active, phase_end = 1, cycle
+    if phase != active:
+        return False
+    return (phase_end - local) > clr
 
 
 # --- vehicles --------------------------------------------------------------
@@ -1014,6 +1100,65 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 break
 
 
+def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
+    """Estimate each signalized approach's volume (veh/h) for Webster timing.
+
+    A short SEEDED warmup with the uniform BASE signals, on its OWN RNG stream
+    (config.RANDOM_SEED + 11) and its own vehicle population and context objects,
+    so it consumes nothing the authoritative run draws: with WEBSTER_ENABLED the
+    authoritative simulation that follows is the byte-for-byte same population it
+    would have with the flag off, and only the signal timing differs. An edge's
+    flow = the vehicles that fully crossed it (the existing segment_throughput
+    measure -- one count per traversal into the downstream node) over the LAST HALF
+    of the warmup, after the network has filled from empty, converted to veh/h.
+    Returns {edge_key: veh_per_hour} (edges that never carried a car are absent,
+    and build_webster_plans then reads them as zero flow)."""
+    nodes = list(G.nodes)
+    wrng = random.Random(config.RANDOM_SEED + 11)   # isolated from the authoritative run
+    signals = prepare_signals(G)                    # uniform base signals (never Webster)
+    lanes = {(u, v, k): d.get("n_lanes", 1)
+             for u, v, k, d in G.edges(keys=True, data=True)}
+    mobil_ctx = build_mobil_context(G)              # mirror run_simulation's lane setup
+    if mobil_ctx is not None:
+        lanes = None
+    nox_coeffs = emissions.active_coeffs()
+    fleet_ctx = build_fleet_context()
+    driver_ctx = build_driver_context()
+    demand = build_demand_weights(G, nodes)
+    through = build_through_context(G, nodes)
+
+    vehicles = []
+    for vid in range(n_vehicles):
+        veh = make_vehicle(G, nodes, wrng, vid, demand, through, fleet_ctx, driver_ctx)
+        if veh is not None:
+            vehicles.append(veh)
+
+    seg_tot, seg_nox = defaultdict(float), defaultdict(float)
+    thru = defaultdict(float)          # cumulative crossings over the warmup
+    half = warmup_steps // 2
+    thru_at_half = {}                  # snapshot at the half mark (start of the window)
+    for step in range(warmup_steps):
+        if step == half:
+            thru_at_half = dict(thru)
+        step_vehicles(vehicles, config.DT, step * config.DT, seg_tot, seg_nox, thru,
+                      nox_coeffs, G, nodes, wrng, signals, demand, through,
+                      fleet_ctx=fleet_ctx, driver_ctx=driver_ctx, lanes=lanes,
+                      mobil_ctx=mobil_ctx)
+
+    window_s = max(warmup_steps - half, 1) * config.DT
+    flows = {}
+    for edge, total in thru.items():
+        crossed = total - thru_at_half.get(edge, 0.0)
+        if crossed > 0.0:
+            flows[edge] = crossed / (window_s / 3600.0)
+    if verbose:
+        peak = max(flows.values(), default=0.0)
+        print(f"Webster warmup: {len(vehicles)} vehicles x {warmup_steps} steps "
+              f"-> {len(flows)} approaches with flow over the last {window_s:.0f}s "
+              f"(peak {peak:,.0f} veh/h)")
+    return flows
+
+
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
                    speed_stats=None):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
@@ -1027,7 +1172,17 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
     prepare_network(G)
-    signals = prepare_signals(G)
+    # Webster signal timing (Phase 4, increment 2): a measurement pre-pass first,
+    # so each intersection can be timed to the volume it actually carries. Off by
+    # default -- prepare_signals(G) with no flows is the uniform base signal, and
+    # the warmup uses its own RNG stream so the authoritative run below is the same
+    # population it would be with the flag off (only the timing changes).
+    webster_flows = None
+    if config.WEBSTER_ENABLED:
+        webster_flows = _measure_approach_flows(
+            G, config.N_VEHICLES if n_vehicles is None else n_vehicles,
+            config.WEBSTER_WARMUP_STEPS, verbose=verbose)
+    signals = prepare_signals(G, flows=webster_flows)
     # per-segment virtual-lane counts (all 1 unless config.LANES_ENABLED); dict
     # keyed like by_edge so step_vehicles can look lanes up per segment
     lanes = {(u, v, k): d.get("n_lanes", 1)
@@ -1038,6 +1193,10 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     if verbose:
         src = "OSM-tagged" if signals["tagged"] else "degree>=4 fallback"
         print(f"{len(signals['nodes'])} signalized intersections ({src})")
+        if signals["node_cycle"] is not None:
+            cyc = signals["node_cycle"].values()
+            print(f"Webster timing ON: per-node cycle {min(cyc):.0f}-{max(cyc):.0f}s "
+                  f"(clearance {signals['clearance']:.1f}s/phase)")
         if config.LANES_ENABLED:
             multi = sum(1 for n in lanes.values() if n > 1)
             print(f"lanes experiment ON: {multi} of {len(lanes)} segments get >1 "
