@@ -119,13 +119,17 @@ def record(G):
 
 
 def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
-           sig_size=30, title="Each dot is one car", box=None):
+           sig_size=30, title="Each dot is one car", box=None,
+           mark_geoms=None, mark_color="#e74c3c"):
     """Draw the recorded frames over the dark network and write a looping GIF.
     bbox = (lon_min, lon_max, lat_min, lat_max) crops to a zoom window.
     box = (lon_min, lon_max, lat_min, lat_max), optional: draws a non-filled
     rectangle at those data coords on every frame (not a crop). Used to bake a
     "zoom window" outline into a full-view render so a companion zoom GIF's
-    crop is registered against it by construction, instead of by hand."""
+    crop is registered against it by construction, instead of by hand.
+    mark_geoms = list of shapely LineStrings drawn over the gray map in
+    mark_color on every frame: used by the closure demo to highlight the
+    closed stretch (teal before, red after) without touching the base map."""
     segs = [np.asarray(g.coords) for g in geoms.values()]
 
     fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
@@ -142,6 +146,10 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
         ax.add_patch(Rectangle((lon0, lat0), lon1 - lon0, lat1 - lat0,
                                 fill=False, edgecolor="#16d6c1", linewidth=2,
                                 zorder=5))
+    if mark_geoms:
+        ax.add_collection(LineCollection(
+            [np.asarray(g.coords) for g in mark_geoms],
+            colors=mark_color, linewidths=2.5, zorder=3.5))
     ax.set_aspect(1.0 / math.cos(math.radians(config.STUDY_CENTER[0])))
     ax.axis("off")
     ax.set_title(title, color="#e6edf3", fontsize=15, pad=12)
