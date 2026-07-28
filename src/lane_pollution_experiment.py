@@ -67,28 +67,28 @@ CORRIDOR = {
 # seeds: 8 for a solid mean +/- spread (was the single-seed weakness)
 SEEDS = [42, 7, 13, 99, 2024, 314, 777, 8]
 
-# Framing A: 1-lane vs real-lane at a HIGH demand where the cap bites (the lanes
-# experiment showed 1-lane caps ~1,106 vs 2-lane ~1,388 at N=1200).
-A_DEMAND = 1200
-# Framing B: real lanes on, demand climbing toward Powell's real peak.
-B_DEMANDS = [300, 600, 900, 1200, 1500]
+# A full FACTORIAL grid: both lane settings at every demand level, so we get the
+# complete curve -- Powell-corridor pollution vs demand, one line per lane
+# setting. That single figure answers everything: at low demand the lines
+# coincide (no congestion); as demand rises the 1-lane line SHOOTS UP (idling in
+# the standing queue) while the 2-lane line stays lower (flow); at the top even
+# 2-lane starts to jam (Christof's "both lanes backing up" regime). The gap
+# between the lines IS the pollution the single-lane bottleneck manufactures.
+# Demand runs from quiet up past Powell's real ~1,400-1,745 peak so both regimes
+# show. (The lanes experiment: 1-lane caps ~1,106, 2-lane reaches ~1,388.)
+DEMANDS = [300, 600, 900, 1200, 1500, 1800]
 
 
 def build_jobs():
-    """The full independent job list; index == SLURM array task id."""
+    """The full independent job list; index == SLURM array task id.
+    {1-lane, 2-lane} x DEMANDS x SEEDS."""
     jobs = []
     for seed in SEEDS:
-        # Framing A -- the capacity-undercount contrast (both lane settings)
-        for lanes in (False, True):
-            tag = "2lane" if lanes else "1lane"
-            jobs.append({"framing": "A", "seed": seed, "n_veh": A_DEMAND,
-                         "lanes": lanes,
-                         "name": f"lanepoll_A_{tag}_n{A_DEMAND}_s{seed}"})
-        # Framing B -- growth sweep, real lanes on
-        for n in B_DEMANDS:
-            jobs.append({"framing": "B", "seed": seed, "n_veh": n,
-                         "lanes": True,
-                         "name": f"lanepoll_B_2lane_n{n}_s{seed}"})
+        for n in DEMANDS:
+            for lanes in (False, True):
+                tag = "2lane" if lanes else "1lane"
+                jobs.append({"seed": seed, "n_veh": n, "lanes": lanes,
+                             "name": f"lanepoll_{tag}_n{n}_s{seed}"})
     return jobs
 
 
@@ -120,10 +120,12 @@ def run_one(job, graph_file):
         print(f"SKIP {job['name']} (already on disk)")
         return
 
-    # fresh graph each run: prepare_network mutates edge attrs in place
+    # fresh graph each run: prepare_network mutates edge attrs in place.
+    # use_checkpoint=False: these are short runs in a big batch -- crash recovery
+    # isn't worth the per-run checkpoint I/O, and unique names mean no stale state.
     G = ox.load_graphml(graph_file)
     generate.set_seeds(config.RANDOM_SEED)
-    totals, nox, thru = generate.run_simulation(G, verbose=False)
+    totals, nox, thru = generate.run_simulation(G, verbose=False, use_checkpoint=False)
     generate.save_results(totals, nox, thru)
 
     powell = _powell_edges(G)
@@ -151,8 +153,8 @@ def main():
     if args.list:
         for i, j in enumerate(jobs):
             print(f"{i:3d}  {j['name']}")
-        print(f"\n{len(jobs)} jobs = {len(SEEDS)} seeds x "
-              f"(2 lane settings @ A + {len(B_DEMANDS)} demands @ B)")
+        print(f"\n{len(jobs)} jobs = {len(SEEDS)} seeds x {len(DEMANDS)} "
+              f"demands x 2 lane settings")
         return
 
     graph_file = os.path.join(config.NETWORK_DIR, "graph.graphml")
@@ -163,14 +165,28 @@ def main():
     if args.task is not None:
         run_one(jobs[args.task], graph_file)
     elif args.smoke:
-        # framing A, first seed only: the fast local proof it works
-        for j in [x for x in jobs if x["framing"] == "A" and x["seed"] == SEEDS[0]]:
+        # one demand, first seed, both lane settings: the fast local proof
+        for j in [x for x in jobs if x["n_veh"] == 1200 and x["seed"] == SEEDS[0]]:
             run_one(j, graph_file)
-        print("\nsmoke done. Compare the two lines: 2lane should show MORE "
-              "Powell-corridor NOx and a higher busiest-segment than 1lane.")
+        print("\nsmoke done.")
     elif args.all:
-        for j in jobs:
-            run_one(j, graph_file)
+        # one failing run must not kill the overnight batch
+        import time
+        t0 = time.perf_counter()
+        ok = fail = 0
+        for i, j in enumerate(jobs):
+            try:
+                run_one(j, graph_file)
+                ok += 1
+            except Exception as e:            # noqa: BLE001 -- batch resilience
+                fail += 1
+                print(f"FAILED {j['name']}: {type(e).__name__}: {e}")
+            if (i + 1) % 12 == 0:
+                print(f"  ... {i + 1}/{len(jobs)} done, "
+                      f"{time.perf_counter() - t0:.0f}s elapsed", flush=True)
+        print(f"\nALL DONE: {ok} ok, {fail} failed, "
+              f"{time.perf_counter() - t0:.0f}s total. "
+              f"Read with: python src/lane_pollution_readout.py")
     else:
         raise SystemExit("pick one: --count | --list | --task N | --smoke | --all")
 
