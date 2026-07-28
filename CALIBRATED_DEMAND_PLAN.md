@@ -1,5 +1,33 @@
 # Calibrated real-demand experiment (the Aug 14 spine)
 
+## RESULTS SO FAR (Jul 28, Phases 0-2 executed at corridor scale)
+- **Phase 0 targets pinned:** ODOT AADT 34,900 at Powell/26th -> 1,400-1,745
+  veh/hr directional peak; ~727 average-hour. PBOT counts held out.
+- **Phase 1 diagnosis (8 seeds, read-only over the lanepoll sweep):** Powell
+  itself never chokes (jam ~0 to N=1500, flow 683->1,269). The gridlock lives
+  on SE Division (jams from N=600) and SE Cesar Chavez -- their uniform 50/50
+  signals cap discharge at ~half nominal -- and spills network-wide (63% of
+  vehicle-time jammed at N=1800). Mechanism for Powell's own ceiling:
+  turners into jammed side streets dam their Powell lane.
+- **Phase 2 probes, all seed-42 first then multi-seed (N=1500, real lanes):**
+  - Through-share 0.5/0.7: FAILS -- jams Powell itself (turn-block spillback),
+    busiest falls to 1,099/965.
+  - Webster (alone or +T0.5): FAILS to unlock -- jam rises 819->901 (30 s
+    clamped cycles + clearance cost, consistent with the Webster payoff study).
+  - MOBIL + driver heterogeneity: seed 42 hit 1,396 (inside the real band!)
+    with jam 720, BUT the 8-seed spread is 953-1,396, mean ~1,215 +/- 180,
+    jam mean ~829 -- statistically indistinguishable from the virtual-lane
+    baseline (1,269). Real mechanism, not a robust unlock.
+- **Phase 2 verdict (the plan's honest-failure branch): no corridor-scale
+  lever reaches the real band robustly.** The 1.5 km gravity/cordon demand
+  cannot deliver Powell-shaped through-flow; the corridor extract is also
+  missing inner Powell's real signals (OSM hole -- the METRO graph carries 29
+  real signalized Powell intersections). Conclusion: the calibrated
+  experiment REQUIRES metro scale -- LODES OD demand + the 29 real Powell
+  signals (+ green-wave 2b along them, + MOBIL) on Orca. Corridor work here
+  is complete as the diagnostic chain that justifies it.
+
+
 **Goal (Darcy's, stated Jul 28):** run the model at *real Portland street
 demand* — real lane counts, Powell carrying its real peak-hour volume
 (~1,400–1,745 veh/hr directional, from ODOT AADT 34,900) — and report, for
