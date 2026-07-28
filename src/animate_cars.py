@@ -120,7 +120,8 @@ def record(G):
 
 def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
            sig_size=30, title="Each dot is one car", box=None,
-           mark_geoms=None, mark_color="#e74c3c"):
+           mark_geoms=None, mark_color="#e74c3c",
+           street_color="#39424e", street_lw=0.7):
     """Draw the recorded frames over the dark network and write a looping GIF.
     bbox = (lon_min, lon_max, lat_min, lat_max) crops to a zoom window.
     box = (lon_min, lon_max, lat_min, lat_max), optional: draws a non-filled
@@ -129,13 +130,16 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
     crop is registered against it by construction, instead of by hand.
     mark_geoms = list of shapely LineStrings drawn over the gray map in
     mark_color on every frame: used by the closure demo to highlight the
-    closed stretch (teal before, red after) without touching the base map."""
+    closed stretch (teal before, red after) without touching the base map.
+    street_color/street_lw restyle the base map: zoom renders brighten it so
+    the street grid stays visible under dense downtown signals (Jul 28 fix:
+    at the old faint styling the signal squares read as floating in blackness)."""
     segs = [np.asarray(g.coords) for g in geoms.values()]
 
     fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
     fig.patch.set_facecolor("#0d1117")
     ax.set_facecolor("#0d1117")
-    ax.add_collection(LineCollection(segs, colors="#39424e", linewidths=0.7))
+    ax.add_collection(LineCollection(segs, colors=street_color, linewidths=street_lw))
     if bbox:
         ax.set_xlim(bbox[0], bbox[1])
         ax.set_ylim(bbox[2], bbox[3])

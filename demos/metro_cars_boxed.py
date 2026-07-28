@@ -90,13 +90,21 @@ def main():
             clat - ZOOM_HALF_LAT, clat + ZOOM_HALF_LAT)
     print(f"zoom window centered on downtown ({' & '.join(sorted(names)[:2])}): bbox={bbox}")
 
-    full_path = os.path.join(config.FIGURES_DIR, "cars_moving_metro_boxed.gif")
-    render(G, frames, sig_xy, geoms, full_path, box=bbox,
+    # Jul 28 legibility fix (Darcy's catch, morning of the talk): the old sizes
+    # (zoom sig_size 70 vs dot 45, streets at the faint default) let downtown's
+    # 375 signal squares cover the street grid entirely, so the squares read as
+    # "traffic lights with no roads". Flip the visual hierarchy: signals SMALLER
+    # than cars, streets bright enough to see under them. New filenames so the
+    # old pair survives until the new one is eyeballed.
+    full_path = os.path.join(config.FIGURES_DIR, "cars_moving_metro_boxed2.gif")
+    render(G, frames, sig_xy, geoms, full_path, box=bbox, sig_size=12,
+           street_lw=0.8,
            title="Each dot is one car  |  Portland metro, 16,500 vehicles")
 
-    zoom_path = os.path.join(config.FIGURES_DIR, "cars_moving_metro_zoom_boxed.gif")
+    zoom_path = os.path.join(config.FIGURES_DIR, "cars_moving_metro_zoom_boxed2.gif")
     render(G, frames, sig_xy, geoms, zoom_path, bbox=bbox, dot_size=45,
-           sig_size=70, title=f"Each dot is one car  |  {label}")
+           sig_size=24, street_color="#586474", street_lw=1.6,
+           title=f"Each dot is one car  |  {label}")
 
     # Keep the full metro GIF under the slide's ~5 MB budget: if PillowWriter's
     # per-frame palette left it larger, re-encode once with a single shared
