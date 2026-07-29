@@ -9,11 +9,12 @@
 #
 #SBATCH --job-name=metrocal-day
 #SBATCH --partition=long
-#SBATCH --time=48:00:00
+#SBATCH --time=120:00:00
 #SBATCH --mem=16G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=logs/metrocal_day_%A_%a.out
-# time is a FIRST GUESS (~24x an hour job's stepping); tighten after task 0.
+# time: measured hour-jobs ran 1h (base) / 2h (realism), so a day run is
+# ~24-48h of stepping; 120h leaves honest headroom (long partition caps at 7d).
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
