@@ -100,6 +100,17 @@ At the calibrated setting, 1-lane vs real-lanes:
   `--task N`).
 - Stretch: the metro-scale calibrated version with LODES OD on (the demand
   structure that actually has real origin–destination information).
+  [HARNESS BUILT Jul 28, run pending user's Orca session:
+  `src/metro_calibrated_experiment.py` — 48 hour-jobs ({base, realism-full
+  stack} × {16,500, 24,750, 33,000} veh × 8 seeds) + 2 checkpointed day-jobs,
+  each writing a unique parquet + a per-run summary JSON (headline metrics
+  computed from the run's own graph, so the laptop readout
+  `src/metro_calibrated_readout.py` needs no metro graph). Graph guard refuses
+  corridor-sized graphs for metro jobs; `--cache-graph` downloads the 20 km
+  graph on Orca (fresh OSM — never re-cites M20.*). SLURM scripts + full
+  runbook in `orca/`. Verified locally: job lists, sh syntax, `--smoke` end to
+  end on the corridor graph (LODES + MOBIL + drivers + Webster + both
+  accumulators + save + summary), readout aggregation on synthetic summaries.]
 
 ## Governance (unchanged)
 One sim at a time; every run a unique RUN_NAME; seeds pinned & recorded; new

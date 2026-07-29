@@ -1,0 +1,21 @@
+#!/bin/bash
+# One full-DAY job (24 simulated hours) of the metro calibrated experiment.
+# Submit:
+#   N=$(python src/metro_calibrated_experiment.py --count-day)
+#   sbatch --array=0-$((N-1)) orca/job_day.sh
+# Day jobs checkpoint every config.CHECKPOINT_EVERY steps, so a killed task
+# resumes from its last checkpoint on re-submit instead of starting over.
+# LODES demand is commute-shaped (flat over the day) -- the acknowledged caveat.
+#
+#SBATCH --job-name=metrocal-day
+#SBATCH --partition=long
+#SBATCH --time=48:00:00
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=1
+#SBATCH --output=logs/metrocal_day_%A_%a.out
+# time is a FIRST GUESS (~24x an hour job's stepping); tighten after task 0.
+
+set -euo pipefail
+cd "$SLURM_SUBMIT_DIR"
+source .venv/bin/activate
+python src/metro_calibrated_experiment.py --day-task "$SLURM_ARRAY_TASK_ID"
