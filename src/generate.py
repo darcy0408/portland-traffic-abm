@@ -1059,7 +1059,7 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
                   fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None,
-                  speed_stats=None):
+                  speed_stats=None, stuck_stats=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -1191,6 +1191,8 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                         b_comf=idm["b_comf"], T=idm["T"], s0=idm["s0"])
 
     # 2) move everyone, credit the segment they travelled on, advance routes
+    # stuck threshold in m/s, converted once per step, not once per vehicle
+    stuck_v = config.STUCK_SPEED_KMH / 3.6 if stuck_stats is not None else 0.0
     for veh in vehicles:
         v_old = veh["v"]
         a = accel[veh["id"]]
@@ -1213,6 +1215,13 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         if speed_stats is not None:
             speed_stats["v_sum"][edge_key] += v_avg * dt
             speed_stats["v2_sum"][edge_key] += v_avg * v_avg * dt
+        # opt-in stuck time (calibrated-demand Phase 3): a vehicle-second below
+        # config.STUCK_SPEED_KMH counts as stuck, so "vehicle-hours stuck" is
+        # MEASURED per car per step, not inferred from the segment's mean speed
+        # at analysis time. Same pure-measurement contract as speed_stats above:
+        # nothing feeds back into the dynamics.
+        if stuck_stats is not None and v_avg < stuck_v:
+            stuck_stats["stuck_sum"][edge_key] += dt
         # and with this vehicle's NOx for the step: the HBEFA3 rate at the step's
         # average speed and its realized acceleration, integrated over dt. NOx is
         # turned into NO2 downstream (NO2 = F_NO2 * NOx), so the fraction stays a
@@ -1344,14 +1353,19 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
 
 
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
-                   speed_stats=None):
+                   speed_stats=None, stuck_stats=None):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
     per-segment vehicle-seconds of activity, and per-segment NOx grams.
 
     speed_stats (opt-in, realism readout): pass an empty dict and it is filled
     in place with per-segment time-weighted speed sums, keys "v_sum" and
     "v2_sum" (see step_vehicles). Existing callers pass nothing and see the
-    exact prior behavior and the same 3-tuple return."""
+    exact prior behavior and the same 3-tuple return.
+
+    stuck_stats (opt-in, calibrated-demand Phase 3): pass an empty dict and it
+    is filled in place with per-segment stuck vehicle-seconds under key
+    "stuck_sum" -- time spent below config.STUCK_SPEED_KMH (see step_vehicles).
+    Same contract as speed_stats: pure measurement, off by default."""
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -1413,6 +1427,10 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
             speed_stats["v_sum"] = {edge: 0.0 for edge in G.edges(keys=True)}
             speed_stats["v2_sum"] = {edge: 0.0 for edge in G.edges(keys=True)}
             state["speed_stats"] = speed_stats
+        if stuck_stats is not None:
+            # same discipline as speed_stats: caller's dict, checkpointed in state
+            stuck_stats["stuck_sum"] = {edge: 0.0 for edge in G.edges(keys=True)}
+            state["stuck_stats"] = stuck_stats
     else:
         print(f"Resuming from step {state['step']}")
         segment_totals = state["segment_totals"]
@@ -1436,6 +1454,19 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                     "checkpoint for this run has no speed_stats; delete the "
                     "checkpoint (or run without speed_stats) to proceed")
             state["speed_stats"] = speed_stats
+        if stuck_stats is not None:
+            saved = state.get("stuck_stats")
+            if saved:
+                # resume: adopt the checkpointed partial sums into the caller's dict
+                stuck_stats.update(saved)
+            else:
+                # checkpoint predates the request: the sum would cover only the
+                # remaining steps, i.e. be WRONG for the whole run. Refuse rather
+                # than silently produce a partial readout (speed_stats discipline).
+                raise SystemExit(
+                    "checkpoint for this run has no stuck_stats; delete the "
+                    "checkpoint (or run without stuck_stats) to proceed")
+            state["stuck_stats"] = stuck_stats
 
     t0 = time.perf_counter()
     for step in range(state["step"], n_steps):
@@ -1446,7 +1477,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
                       signals, demand, through, fleet_ctx=fleet_ctx,
                       driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx,
-                      speed_stats=speed_stats)
+                      speed_stats=speed_stats, stuck_stats=stuck_stats)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -1471,7 +1502,8 @@ def benchmark(G):
                        use_checkpoint=False, verbose=True)
 
 
-def save_results(segment_totals, segment_nox, segment_throughput, speed_stats=None):
+def save_results(segment_totals, segment_nox, segment_throughput, speed_stats=None,
+                 stuck_stats=None):
     """Write final per-segment results as one tidy table.
     parquet keeps data types and stays compact. Switch to .to_csv if you ever
     want a file you can open and read by eye.
@@ -1484,7 +1516,11 @@ def save_results(segment_totals, segment_nox, segment_throughput, speed_stats=No
 
     speed_stats (opt-in, from run_simulation): adds v_sum and v2_sum columns, the
     time-weighted speed sums whose analysis-time quotients give each segment's
-    mean speed (v_sum/value) and speed variance (v2_sum/value - mean^2)."""
+    mean speed (v_sum/value) and speed variance (v2_sum/value - mean^2).
+
+    stuck_stats (opt-in, from run_simulation): adds a stuck_sum column, the
+    vehicle-seconds the segment carried below config.STUCK_SPEED_KMH; divide by
+    3600 for the stuck vehicle-hours of the calibrated-demand Phase 3 readout."""
     keys = list(segment_totals.keys())
     rows = [{"u": u, "v": v, "key": k, "value": segment_totals[(u, v, k)],
              "nox_g": segment_nox[(u, v, k)],
@@ -1495,6 +1531,8 @@ def save_results(segment_totals, segment_nox, segment_throughput, speed_stats=No
         # aligned to `keys`, the same iteration order the rows were built from
         df["v_sum"] = [speed_stats["v_sum"][e] for e in keys]
         df["v2_sum"] = [speed_stats["v2_sum"][e] for e in keys]
+    if stuck_stats is not None:
+        df["stuck_sum"] = [stuck_stats["stuck_sum"][e] for e in keys]
     out = os.path.join(config.PROCESSED_DIR, f"{config.RUN_NAME}_segments.parquet")
     df.to_parquet(out)
     print(f"Saved {len(df)} segment results to {out} "

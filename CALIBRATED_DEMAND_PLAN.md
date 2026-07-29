@@ -83,6 +83,11 @@ At the calibrated setting, 1-lane vs real-lanes:
 - **Cars stuck:** add a small OPT-IN stopped-time accumulator (pattern:
   `speed_stats` — keyword-only, off by default, kernel-regression bit-identical
   proof) so "vehicle-hours below 5 km/h" is measured, not inferred.
+  [BUILT Jul 28: `stuck_stats=` in `generate.py` (threshold
+  `config.STUCK_SPEED_KMH = 5.0`, matching `gridlock_diagnosis.JAM_KMH`),
+  `stuck_sum` column in `save_results`, stale-checkpoint refusal; gated by
+  `src/stuck_scenarios.py` 3/3 (red-light measurement, threshold sharpness,
+  inertness) + kernel_regression bit-identical + all eight prior gates green.]
 - **Validation:** modeled busiest-segment veh/hr vs the real count, said
   plainly ("model carries X vs real Y").
 - Deliverables: the two-panel figure at calibrated demand, a stuck-cars map,

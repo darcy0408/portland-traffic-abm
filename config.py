@@ -61,6 +61,16 @@ DT         = 1.0    # simulation time step in seconds (one step = one second)
 # --- Vehicle ---
 VEHICLE_LENGTH_M = 5.0   # bumper-to-bumper length; sets the minimum following gap
 
+# --- Stuck-time accumulator (calibrated-demand plan, Phase 3) ---
+# "Cars stuck" is measured, not inferred: an opt-in per-segment accumulator
+# (generate.run_simulation stuck_stats=..., same pattern as speed_stats) sums the
+# vehicle-seconds each segment carries below this speed. The threshold matches
+# JAM_KMH in src/gridlock_diagnosis.py, which INFERS jam from throughput*length/
+# value at analysis time -- this accumulator measures the same 5 km/h condition
+# per vehicle per step instead of from the segment mean. Pure measurement: it
+# never feeds back into the dynamics (kernel-regression proven bit-identical).
+STUCK_SPEED_KMH = 5.0    # below this a vehicle-second counts as stuck
+
 # --- Traffic signals (week 4) ---
 # Signalized intersections run a simple two-phase cycle: one phase serves the
 # roughly east-west approaches, the other the north-south ones, so cross streets
