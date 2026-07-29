@@ -21,7 +21,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 # the venv was built against the spack python module; load it so the compute
 # node has the same interpreter + runtime libs (no-op if lmod is absent)
-source /etc/profile.d/lmod.sh 2>/dev/null || true
+source /etc/profile.d/z00_lmod.sh 2>/dev/null || true
 module load python/3.12.12-gcc-13.4.0 2>/dev/null || true
 source .venv/bin/activate
 python src/metro_calibrated_experiment.py --task "$SLURM_ARRAY_TASK_ID"
