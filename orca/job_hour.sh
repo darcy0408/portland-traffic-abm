@@ -19,9 +19,8 @@
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
-# the venv was built against the spack python module; load it so the compute
-# node has the same interpreter + runtime libs (no-op if lmod is absent)
-source /etc/profile.d/z00_lmod.sh 2>/dev/null || true
-module load python/3.12.12-gcc-13.4.0 2>/dev/null || true
+# the venv is built on the SYSTEM python3 (3.9), which runs on every node --
+# the spack python modules are compiled for a newer microarch and SIGILL on
+# the login node, so we deliberately do not use them.
 source .venv/bin/activate
 python src/metro_calibrated_experiment.py --task "$SLURM_ARRAY_TASK_ID"
