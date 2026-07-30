@@ -45,6 +45,14 @@ WARMUP_S = 600      # simulate this long before recording, so queues are establi
 RECORD_S = 120      # seconds of movement captured (= frames at 1 fps recording)
 FPS = 10            # playback frames per second: 10x real time, 12 s loop
 DOT_VMAX = 13.4     # speed (m/s) mapped to the top of the color scale (30 mph)
+# Signal-square state colors. The red must still read RED at 12-24 px squares
+# on the near-black background: the old #e74c3c coral picked up an orange cast
+# at that size (a Jul 28 talk attendee asked what the "orange squares" were).
+# #e8112d sits slightly blue of pure red, so it cannot drift toward orange, and
+# it beats the coral on red/green colorblind separation from SIG_GREEN
+# (deutan dE 14.3 vs 10.7, dataviz validator, dark surface #0d1117).
+SIG_GREEN = "#2ecc71"
+SIG_RED = "#e8112d"
 ZOOM_HALF_LON = 0.0060   # zoom window half-width in degrees (~470 m at 45.5 N)
 ZOOM_HALF_LAT = 0.0042   # zoom window half-height in degrees (~465 m)
 
@@ -164,7 +172,7 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
 
     # dynamic artists, updated in place each frame (fast: no re-draw of the map)
     sig_scatter = ax.scatter(sig_xy[:, 0], sig_xy[:, 1], s=sig_size, marker="s",
-                             c="#e74c3c", zorder=3)
+                             c=SIG_RED, zorder=3)
     car_scatter = ax.scatter([], [], s=dot_size, c=[], cmap="RdYlGn",
                              vmin=0.0, vmax=DOT_VMAX, zorder=4, linewidths=0)
     clock = ax.text(0.02, 0.02, "", transform=ax.transAxes, color="#9da7b3",
@@ -174,7 +182,7 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
     for i, (xy, spd, green_ew) in enumerate(frames):
         car_scatter.set_offsets(xy)
         car_scatter.set_array(spd)
-        sig_scatter.set_color(np.where(green_ew, "#2ecc71", "#e74c3c"))
+        sig_scatter.set_color(np.where(green_ew, SIG_GREEN, SIG_RED))
         clock.set_text(f"t = +{i // 60}:{i % 60:02d}  (10x speed)")
         buf = io.BytesIO()
         fig.savefig(buf, format="png", facecolor=fig.get_facecolor())
