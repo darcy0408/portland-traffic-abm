@@ -6,8 +6,12 @@ a sim. Two panels, same two series (realism stack vs base model) over the
 demand ladder:
 
   A) busiest Powell segment veh/hr, mean +/- SD over 8 seeds, with the real
-     PBOT peak band shaded -- THE validation picture: realism enters the band
+     peak band shaded -- THE validation picture: realism enters the band
      at the untuned a-priori demand, base saturates ~1,000 and never does.
+     The band is derived from ODOT's measured Powell AADT, NOT from the PBOT
+     counts (those stay held out; see calibrate_demand.py's honesty note).
+     Mislabeling it "PBOT counts" would assert the opposite of the project's
+     validation claim, so the provenance is spelled out on the figure itself.
   B) network-wide stuck vehicle-hours (measured, below 5 km/h) -- realism
      roughly halves gridlock at every demand level.
 
@@ -31,7 +35,10 @@ import matplotlib.pyplot as plt
 
 import config
 
-REAL_BAND = (1400, 1745)          # PBOT peak-hour band on Powell, veh/hr
+# Powell peak-hour directional band, veh/hr. Provenance: ODOT 2018 verified AADT
+# 34,900 at Powell/SE 26th, x 50% directional split x the 8-10% K-factor
+# (src/calibrate_demand.py). The held-out PBOT counts are NOT its source.
+REAL_BAND = (1400, 1745)
 COLORS = {"realism": "#2a78d6", "base": "#eb6834"}   # validated pair
 LABELS = {"realism": "realism stack\n(MOBIL + Webster + green-wave)",
           "base": "base model\n(single lane, uniform signals)"}
@@ -69,7 +76,7 @@ def main():
     # --- panel A: busiest Powell vs demand, with the real band ---------------
     ax_a.axhspan(*REAL_BAND, color="#dce9dc", zorder=0)
     ax_a.text(0.02, (REAL_BAND[1] - 40), "real Powell peak band "
-              f"({REAL_BAND[0]:,}–{REAL_BAND[1]:,} veh/hr, PBOT counts)",
+              f"({REAL_BAND[0]:,}–{REAL_BAND[1]:,} veh/hr, from ODOT AADT)",
               transform=ax_a.get_yaxis_transform(), fontsize=8.5,
               color="#3a5a3a", va="top")
     for arm in ("realism", "base"):
@@ -118,11 +125,15 @@ def main():
     fig.suptitle("Metro scale: the realism stack reaches the real Powell band; "
                  "the base model saturates below it",
                  fontsize=12, fontweight="bold", x=0.02, ha="left")
-    fig.text(0.02, 0.925, f"Portland 20 km OSM network (159k edges), LODES OD "
-             f"demand, mean ± SD over {n_seeds} seeds, all parameters "
-             f"a-priori — the band is the held-out validation. "
-             f"Orca, Jul 29.", fontsize=8.5, color="#555555")
-    fig.tight_layout(rect=(0, 0, 1, 0.90))
+    # Two lines: the one-line version overflows the right edge at this figsize.
+    # Claim discipline: state what was NOT fitted, rather than calling the band
+    # "held-out" (the PBOT counts are the held-out set; the band is ODOT AADT).
+    fig.text(0.02, 0.935, f"Portland 20 km OSM network (159k directed edges), "
+             f"LODES OD demand, mean ± SD over {n_seeds} seeds. Orca, Jul 29.\n"
+             f"All parameters a-priori; nothing was fitted to the band or to "
+             f"the held-out PBOT counts.", fontsize=8.5, color="#555555",
+             va="top", linespacing=1.5)
+    fig.tight_layout(rect=(0, 0, 1, 0.86))
 
     out = os.path.join(config.FIGURES_DIR, "metro_calibrated_band.png")
     fig.savefig(out, dpi=200)
