@@ -152,6 +152,21 @@ Honest readings:
   graph (not the M20.* graph — no M20 number is re-cited), stuck threshold
   5 km/h.
 
+### Noise vs NOx contrast (Jul 30, `src/metro_noise_contrast.py`, 8 seeds)
+Same demand, realism vs base, hour runs. Powell NOx swings with congestion
+state — +11.4% ± 8.9 at 16,500 (realism carries MORE cars through a
+free-flowing Powell), −13.7% ± 6.5 at 24,750, −28.4% ± 4.1 at 33,000 (as
+base congests, queue-clearing wins) — while the CNOSSOS noise surface
+barely moves and in the OPPOSITE direction: Powell median +1.1 to +1.3 dB,
+network median +0.6 to +0.8 dB, at every demand level. Mechanism: NOx is
+per-second (idling multiplies it); noise's flow term is 10·log10(Q/v), so
+clearing a queue (fewer cars per metre, faster) roughly cancels, and the
+log scale compresses the rest. ~1 dB is below the ~3 dB just-noticeable
+threshold: an intervention that cuts Powell NOx by a quarter is inaudible.
+The two surfaces respond to the same traffic with opposite signs and
+different orders of magnitude — the concrete argument for computing both
+from one simulation instead of assuming one tracks the other.
+
 ### Day runs (Jul 29-30, SLURM 114380, both COMPLETED; ONE seed — qualitative)
 24 simulated hours at CONSTANT 16,500-vehicle demand (LODES has no time
 profile — this is a permanent rush hour, the acknowledged caveat, and it
