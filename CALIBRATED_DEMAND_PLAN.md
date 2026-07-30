@@ -150,7 +150,28 @@ Honest readings:
 - Caveats: all parameters a-priori (nothing tuned to the held-out counts; the
   band itself is the held-out validation), LODES is commute-shaped, fresh-OSM
   graph (not the M20.* graph — no M20 number is re-cited), stuck threshold
-  5 km/h. Day runs (114380) still in flight.
+  5 km/h.
+
+### Day runs (Jul 29-30, SLURM 114380, both COMPLETED; ONE seed — qualitative)
+24 simulated hours at CONSTANT 16,500-vehicle demand (LODES has no time
+profile — this is a permanent rush hour, the acknowledged caveat, and it
+turns out to be load-bearing):
+- base:    busiest Powell 438 veh/hr (24 h avg; was 912 in hour 1), Powell 82%
+  stuck, network 72% of ALL vehicle-time below 5 km/h. The base model does not
+  reach a steady state — queues accumulate all day (inflow > its ~1,000 cap)
+  and the network seizes.
+- realism: network seizes TOO — 76% of vehicle-time stuck (slightly worse than
+  base). Its Powell stays locally clear (19% stuck, only 1,602 veh-h — starved,
+  not congested: the arterial-priority timing keeps Powell moving while the jam
+  lives on the rest of the network, and cars increasingly cannot reach it).
+- HONEST READING: under sustained peak demand BOTH models spiral into
+  gridlock; the realism stack relocates the collapse, it does not prevent it.
+  No "realism survives the day" claim is available. The hour-scale results
+  (above) remain the validation-relevant ones — the real PBOT band is a
+  peak-HOUR quantity. What the day runs actually demonstrate is that
+  day-scale simulation REQUIRES time-varying demand (AM/PM profile with
+  overnight queue-draining) — the parked AM/PM demand-profile work is the
+  gating prerequisite for any week-run, not an optional refinement.
 
 ## Governance (unchanged)
 One sim at a time; every run a unique RUN_NAME; seeds pinned & recorded; new
