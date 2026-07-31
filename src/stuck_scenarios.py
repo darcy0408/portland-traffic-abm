@@ -27,6 +27,16 @@ Three checks:
      accumulator can feed back into the dynamics. (kernel_regression.py
      additionally proves the surrounding edit changed no base physics.)
 
+  D) HOUR BUCKETS (real-demand plan Phase A2). Buckets are the same seconds,
+     filed by ELAPSED hour. A car held at a red that STRADDLES the 3600 s
+     boundary (signal offset 45 s puts the red on t mod 60 in [45,15) wrapping,
+     i.e. exactly t = 3585..3614) must split its 30 stuck seconds
+     exactly 15/15 between hour 0 and hour 1 -- the hand-check. Then the
+     identities: the hour totals sum to the flat total; in "segments" mode
+     each segment's buckets sum to that segment's stuck_sum; "network" mode
+     files no segments at all; and the buckets, like the accumulator itself,
+     leave trajectories bitwise unchanged.
+
 Run: python src/stuck_scenarios.py
 """
 import os
@@ -68,7 +78,7 @@ def _signal_at_2():
             "cycle": 60.0, "green_split": 0.5}
 
 
-def _run(vehs, signals, n_steps, t0=0, stuck_stats=None):
+def _run(vehs, signals, n_steps, t0=0, stuck_stats=None, stuck_by_hour=None):
     """Step the real kernel n_steps, mutating vehs in place. Cars never finish
     their route here, so the G/nodes/rng respawn args are dummies (the same
     shortcut as driver_scenarios.py). Returns the per-segment vehicle-seconds
@@ -78,7 +88,8 @@ def _run(vehs, signals, n_steps, t0=0, stuck_stats=None):
     for s in range(n_steps):
         step_vehicles(vehs, config.DT, (t0 + s) * config.DT, seg_tot, seg_nox,
                       seg_thru, coeffs, None, [], random.Random(0), signals,
-                      None, None, stuck_stats=stuck_stats)
+                      None, None, stuck_stats=stuck_stats,
+                      stuck_by_hour=stuck_by_hour)
     return seg_tot
 
 
@@ -172,12 +183,102 @@ def scenario_inertness():
                   f"max abs diff {np.abs(runs['off'] - runs['on']).max():.3g}")
 
 
+def _signal_at_2_offset(offset):
+    """The same single signal, phase-shifted: green when ((t+offset) % 60) < 30,
+    so offset 45 puts the RED on t mod 60 in [45, 15) wrapping -- i.e. exactly
+    t = 3585..3614, a red that straddles the 3600 s hour boundary. The shift is
+    needed because the 60 s cycle divides 3600 exactly, so an unshifted signal
+    always changes phase precisely AT the boundary and never across it."""
+    sig = _signal_at_2()
+    sig["offset"] = {2: float(offset)}
+    return sig
+
+
+def scenario_hour_buckets():
+    print("\nD) HOUR BUCKETS: the same seconds, filed by elapsed hour")
+    n_steps, t0 = 30, 3585           # t = 3585..3614: all red, straddles 3600
+    print(f"   One car held at a red from t={t0} to t={t0 + n_steps - 1} s, a window")
+    print("   that straddles the 1 h boundary. Expect exactly 15 s in hour 0")
+    print("   and 15 s in hour 1, and every bucket summing back to stuck_sum.")
+    v0 = 50 * KPH
+
+    def held_car():
+        return {"id": 0, "route": [_edge(1, 2, 400.0, v0), _edge(2, 3, 600.0, v0)],
+                "idx": 0, "pos": 398.0, "v": 0.0}
+
+    ok = []
+    # --- the hand-check, in "segments" mode (the richer of the two) ---
+    stuck = {"stuck_sum": defaultdict(float), "hour_sum": defaultdict(float),
+             "hour_seg": defaultdict(float)}
+    _run([held_car()], _signal_at_2_offset(45), n_steps, t0=t0,
+         stuck_stats=stuck, stuck_by_hour="segments")
+    seg = (1, 2, 0)
+    h0, h1 = stuck["hour_sum"][0], stuck["hour_sum"][1]
+    ok.append(_check("the held car is stuck for the whole window",
+                     stuck["stuck_sum"][seg] == n_steps * config.DT,
+                     f"stuck_sum {stuck['stuck_sum'][seg]:.1f} s of "
+                     f"{n_steps * config.DT:.1f} s held"))
+    ok.append(_check("split exactly 15 s / 15 s across the hour boundary",
+                     h0 == 15.0 and h1 == 15.0,
+                     f"hour 0 = {h0:.1f} s, hour 1 = {h1:.1f} s"))
+    ok.append(_check("no seconds filed outside those two hours",
+                     set(stuck["hour_sum"]) == {0, 1},
+                     f"hours present: {sorted(stuck['hour_sum'])}"))
+    ok.append(_check("hour totals sum to the flat total",
+                     sum(stuck["hour_sum"].values())
+                     == sum(stuck["stuck_sum"].values()),
+                     f"{sum(stuck['hour_sum'].values()):.1f} s vs "
+                     f"{sum(stuck['stuck_sum'].values()):.1f} s"))
+    per_seg = defaultdict(float)
+    for (_h, e), secs in stuck["hour_seg"].items():
+        per_seg[e] += secs
+    ok.append(_check("per-segment buckets sum to that segment's stuck_sum",
+                     all(abs(per_seg[e] - stuck["stuck_sum"][e]) < 1e-12
+                         for e in stuck["stuck_sum"]),
+                     f"segment {seg}: {per_seg[seg]:.1f} s vs "
+                     f"{stuck['stuck_sum'][seg]:.1f} s"))
+
+    # --- "network" mode files hours but no segments ---
+    net = {"stuck_sum": defaultdict(float), "hour_sum": defaultdict(float)}
+    _run([held_car()], _signal_at_2_offset(45), n_steps, t0=t0,
+         stuck_stats=net, stuck_by_hour="network")
+    ok.append(_check("network mode gives the same hours, no segment detail",
+                     dict(net["hour_sum"]) == {0: 15.0, 1: 15.0}
+                     and "hour_seg" not in net,
+                     f"hour_sum {dict(net['hour_sum'])}, "
+                     f"hour_seg {'absent' if 'hour_seg' not in net else 'PRESENT'}"))
+
+    # --- inertness: bucketing changes no trajectory ---
+    def queued():
+        route = [_edge(1, 2, 400.0, v0), _edge(2, 3, 600.0, v0)]
+        return [{"id": j, "route": list(route), "idx": 0,
+                 "pos": 398.0 - 7.0 * j, "v": 0.0} for j in range(20)]
+
+    runs = {}
+    for label, mode in (("off", None), ("segments", "segments")):
+        vehs = queued()
+        st = {"stuck_sum": defaultdict(float), "hour_sum": defaultdict(float),
+              "hour_seg": defaultdict(float)} if mode else None
+        # 40 steps: the 30 s red (queued, filling both hour buckets) plus 10 s
+        # of discharge. Deliberately short of the ~600 m the lead car needs to
+        # finish its route -- these cars have dummy G/nodes and cannot respawn.
+        _run(vehs, _signal_at_2_offset(45), 40, t0=t0, stuck_stats=st,
+             stuck_by_hour=mode)
+        runs[label] = np.array([(v["idx"], v["pos"], v["v"]) for v in vehs])
+    same = np.array_equal(runs["off"], runs["segments"])
+    ok.append(_check("bucketing leaves trajectories bitwise identical", same,
+                     "bitwise equal" if same else
+                     f"max abs diff {np.abs(runs['off'] - runs['segments']).max():.3g}"))
+    return all(ok)
+
+
 if __name__ == "__main__":
     print("Stuck-time accumulator scenarios  (real kernel, hand-checkable)")
     print("=" * 66)
     results = {"red_light": scenario_red_light(),
                "threshold": scenario_threshold(),
-               "inertness": scenario_inertness()}
+               "inertness": scenario_inertness(),
+               "hour_buckets": scenario_hour_buckets()}
     print("\n" + "=" * 66)
     for name, okay in results.items():
         print(f"   {PASS if okay else FAIL}  {name}")

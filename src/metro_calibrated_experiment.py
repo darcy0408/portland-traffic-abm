@@ -43,8 +43,10 @@ Usage:
 """
 import argparse
 import json
+import math
 import os
 import sys
+from collections import defaultdict
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -115,11 +117,31 @@ def build_jobs():
 
 
 def build_day_jobs():
-    """Day-job list; index == SLURM array task id for the day array."""
-    return [{"arm": arm, "seed": DAY_SEED, "n_veh": DAY_DEMAND,
-             "steps": DAY_STEPS,
-             "name": f"metrocal_day_{arm}_n{DAY_DEMAND}_s{DAY_SEED}"}
-            for arm in ARMS]
+    """Day-job list; index == SLURM array task id for the day array.
+
+    Four jobs = {flat, profiled} x {base, realism}, all with stuck time sliced
+    by hour (real-demand plan Phase A2). The Jul 29 flat day runs
+    (metrocal_day_*) measured only whole-run totals, so they can say BOTH arms
+    seized but not whether stuck time ratcheted all day or plateaued -- which
+    is precisely the A2 question. These re-run the flat pair with the hour
+    buckets on (the CONTROL) alongside the profiled pair (the TREATMENT),
+    under new names so nothing on disk is touched.
+
+    Note what N_VEHICLES means in each arm: flat holds DAY_DEMAND vehicles
+    active for all 24 h (a permanent rush hour), while profiled treats it as
+    the PEAK-hour fleet and scales every other hour down by the hourly shape.
+    Peak-hour demand is therefore matched between the two, and the profiled
+    day carries strictly less traffic overall -- which is the point.
+    """
+    jobs = []
+    for profile in (False, True):
+        for arm in ARMS:
+            tag = "dayprof" if profile else "dayflat"
+            jobs.append({"arm": arm, "seed": DAY_SEED, "n_veh": DAY_DEMAND,
+                         "steps": DAY_STEPS, "profile": profile,
+                         "by_hour": "segments",
+                         "name": f"metrocal_{tag}_{arm}_n{DAY_DEMAND}_s{DAY_SEED}"})
+    return jobs
 
 
 def _powell_edges(G):
@@ -151,6 +173,12 @@ def run_one(job, graph_file, checkpoint=False, min_edges=MIN_METRO_EDGES):
     config.N_STEPS = job["steps"]
     config.RANDOM_SEED = job["seed"]
     config.RUN_NAME = job["name"]
+    # set EXPLICITLY every job (not just when true): these are not arm keys, so
+    # the arm-complement reset above does not cover them, and a SLURM task that
+    # reused an interpreter could otherwise inherit the previous job's setting.
+    config.DEMAND_PROFILE_ENABLED = bool(job.get("profile"))
+    config.DEMAND_PROFILE_START_HOUR = 0        # a day run starts at midnight
+    hour_mode = job.get("by_hour")               # None | "network" | "segments"
 
     out = os.path.join(config.PROCESSED_DIR, f"{job['name']}_segments.parquet")
     if os.path.exists(out):
@@ -168,7 +196,8 @@ def run_one(job, graph_file, checkpoint=False, min_edges=MIN_METRO_EDGES):
     speed_stats, stuck_stats = {}, {}
     totals, nox, thru = generate.run_simulation(
         G, verbose=False, use_checkpoint=checkpoint,
-        speed_stats=speed_stats, stuck_stats=stuck_stats)
+        speed_stats=speed_stats, stuck_stats=stuck_stats,
+        stuck_by_hour=hour_mode)
     generate.save_results(totals, nox, thru, speed_stats, stuck_stats)
 
     powell = _powell_edges(G)
@@ -196,6 +225,28 @@ def run_one(job, graph_file, checkpoint=False, min_edges=MIN_METRO_EDGES):
                    network_stuck_veh_h=net_stuck_h,
                    powell_nox_g=powell_nox, total_nox_g=total_nox,
                    graph_edges=G.number_of_edges())
+    if hour_mode:
+        # the A2 time series: stuck vehicle-hours per ELAPSED hour, network-wide
+        # and (in "segments" mode) on Powell. hour_start records the clock hour
+        # at t=0 so a readout can label them. Written into the summary JSON,
+        # which the readout already reads -- no new artifact type.
+        n_h = int(math.ceil(hours))
+        hs = stuck_stats["hour_sum"]
+        summary["stuck_hour_start"] = stuck_stats["hour_start"]
+        summary["network_stuck_veh_h_by_hour"] = [hs.get(h, 0.0) / 3600.0
+                                                  for h in range(n_h)]
+        if hour_mode == "segments":
+            pw = set(powell)
+            pw_hour = defaultdict(float)         # one pass over the sparse dict
+            for (h, e), secs in stuck_stats["hour_seg"].items():
+                if e in pw:
+                    pw_hour[h] += secs
+            summary["powell_stuck_veh_h_by_hour"] = [pw_hour.get(h, 0.0) / 3600.0
+                                                     for h in range(n_h)]
+        peak_h = max(range(n_h), key=lambda h: hs.get(h, 0.0))
+        print(f"{'':34s}  hourly stuck peaks at elapsed hour {peak_h} "
+              f"({hs.get(peak_h, 0.0) / 3600.0:.1f} veh-h); "
+              f"last hour {hs.get(n_h - 1, 0.0) / 3600.0:.1f} veh-h")
     with open(os.path.join(config.PROCESSED_DIR,
                            f"{job['name']}_summary.json"), "w") as f:
         json.dump(summary, f, indent=2)
@@ -271,10 +322,17 @@ def main():
         # deliberately small and clearly labeled: proves the whole code path
         # (overrides + LODES + realism stack + both accumulators + save) on
         # whatever graph is cached locally. NOT a result; parquet name says smoke.
+        # two smokes: the plain arm, and the Phase A1 profile + hour buckets on
+        # a >1 h run (the only way the hourly path and the parked pool are
+        # exercised end to end outside the gates).
         job = {"arm": "realism", "seed": 42, "n_veh": 300, "steps": 300,
                "name": "metrocal_smoke_realism_n300_s42"}
         run_one(job, graph_file, checkpoint=False, min_edges=0)
-        print("\nsmoke done (non-authoritative; delete the smoke parquet freely).")
+        prof = {"arm": "realism", "seed": 42, "n_veh": 300, "steps": 7500,
+                "profile": True, "by_hour": "segments",
+                "name": "metrocal_smoke_dayprof_n300_s42"}
+        run_one(prof, graph_file, checkpoint=False, min_edges=0)
+        print("\nsmoke done (non-authoritative; delete the smoke parquets freely).")
     else:
         raise SystemExit("pick one: --count | --list | --task N | --day-task N "
                          "| --smoke | --cache-graph")

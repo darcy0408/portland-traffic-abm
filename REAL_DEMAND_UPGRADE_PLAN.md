@@ -76,6 +76,38 @@ A2. Re-run the two day jobs WITH the profile (Orca, same harness, new
     contrast worth citing; if both stabilize, the honest claim is "a
     demand profile, not the realism stack, is what makes day-scale run."
 
+    A2 STATUS (Jul 31): the MEASUREMENT and the job list are built and gated;
+    the runs themselves are not submitted (they are Orca wall time, and the
+    submit is the user's call). What exists now:
+    - run_simulation(stuck_by_hour=...) slices stuck time by ELAPSED hour --
+      deliberately not the wrapped clock hour, so a week run (A3) would show
+      day-over-day ratcheting instead of averaging it away. "network" gives
+      the per-hour network total for free; "segments" also keys by segment
+      so any corridor (Powell) can be sliced by hour. Cost measured, not
+      guessed: 37.5k edges carry stuck time in a single metro hour, so a 24 h
+      run holds up to ~0.9M sparse entries (~150 MB) -- job_day.sh mem raised
+      16G -> 24G. Gate: stuck_scenarios D (a red straddling the 3600 s
+      boundary splits 15/15 s by hand; every bucket sums back to stuck_sum;
+      network mode files no segments; bucketing is trajectory-inert), plus
+      the checkpoint-predates-buckets refusal.
+    - The day array is now FOUR jobs, {flat, profiled} x {base, realism}, all
+      bucketed. The flat pair is re-run as the CONTROL: the Jul 29 flat runs
+      recorded only whole-run totals, so they can say both arms seized but
+      not whether stuck time ratcheted or plateaued -- which is the A2
+      question. New RUN_NAMEs (metrocal_dayflat_*, metrocal_dayprof_*), so
+      nothing on disk is touched. Peak-hour demand is MATCHED across the
+      pair (profiled reads N_VEHICLES as the peak fleet); the profiled day
+      therefore carries less total traffic, which is the point.
+    - Each summary JSON gains network_stuck_veh_h_by_hour and (segments mode)
+      powell_stuck_veh_h_by_hour. Verified end to end on the corridor smoke:
+      both arrays sum EXACTLY to the whole-run totals they refine.
+    - GOTCHA for the submit: data/ is gitignored, so a fresh Orca clone has no
+      portal_powell_sample.csv and the profile would silently fall back to the
+      synthetic hourly shape. scp it first (RUNBOOK step 7 now says so, with a
+      one-line check); the run log states which shape it used.
+    Still to build when the runs land: the readout that reads the four hourly
+    arrays and answers the PM-peak-vs-AM-peak question.
+
 A3. Only after A2 stabilizes: the week run Christof asked about (7×86,400
     steps, checkpointed, long partition — ~3-5 days wall on current rates).
 

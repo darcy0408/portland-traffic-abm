@@ -974,6 +974,16 @@ def _mobil_lane_pass(by_edge, mobil_ctx, L):
     return decisions
 
 
+HOUR_MODES = (None, False, "network", "segments")
+
+
+def _check_hour_mode(mode):
+    """Validate the stuck-by-hour bucketing mode (see run_simulation)."""
+    if mode not in HOUR_MODES:
+        raise ValueError(f"stuck_by_hour must be one of {HOUR_MODES}, got {mode!r}")
+    return mode
+
+
 def build_profile_context(n_fleet):
     """Build the hourly demand-profile context (config.DEMAND_PROFILE_ENABLED).
 
@@ -1107,7 +1117,8 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
                   fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None,
-                  speed_stats=None, stuck_stats=None, profile_ctx=None):
+                  speed_stats=None, stuck_stats=None, profile_ctx=None,
+                  stuck_by_hour=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -1168,6 +1179,12 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     step. Cars never vanish mid-trip, so a falling quota drains the network
     only as fast as trips actually finish -- the honest physics of an ebbing
     rush hour. With profile_ctx=None (the default) this function is untouched.
+
+    Stuck-time hour buckets (`stuck_by_hour`, needs stuck_stats): None/False
+    off; "network" also credits each stuck vehicle-second to its ELAPSED hour
+    in stuck_stats["hour_sum"]; "segments" additionally credits it per segment
+    per hour in stuck_stats["hour_seg"]. Pure measurement, like stuck_sum
+    itself.
     """
     if lanes is not None and mobil_ctx is not None:
         raise ValueError("virtual lanes (lanes=) and explicit MOBIL lanes "
@@ -1265,6 +1282,13 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     # 2) move everyone, credit the segment they travelled on, advance routes
     # stuck threshold in m/s, converted once per step, not once per vehicle
     stuck_v = config.STUCK_SPEED_KMH / 3.6 if stuck_stats is not None else 0.0
+    # stuck-time hour bucket for this step: ELAPSED hour since t=0, deliberately
+    # NOT the wrapped clock hour, so a multi-day run shows day-over-day
+    # ratcheting instead of averaging it away (the A2 question is whether stuck
+    # time RECOVERS after a peak). Computed once per step, not per vehicle.
+    stuck_hour = None
+    if stuck_stats is not None and _check_hour_mode(stuck_by_hour):
+        stuck_hour = int(t) // 3600
     n_parked = 0     # cars parked THIS step: marked below, swept after the loop
     for veh in vehicles:
         v_old = veh["v"]
@@ -1295,6 +1319,13 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         # nothing feeds back into the dynamics.
         if stuck_stats is not None and v_avg < stuck_v:
             stuck_stats["stuck_sum"][edge_key] += dt
+            # optional hour buckets: the same vehicle-second, also credited to
+            # the hour it happened in (and, in "segments" mode, to this segment
+            # within that hour). Every bucket sums back to stuck_sum exactly.
+            if stuck_hour is not None:
+                stuck_stats["hour_sum"][stuck_hour] += dt
+                if stuck_by_hour == "segments":
+                    stuck_stats["hour_seg"][(stuck_hour, edge_key)] += dt
         # and with this vehicle's NOx for the step: the HBEFA3 rate at the step's
         # average speed and its realized acceleration, integrated over dt. NOx is
         # turned into NO2 downstream (NO2 = F_NO2 * NOx), so the fraction stays a
@@ -1442,7 +1473,7 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
 
 
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
-                   speed_stats=None, stuck_stats=None):
+                   speed_stats=None, stuck_stats=None, stuck_by_hour=None):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
     per-segment vehicle-seconds of activity, and per-segment NOx grams.
 
@@ -1454,7 +1485,25 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     stuck_stats (opt-in, calibrated-demand Phase 3): pass an empty dict and it
     is filled in place with per-segment stuck vehicle-seconds under key
     "stuck_sum" -- time spent below config.STUCK_SPEED_KMH (see step_vehicles).
-    Same contract as speed_stats: pure measurement, off by default."""
+    Same contract as speed_stats: pure measurement, off by default.
+
+    stuck_by_hour (opt-in, real-demand plan Phase A2): slices that stuck time
+    by ELAPSED hour so a day run can be asked whether stuck time RECOVERS
+    after a peak or ratchets up all day. Requires stuck_stats. Modes:
+      "network"  -> stuck_stats["hour_sum"], {elapsed_hour: veh-seconds}, the
+                    network total per hour. A handful of numbers; free.
+      "segments" -> ALSO stuck_stats["hour_seg"], {(elapsed_hour, edge): sec},
+                    which lets a readout slice any corridor (e.g. Powell) by
+                    hour. Sparse, but measured on the metro graph ~37.5k edges
+                    carry stuck time in a single hour, so a 24 h run holds up
+                    to ~0.9M entries (~150 MB). Worth it on a day run, which
+                    is far too expensive to repeat for a missing column.
+    Both also set stuck_stats["hour_start"] = config.DEMAND_PROFILE_START_HOUR,
+    the clock hour at t=0, so a readout can label elapsed hours with wall-clock
+    times. Sums are exact: every bucket adds back up to stuck_sum."""
+    _check_hour_mode(stuck_by_hour)
+    if stuck_by_hour and stuck_stats is None:
+        raise ValueError("stuck_by_hour needs stuck_stats (pass an empty dict)")
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -1533,6 +1582,13 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         if stuck_stats is not None:
             # same discipline as speed_stats: caller's dict, checkpointed in state
             stuck_stats["stuck_sum"] = {edge: 0.0 for edge in G.edges(keys=True)}
+            if stuck_by_hour:
+                # sparse: hours and (hour, edge) pairs appear only once they
+                # actually carry stuck time, so an empty night hour costs nothing
+                stuck_stats["hour_sum"] = defaultdict(float)
+                stuck_stats["hour_start"] = config.DEMAND_PROFILE_START_HOUR
+                if stuck_by_hour == "segments":
+                    stuck_stats["hour_seg"] = defaultdict(float)
             state["stuck_stats"] = stuck_stats
     else:
         print(f"Resuming from step {state['step']}")
@@ -1582,6 +1638,17 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                 raise SystemExit(
                     "checkpoint for this run has no stuck_stats; delete the "
                     "checkpoint (or run without stuck_stats) to proceed")
+            if stuck_by_hour and "hour_sum" not in stuck_stats:
+                # same reasoning one level down: the checkpoint predates the
+                # hour buckets, so they would cover only the remaining hours
+                raise SystemExit(
+                    "checkpoint for this run has no stuck hour buckets; delete "
+                    "the checkpoint (or run without stuck_by_hour) to proceed")
+            if stuck_by_hour == "segments" and "hour_seg" not in stuck_stats:
+                raise SystemExit(
+                    "checkpoint for this run has network-only stuck hour "
+                    "buckets; delete the checkpoint (or use "
+                    "stuck_by_hour='network') to proceed")
             state["stuck_stats"] = stuck_stats
 
     if verbose and profile_ctx is not None:
@@ -1603,7 +1670,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                       signals, demand, through, fleet_ctx=fleet_ctx,
                       driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx,
                       speed_stats=speed_stats, stuck_stats=stuck_stats,
-                      profile_ctx=profile_ctx)
+                      profile_ctx=profile_ctx, stuck_by_hour=stuck_by_hour)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)

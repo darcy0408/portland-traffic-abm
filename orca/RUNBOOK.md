@@ -80,14 +80,36 @@ Finished jobs write `data/processed/metrocal_*_segments.parquet`; re-submitting
 the array is safe (each task SKIPs if its parquet exists), so a partial failure
 is fixed by just submitting again.
 
-## 7. Submit the day jobs (2 jobs, long partition)
+## 7. Submit the day jobs (4 jobs, long partition)
+
+FIRST, from the laptop, copy the hourly demand curve across — `data/` is
+gitignored, so a fresh clone does NOT have it, and the profiled runs would
+silently fall back to the synthetic shape:
+
+```powershell
+scp C:\dev\pta-realism\data\portal_powell_sample.csv `
+    darcy-csuglobal@login.orca.pdx.edu:portland-traffic-abm/data/
+```
+
+Then:
 
 ```bash
+python -c "import sys; sys.path.insert(0,'src'); import demand_data; \
+           print('real PORTAL data' if demand_data.is_using_real_data() else 'SYNTHETIC')"
 N=$(python src/metro_calibrated_experiment.py --count-day)
 sbatch --array=0-$((N-1)) orca/job_day.sh
 ```
 
-Day jobs checkpoint, so a wall-clock kill resumes on resubmit.
+The four tasks are {flat, profiled} x {base, realism}. Flat is the control
+(constant fleet all day = permanent rush hour, the Jul 29 result); profiled
+applies the hourly demand shape, treating N_VEHICLES as the PEAK-hour fleet,
+so peak demand is matched between the pair. All four slice stuck time by
+elapsed hour into their summary JSONs, which is what answers A2: does stuck
+time RECOVER after the peak, or ratchet all day?
+
+Day jobs checkpoint, so a wall-clock kill resumes on resubmit. A checkpoint
+written before this change has no hour buckets and will be REFUSED with a
+clear message — delete it and restart that task.
 
 ## 8. Bring results home and read them out
 
