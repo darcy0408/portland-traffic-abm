@@ -974,6 +974,54 @@ def _mobil_lane_pass(by_edge, mobil_ctx, L):
     return decisions
 
 
+def build_profile_context(n_fleet):
+    """Build the hourly demand-profile context (config.DEMAND_PROFILE_ENABLED).
+
+    Turns the hour-of-day demand shape into a 24-entry active-fleet QUOTA:
+    quota[h] = round(n_fleet * m(h)/m_peak), so the peak hour runs the full
+    spawned fleet and every other hour a proportional slice. The shape is
+    config.DEMAND_PROFILE if set (the gates pass explicit shapes), else the
+    a-priori PORTAL hour-of-day curve from demand_data (or its synthetic
+    fallback) -- never anything fit to the held-out validation counts.
+
+    Returns None when the flag is off. Otherwise a dict carried through the
+    run and the checkpoint: the quota table, the parked-vehicle id pool, the
+    fleet size the quotas were computed from, and the clock hour at t=0.
+    """
+    if not config.DEMAND_PROFILE_ENABLED:
+        return None
+    shape = config.DEMAND_PROFILE
+    if shape is None:
+        shape = demand_data.hourly_demand_profile()
+    if len(shape) != 24 or min(shape) < 0 or max(shape) <= 0:
+        raise ValueError("DEMAND_PROFILE must be 24 non-negative values with a "
+                         f"positive peak, got {shape!r}")
+    m_peak = max(shape)
+    return {"quota": [round(n_fleet * m / m_peak) for m in shape],
+            "parked": [],                  # ids of cars currently off the network
+            "fleet": n_fleet,              # invariant: active + parked == fleet
+            "start_hour": config.DEMAND_PROFILE_START_HOUR}
+
+
+def _profile_quota(profile_ctx, t):
+    """Active-fleet quota for simulation time t (seconds): the quota of the
+    current clock hour, wrapping past midnight so multi-day runs repeat the
+    daily shape."""
+    hour = (int(t) // 3600 + profile_ctx["start_hour"]) % 24
+    return profile_ctx["quota"][hour]
+
+
+def profile_park_down(profile_ctx, vehicles):
+    """Park a freshly spawned fleet down to hour zero's quota, before the first
+    step: the tail of the list (the highest vehicle ids) moves to the parked
+    pool. Their trip draws are already spent, so a FLAT profile parks nobody
+    and consumes not one extra RNG draw -- which is exactly why the flag-on
+    flat-profile run is bitwise the base run (the inertness gate)."""
+    q0 = _profile_quota(profile_ctx, 0.0)
+    while len(vehicles) > q0:
+        profile_ctx["parked"].append(vehicles.pop()["id"])
+
+
 def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
                  driver_ctx=None):
     """Create one vehicle with an origin, destination, and shortest-time route.
@@ -1059,7 +1107,7 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
                   fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None,
-                  speed_stats=None, stuck_stats=None):
+                  speed_stats=None, stuck_stats=None, profile_ctx=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -1111,12 +1159,36 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     from the same frozen snapshot, deciding changes with MOBIL. Overtaking is
     therefore emergent, not coded. Mutually exclusive with `lanes` above: virtual
     lanes are the frictionless upper bound, MOBIL pays the real cost of a gap.
+
+    Hourly demand profile (`profile_ctx`, config.DEMAND_PROFILE_ENABLED): the
+    active fleet tracks an hour-of-day quota instead of staying constant. Cars
+    finishing a trip while the fleet is over quota PARK (leave the network into
+    profile_ctx["parked"]) instead of respawning; while the fleet is under
+    quota, parked cars are released back as fresh trips at the start of the
+    step. Cars never vanish mid-trip, so a falling quota drains the network
+    only as fast as trips actually finish -- the honest physics of an ebbing
+    rush hour. With profile_ctx=None (the default) this function is untouched.
     """
     if lanes is not None and mobil_ctx is not None:
         raise ValueError("virtual lanes (lanes=) and explicit MOBIL lanes "
                          "(mobil_ctx=) are mutually exclusive lane models")
     explicit = mobil_ctx is not None
     lane_counts = mobil_ctx["lanes"] if explicit else lanes
+
+    # Demand profile: release parked cars while this hour's quota exceeds the
+    # active fleet. Released cars spawn as fresh trips (same draw as a respawn)
+    # and take part in this very step. On a route failure the id stays in the
+    # pool and we stop for this step rather than retry-loop; conservation
+    # (active + parked == fleet) holds either way.
+    if profile_ctx is not None:
+        parked = profile_ctx["parked"]
+        while parked and len(vehicles) < _profile_quota(profile_ctx, t):
+            fresh = make_vehicle(G, nodes, rng, parked[-1], demand, through,
+                                 fleet_ctx, driver_ctx)
+            if fresh is None:
+                break
+            parked.pop()
+            vehicles.append(fresh)
 
     # group cars by the segment they are on, and sort each group front-to-back
     by_edge = defaultdict(list)
@@ -1193,6 +1265,7 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     # 2) move everyone, credit the segment they travelled on, advance routes
     # stuck threshold in m/s, converted once per step, not once per vehicle
     stuck_v = config.STUCK_SPEED_KMH / 3.6 if stuck_stats is not None else 0.0
+    n_parked = 0     # cars parked THIS step: marked below, swept after the loop
     for veh in vehicles:
         v_old = veh["v"]
         a = accel[veh["id"]]
@@ -1278,8 +1351,19 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                     n_new = lane_counts.get(veh["route"][veh["idx"]][:3], 1)
                     veh["lane"] = min(veh.get("lane", 0), n_new - 1)
             else:
-                # reached the destination: respawn with a fresh trip so the
-                # number of vehicles on the network stays steady
+                # reached the destination. Demand profile: a car finishing while
+                # the fleet is over this hour's quota PARKS instead of
+                # respawning (subtracting n_parked keeps the over-quota test
+                # honest mid-step: cars marked this step are still in `vehicles`
+                # until the sweep below removes them).
+                if (profile_ctx is not None and
+                        len(vehicles) - n_parked > _profile_quota(profile_ctx, t)):
+                    profile_ctx["parked"].append(veh["id"])
+                    veh["_parked"] = True
+                    n_parked += 1
+                    break
+                # otherwise respawn with a fresh trip so the number of vehicles
+                # on the network stays steady
                 fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through,
                                      fleet_ctx, driver_ctx)
                 if fresh is not None:
@@ -1291,6 +1375,11 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 else:
                     veh["pos"], veh["v"] = edge[3], 0.0
                 break
+
+    # sweep the cars parked this step out of the active list -- in place, so the
+    # caller's (and the checkpoint's) reference to this same list stays valid
+    if n_parked:
+        vehicles[:] = [v for v in vehicles if not v.get("_parked")]
 
 
 def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
@@ -1375,6 +1464,9 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     # default -- prepare_signals(G) with no flows is the uniform base signal, and
     # the warmup uses its own RNG stream so the authoritative run below is the same
     # population it would be with the flag off (only the timing changes).
+    # With the demand profile on, the warmup still runs the full constant fleet:
+    # Webster times every signal to PEAK-hour flows, i.e. one fixed-time plan per
+    # day, the way a real fixed-time controller is timed for the peak period.
     webster_flows = None
     if config.WEBSTER_ENABLED:
         webster_flows = _measure_approach_flows(
@@ -1418,9 +1510,20 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                                driver_ctx)
             if veh is not None:
                 vehicles.append(veh)
+        # hourly demand profile (Phase A1): quotas come from the fleet actually
+        # spawned, and the fleet parks down to hour zero's quota before the
+        # first step (see profile_park_down for the flat-profile inertness
+        # argument the gate in src/demand_profile_scenarios.py proves).
+        profile_ctx = build_profile_context(len(vehicles))
+        if profile_ctx is not None:
+            profile_park_down(profile_ctx, vehicles)
         state = {"step": 0, "segment_totals": segment_totals,
                  "segment_nox": segment_nox,
                  "segment_throughput": segment_throughput, "vehicles": vehicles}
+        if profile_ctx is not None:
+            # the parked pool is run state: checkpointed so a resume conserves
+            # the fleet (active + parked == fleet at every step)
+            state["profile_ctx"] = profile_ctx
         if speed_stats is not None:
             # the caller's dict gets the per-edge accumulators; stored in state
             # so a checkpoint resume keeps the partial sums
@@ -1441,6 +1544,19 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                               or {edge: 0.0 for edge in G.edges(keys=True)})
         state["segment_throughput"] = segment_throughput
         vehicles = state["vehicles"]
+        if config.DEMAND_PROFILE_ENABLED:
+            profile_ctx = state.get("profile_ctx")
+            if not profile_ctx:
+                # the checkpoint predates the profile request: its fleet was
+                # spawned and run un-gated, so the parked pool and quotas would
+                # be wrong for the whole run. Refuse rather than resume into an
+                # inconsistent population (speed_stats/stuck_stats discipline).
+                raise SystemExit(
+                    "checkpoint for this run has no demand-profile state; "
+                    "delete the checkpoint (or run without "
+                    "DEMAND_PROFILE_ENABLED) to proceed")
+        else:
+            profile_ctx = None
         if speed_stats is not None:
             saved = state.get("speed_stats")
             if saved:
@@ -1468,6 +1584,15 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                     "checkpoint (or run without stuck_stats) to proceed")
             state["stuck_stats"] = stuck_stats
 
+    if verbose and profile_ctx is not None:
+        q = profile_ctx["quota"]
+        src = ("explicit config.DEMAND_PROFILE" if config.DEMAND_PROFILE is not None
+               else ("real PORTAL data" if demand_data.is_using_real_data()
+                     else "SYNTHETIC fallback"))
+        print(f"demand profile ON ({src}): hourly active-fleet quota "
+              f"{min(q)}-{max(q)} of {profile_ctx['fleet']} spawned, "
+              f"{len(profile_ctx['parked'])} parked entering step {state['step']}")
+
     t0 = time.perf_counter()
     for step in range(state["step"], n_steps):
         # the optional context/lane arguments go by KEYWORD at every call site:
@@ -1477,7 +1602,8 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                       segment_nox, segment_throughput, nox_coeffs, G, nodes, rng,
                       signals, demand, through, fleet_ctx=fleet_ctx,
                       driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx,
-                      speed_stats=speed_stats, stuck_stats=stuck_stats)
+                      speed_stats=speed_stats, stuck_stats=stuck_stats,
+                      profile_ctx=profile_ctx)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -1613,6 +1739,13 @@ def run_day_experiment(G):
     timing. All 24 results go to one file with an 'hour' column so visualize.py can
     draw the daily profile and the hourly maps without rerunning anything.
     """
+    if config.DEMAND_PROFILE_ENABLED:
+        # this experiment applies the hourly shape ITSELF (one sim per hour with
+        # a scaled fleet); running it with the in-kernel respawn gating on would
+        # apply the same profile twice. One continuous profiled day is a plain
+        # run_simulation with n_steps=86400 and the flag on, not this function.
+        raise SystemExit("run_day_experiment scales demand per hour itself; "
+                         "turn DEMAND_PROFILE_ENABLED off to use it")
     profile = demand_data.hourly_demand_profile()
     src = "real PORTAL data" if demand_data.is_using_real_data() else "SYNTHETIC fallback"
     print(f"Time-of-day demand shape: {src}. "

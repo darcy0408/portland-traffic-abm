@@ -192,6 +192,28 @@ THROUGH_TRAFFIC_FRACTION = 0.15
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
+# --- Hourly demand profile (Phase A1, REAL_DEMAND_UPGRADE_PLAN.md, Jul 31) ---
+# The base model holds the active fleet CONSTANT: every finished trip respawns
+# immediately, so a 24 h run is a permanent rush hour -- and the Jul 29 metro day
+# runs showed no finite network survives one (both arms seize). With this flag on,
+# demand follows an hour-of-day shape m(h): each hour has an active-fleet QUOTA of
+# round(N * m(h)/m_peak) vehicles, where N is the spawned fleet, so N_VEHICLES
+# becomes the PEAK-hour fleet (matching how the metro demand ladder was scaled).
+# A trip that finishes while the fleet is over quota PARKS (the car leaves the
+# network, joining a parked pool) instead of respawning; when the quota rises,
+# parked cars rejoin as fresh trips. Cars never vanish mid-trip -- a demand drop
+# only stops respawns, so the active fleet decays to the new quota at the rate
+# trips actually finish, which is the honest physics of an ebbing rush hour.
+# The shape comes from demand_data.hourly_demand_profile(): the real PORTAL
+# hour-of-day curve if data/portal_powell_sample.csv is present, else its clearly
+# marked synthetic fallback -- a-priori either way, NEVER fit to the held-out
+# validation counts. Off by default: every committed run reproduces unchanged.
+DEMAND_PROFILE_ENABLED = False
+DEMAND_PROFILE = None          # None -> demand_data.hourly_demand_profile();
+                               # or an explicit 24-value shape (gates use this)
+DEMAND_PROFILE_START_HOUR = 0  # clock hour at simulation t=0 (0 = midnight, so a
+                               # 24 h run walks the profile once, hour 0 to 23)
+
 # --- Multi-lane capacity experiment (lanes-experiment worktree, Jul 10) ---
 # The base model gives every directed segment ONE following lane, which caps a
 # signalized segment near 1,070 veh/hr, below Powell's real peak (see

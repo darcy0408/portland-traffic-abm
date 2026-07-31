@@ -41,6 +41,31 @@ A1. Hourly demand profile. A multiplier m(t) on trip generation, 24 values,
     by hand; kernel_regression bit-identical with the flag off.
     (Seeded by the parked AM/PM worktree experiment — promote, don't rebuild.)
 
+    A1 STATUS (Jul 31): SHIPPED, gated, off by default. Implementation is
+    quota-based (the deterministic form of the respawn gate): each hour has an
+    active-fleet quota round(N * m(h)/m_peak); a trip finishing over quota
+    parks, parked cars release as fresh trips when the quota rises, and the
+    initial fleet parks down to hour zero's quota before the first step -- so
+    N_VEHICLES now means the PEAK-hour fleet, matching the metrocal ladder.
+    Chosen over the literal probability-gate wording above because it consumes
+    ZERO extra RNG draws, which makes gate (i) provable in the strongest form:
+    flat profile == base bitwise INCLUDING the final RNG state (both arms of
+    the gate confirm). Profile source: demand_data.hourly_demand_profile() --
+    the real PORTAL hour-of-day curve (CSV copied into this worktree's data/;
+    NOTE data/ is gitignored, so Orca needs the CSV scp'd or the run falls
+    back to the synthetic shape; the run log prints which one it used) -- or
+    an explicit config.DEMAND_PROFILE list. Gates: all three planned checks in
+    src/demand_profile_scenarios.py 3/3 (bitwise+RNG inertness with 533
+    exercised respawns; conservation every step of a 2.5 h square wave with
+    the hand-derived 40/16 quotas, one-step refill, completion-paced ebb;
+    quota/start-hour/park-down arithmetic vs hand values + loud refusal of a
+    malformed shape), the other nine suites re-run green, kernel_regression
+    bit-identical. Interactions pinned in code: run_day_experiment refuses the
+    flag (it applies the same shape itself, one sim per hour), and the Webster
+    pre-pass deliberately measures the full un-gated fleet, i.e. signals are
+    timed once to PEAK-hour flows like a real fixed-time plan. The per-hour
+    stuck buckets A2 needs are NOT built yet (next increment).
+
 A2. Re-run the two day jobs WITH the profile (Orca, same harness, new
     RUN_NAMEs). The question: does realism now reach a daily steady state —
     stuck fraction recovering after the AM peak instead of ratcheting?
