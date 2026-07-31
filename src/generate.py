@@ -225,6 +225,137 @@ def apply_closure(G, closure=None):
     return removed
 
 
+# --- freeway closure ---------------------------------------------------------
+# Closing a freeway is a different shape of edit than closing a street, and the
+# circular zone above cannot express it. Two reasons, both measured on the metro
+# graph (62,299 nodes / 159,425 directed edges):
+#   1. Freeway segments are long. I-205 mainline edges run 277 m to 4,411 m with
+#      a 735 m median, so a circle small enough to spare the neighborhood catches
+#      almost no freeway. A 150 m circle centered on an I-205 segment closes one
+#      freeway edge.
+#   2. A circle large enough to cut the freeway also deletes the surface streets
+#      underneath and beside it. An 800 m circle closes 245 edges, of which 240
+#      are surface streets, so it models a demolished district rather than a
+#      closed freeway.
+# A freeway closure therefore selects by ROUTE and ROAD CLASS, and only then by
+# geometry. The streets under the viaduct stay open, which is the whole point:
+# the detour traffic has to land somewhere, and that somewhere is the local grid.
+
+
+def _as_tag_list(v):
+    """OSM tags come back as a single value or a list, depending on whether the
+    way carried one value or several. Normalize to a list so callers can just
+    iterate."""
+    if v is None:
+        return []
+    return v if isinstance(v, list) else [v]
+
+
+def _edge_is_class(d, classes):
+    """True if the edge's highway tag names any of `classes`."""
+    return any(str(h) in classes for h in _as_tag_list(d.get("highway")))
+
+
+def _edge_on_route(d, ref):
+    """True if the edge carries route `ref` (e.g. 'I 205') in its ref tag.
+    Substring match, because a shared stretch tags as e.g. ['I 205', 'OR 213']."""
+    return any(ref in str(x) for x in _as_tag_list(d.get("ref")))
+
+
+def freeway_mainline_edges(G, ref):
+    """Every (u, v, k) on route `ref` tagged highway=motorway. This is the
+    through-lanes only: ramps are highway=motorway_link and are handled
+    separately, because on OSM they usually do NOT carry the route's ref
+    (I-205 has 99 ramp edges touching its mainline and zero of them are
+    ref-tagged 'I 205', so ramps must be found by topology, not by tag)."""
+    return [(u, v, k) for u, v, k, d in G.edges(keys=True, data=True)
+            if _edge_on_route(d, ref) and _edge_is_class(d, ("motorway",))]
+
+
+def _ramp_edges_at(G, nodes):
+    """Every motorway_link edge touching any node in `nodes`, in either
+    direction. These are the on- and off-ramps of an interchange."""
+    ramps = []
+    for u, v, k, d in G.edges(keys=True, data=True):
+        if _edge_is_class(d, ("motorway_link",)) and (u in nodes or v in nodes):
+            ramps.append((u, v, k))
+    return ramps
+
+
+def closed_freeway_edges(G, spec=None):
+    """List the (u, v, k) edge keys a freeway closure removes, without changing G.
+
+    Like closed_edges_in_zone, this is shared by the simulation and the figures so
+    the two can never disagree about what was closed.
+
+    `spec` is config.FREEWAY_CLOSURE, a dict:
+        ref         route as OSM tags it, e.g. 'I 205'          (required)
+        name        close a named structure, e.g. 'Abernethy Bridge'
+        center      (lat, lon) with radius_m, to close a stretch instead
+        radius_m    stretch half-length in meters, used with center
+        close_ramps close the on/off ramps stranded inside the closed stretch
+
+    Give either `name` or `center` + `radius_m`, not both. Selecting a named
+    structure is the honest way to model 'they closed the bridge', since OSM
+    already carries the structure name and no coordinate guessing is involved.
+    """
+    spec = config.FREEWAY_CLOSURE if spec is None else spec
+    ref = spec["ref"]
+    name = spec.get("name")
+    center = spec.get("center")
+    radius_m = spec.get("radius_m")
+    if (name is None) == (center is None):
+        raise ValueError("freeway closure needs exactly one of name / center")
+
+    mainline = freeway_mainline_edges(G, ref)
+    if not mainline:
+        raise ValueError(f"no highway=motorway edges found on route {ref!r}")
+
+    closed = []
+    for u, v, k in mainline:
+        d = G.edges[u, v, k]
+        if name is not None:
+            if any(str(n) == name for n in _as_tag_list(d.get("name"))):
+                closed.append((u, v, k))
+        else:
+            mid_lat = 0.5 * (float(G.nodes[u]["y"]) + float(G.nodes[v]["y"]))
+            mid_lon = 0.5 * (float(G.nodes[u]["x"]) + float(G.nodes[v]["x"]))
+            if _haversine_m(center[0], center[1], mid_lat, mid_lon) <= radius_m:
+                closed.append((u, v, k))
+    if not closed:
+        raise ValueError(f"freeway closure on {ref!r} selected no edges; "
+                         f"check the name/center against the graph")
+
+    if not spec.get("close_ramps", True):
+        return closed
+
+    # Ramps: a driver cannot enter a stretch of freeway that is shut, so the
+    # ramps INSIDE the closure go too. A node counts as inside only if every
+    # mainline edge touching it is closed. Nodes at the two ends still carry an
+    # open mainline edge, so they stay open and become the diversion points
+    # where traffic leaves the freeway. Without this rule the model would let
+    # cars ramp onto a closed freeway and sit on an unreachable segment.
+    closed_set = set(closed)
+    touched, still_open = set(), set()
+    for u, v, k in mainline:
+        touched.add(u)
+        touched.add(v)
+        if (u, v, k) not in closed_set:
+            still_open.add(u)
+            still_open.add(v)
+    interior = touched - still_open
+    return closed + _ramp_edges_at(G, interior)
+
+
+def apply_freeway_closure(G, spec=None):
+    """Remove a freeway stretch (and its stranded ramps) from G. Mutates G in
+    place and returns the removed (u, v, k) keys. Pass a copy of G if you need
+    the open network afterward."""
+    removed = closed_freeway_edges(G, spec)
+    G.remove_edges_from(removed)
+    return removed
+
+
 def prepare_network(G):
     """Give every edge a desired speed in m/s ('v0_mps'), a free-flow travel time
     ('travel_time_s'), and ensure a length. Each car uses its current segment's
