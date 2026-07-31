@@ -214,6 +214,26 @@ DEMAND_PROFILE = None          # None -> demand_data.hourly_demand_profile();
 DEMAND_PROFILE_START_HOUR = 0  # clock hour at simulation t=0 (0 = midnight, so a
                                # 24 h run walks the profile once, hour 0 to 23)
 
+# --- Left-turn pockets (Phase B1, REAL_DEMAND_UPGRADE_PLAN.md, Jul 31) ---
+# The named corridor mechanism behind the peak-hour ceiling: a left-turner today
+# waits in the through lane and DAMS it, so one car waiting for a gap stops every
+# car behind it. Real arterials solve this with a turn pocket -- a short dedicated
+# left-turn lane at the intersection. With this flag on, a car whose next route
+# edge is a left turn moves OUT of the through queue into a pocket queue once it
+# is within TURN_POCKET_LENGTH_M of the stop line, on segments OSM says have a
+# dedicated left lane (src/turn_lanes.py sidecar). The pocket holds a finite
+# number of cars; turners arriving at a full pocket stay in the through lane and
+# dam it exactly as before -- which is the real failure mode, not an edge case.
+# Requires MOBIL_ENABLED: pockets are a statement about lane identity, and only
+# the explicit-lane model has any (refused loudly otherwise, like green-wave
+# requiring Webster). Off by default; no committed number moves.
+TURN_POCKETS_ENABLED = False
+TURN_POCKET_LENGTH_M = 30.0   # a-priori storage length. AASHTO/NACTO practice for
+                              # an urban arterial left-turn bay is ~25-45 m; 30 m is
+                              # mid-range and NOT tuned to the held-out counts. At
+                              # VEHICLE_LENGTH_M + IDM_S0 = 7 m per queued car this
+                              # holds 4 cars, the capacity the kernel derives.
+
 # --- Multi-lane capacity experiment (lanes-experiment worktree, Jul 10) ---
 # The base model gives every directed segment ONE following lane, which caps a
 # signalized segment near 1,070 veh/hr, below Powell's real peak (see

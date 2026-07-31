@@ -41,6 +41,7 @@ import webster
 import landuse_data
 import lodes_od
 import demand_data
+import turn_lanes
 from checkpoint import save_checkpoint, load_checkpoint
 
 
@@ -865,7 +866,7 @@ def _veh_idm_accel(veh, leader, edge, L):
                             b_comf=idm["b_comf"], T=idm["T"], s0=idm["s0"])
 
 
-def _lane_queues(group, n_lanes, explicit):
+def _lane_queues(group, n_lanes, explicit, has_pocket=False):
     """Split one segment's cars (already sorted back-to-front by pos) into per-lane
     queues, each still sorted back-to-front, so a car's leader is simply the next
     entry in its own queue.
@@ -875,7 +876,19 @@ def _lane_queues(group, n_lanes, explicit):
     group[i + N] -- the follow-N-ahead rule, unchanged.
     explicit=True is Phase 3: each car carries its own veh["lane"], clamped
     defensively here in case a segment narrowed or a checkpoint predates the flag.
-    With N = 1 both produce the single queue [group], i.e. the base model."""
+    With N = 1 both produce the single queue [group], i.e. the base model.
+
+    has_pocket (Phase B1) adds ONE more queue for the cars sitting in this
+    segment's left-turn pocket (lane == POCKET_LANE). They are pulled out of the
+    through lanes first, which is the entire mechanism: a car in the pocket is no
+    longer any through car's leader, so it cannot dam the lane. With has_pocket
+    False -- every segment when TURN_POCKETS_ENABLED is off -- not one car
+    carries POCKET_LANE and this function is byte-for-byte the original."""
+    if has_pocket:
+        pocket = [veh for veh in group if veh.get("lane") == POCKET_LANE]
+        if pocket:
+            through = [veh for veh in group if veh.get("lane") != POCKET_LANE]
+            return _lane_queues(through, n_lanes, explicit) + [pocket]
     if n_lanes == 1:
         # the overwhelmingly common case, and the base model's only case: the whole
         # group is one queue. Returned as-is rather than sliced, because group[::1]
@@ -887,6 +900,19 @@ def _lane_queues(group, n_lanes, explicit):
     for veh in group:
         queues[min(veh.get("lane", 0), n_lanes - 1)].append(veh)
     return queues
+
+
+def _entry_lane(veh, n_next):
+    """The lane a crossing car will occupy on the next segment.
+
+    A car leaving a LEFT-TURN POCKET has just turned left, so it lands in the
+    new road's leftmost lane (index n_next - 1; lane 0 is rightmost here).
+    Every other car keeps its index, clamped if the new road is narrower. This
+    is also what decides which lane's rear the car must check for room, so the
+    two must agree -- hence one helper used by both."""
+    if veh.get("lane") == POCKET_LANE:
+        return n_next - 1
+    return min(veh.get("lane", 0), n_next - 1)
 
 
 def _next_segment_rear(next_group, n_next, veh_lane, explicit):
@@ -906,6 +932,113 @@ def _next_segment_rear(next_group, n_next, veh_lane, explicit):
                 return other
         return None
     return next_group[n_next - 1] if len(next_group) >= n_next else None
+
+
+def _edge_bearing(G, u, v):
+    """Compass bearing (degrees clockwise from north) of travel from u to v.
+    Same atan2(dx, dy) convention _approach_phase uses, kept un-folded to 180
+    here because a turn's DIRECTION (left vs right) needs the full circle."""
+    x1, y1 = float(G.nodes[u]["x"]), float(G.nodes[u]["y"])
+    x2, y2 = float(G.nodes[v]["x"]), float(G.nodes[v]["y"])
+    return math.degrees(math.atan2(x2 - x1, y2 - y1)) % 360
+
+
+def _is_left_turn(bearings, cur_key, next_key):
+    """Does travelling cur_key -> next_key turn LEFT?
+
+    Signed bearing change folded into (-180, 180]: positive is clockwise (a
+    right turn), negative counter-clockwise (a left). Anything beyond 45
+    degrees of straight-on counts as a turn, so the band for a left is
+    (-180, -45). A U-turn falls in that band deliberately: it queues in the
+    same pocket and blocks the same through lane."""
+    b_cur, b_next = bearings.get(cur_key), bearings.get(next_key)
+    if b_cur is None or b_next is None:
+        return False
+    delta = (b_next - b_cur + 540.0) % 360.0 - 180.0
+    return delta < -45.0
+
+
+def build_turn_pocket_context(G):
+    """Precompute the left-turn pocket pieces (config.TURN_POCKETS_ENABLED):
+    which segments have a dedicated left lane, how many cars one holds, and
+    every edge's bearing so a turn's direction can be read at run time.
+    Returns None when the flag is off, which leaves the kernel untouched.
+
+    Pockets are a claim about lane IDENTITY, and only the explicit-lane model
+    (MOBIL) has any -- under virtual lanes identity is queue rank mod N and
+    reshuffles every step, so a "pocket" there would be meaningless. Refused
+    loudly rather than silently modelled wrong, the same way green-wave refuses
+    to run without Webster.
+
+    The turn:lanes data is a SIDECAR keyed by OSM way id, not a graph
+    attribute: see src/turn_lanes.py for why (the cached graphs predate the tag
+    and must not be re-downloaded). A missing sidecar is an error, not an empty
+    pocket set -- silently running with zero pockets would look like a real
+    result showing pockets do nothing."""
+    if not config.TURN_POCKETS_ENABLED:
+        return None
+    if not config.MOBIL_ENABLED:
+        raise ValueError(
+            "TURN_POCKETS_ENABLED requires MOBIL_ENABLED: a turn pocket is a "
+            "dedicated LANE, and only the explicit-lane model gives cars a "
+            "lane identity to hold. Turn MOBIL_ENABLED on too, or turn "
+            "TURN_POCKETS_ENABLED off.")
+    sidecar = turn_lanes.load_sidecar()
+    if sidecar is None:
+        raise SystemExit(
+            f"TURN_POCKETS_ENABLED but no turn:lanes sidecar at "
+            f"{turn_lanes.sidecar_path()} -- build it with "
+            f"'python src/turn_lanes.py --build' (it fetches the OSM tag the "
+            f"cached graph never requested). Refusing to run with zero "
+            f"pockets, which would look like a result.")
+    pockets = turn_lanes.left_pocket_edges(G, sidecar)
+    # how many cars fit in the bay: storage length over the space one stopped
+    # car occupies (its own length plus the jam gap it keeps). At least 1 --
+    # a pocket that holds nobody is not a pocket.
+    per_car = config.VEHICLE_LENGTH_M + config.IDM_S0
+    capacity = max(1, int(config.TURN_POCKET_LENGTH_M // per_car))
+    bearings = {(u, v, k): _edge_bearing(G, u, v)
+                for u, v, k in G.edges(keys=True)}
+    print(f"  turn pockets ON: {len(pockets):,} of {G.number_of_edges():,} "
+          f"segments have a dedicated left lane, each holding {capacity} cars "
+          f"({config.TURN_POCKET_LENGTH_M:.0f} m / {per_car:.0f} m per car)")
+    return {"edges": pockets, "capacity": capacity,
+            "zone_m": config.TURN_POCKET_LENGTH_M, "bearings": bearings}
+
+
+def _pocket_pass(by_edge, pocket_ctx):
+    """Admit eligible left-turners into their segment's turn pocket.
+
+    Runs before the acceleration pass, on the frozen snapshot, like the MOBIL
+    lane pass. A car qualifies when it is on a segment that HAS a pocket, is
+    within the bay's storage length of the stop line, and its next route edge
+    is a left turn. Cars nearest the line are admitted first, and admission
+    stops when the bay is full: later turners stay in the through lane and dam
+    it, which is what really happens when a bay overflows. A car already in the
+    pocket stays there until it crosses."""
+    edges, capacity = pocket_ctx["edges"], pocket_ctx["capacity"]
+    zone, bearings = pocket_ctx["zone_m"], pocket_ctx["bearings"]
+    for key, group in by_edge.items():
+        if key not in edges:
+            continue
+        occupancy = sum(1 for veh in group if veh.get("lane") == POCKET_LANE)
+        if occupancy >= capacity:
+            continue
+        # group is sorted back-to-front, so reversed() walks from the stop line
+        # backwards -- the order cars actually reach the bay in
+        for veh in reversed(group):
+            if occupancy >= capacity:
+                break
+            edge = veh["route"][veh["idx"]]
+            if veh["pos"] < edge[3] - zone:
+                break          # this car is outside the bay, so are all behind it
+            if veh.get("lane") == POCKET_LANE:
+                continue       # already in it
+            if veh["idx"] + 1 >= len(veh["route"]):
+                continue       # ends its trip here: never blocks a turn lane
+            if _is_left_turn(bearings, edge[:3], veh["route"][veh["idx"] + 1][:3]):
+                veh["lane"] = POCKET_LANE
+                occupancy += 1
 
 
 def _mobil_lane_pass(by_edge, mobil_ctx, L):
@@ -936,6 +1069,14 @@ def _mobil_lane_pass(by_edge, mobil_ctx, L):
         n_lanes = lane_counts.get(key, 1)
         if n_lanes < 2:
             continue                            # nowhere to go: single-file segment
+        # cars already in a turn pocket are out of the through traffic and are
+        # committed to their turn: MOBIL neither moves them nor sees them as
+        # neighbours. With pockets off no car carries POCKET_LANE, so this is a
+        # no-op filter and the pass is unchanged.
+        if any(veh.get("lane") == POCKET_LANE for veh in group):
+            group = [veh for veh in group if veh.get("lane") != POCKET_LANE]
+            if not group:
+                continue
         edge = group[0]["route"][group[0]["idx"]]     # one segment, one geometry
         queues = _lane_queues(group, n_lanes, explicit=True)
         for lane_idx, queue in enumerate(queues):
@@ -973,6 +1114,11 @@ def _mobil_lane_pass(by_edge, mobil_ctx, L):
                     decisions.append((veh, best_lane))
     return decisions
 
+
+# Sentinel lane index for a car sitting in a left-turn pocket (Phase B1). Real
+# lanes are 0..n-1 with 0 rightmost, so a negative index can never collide with
+# one, and with TURN_POCKETS_ENABLED off no vehicle ever carries it.
+POCKET_LANE = -1
 
 HOUR_MODES = (None, False, "network", "segments")
 
@@ -1118,7 +1264,7 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
                   fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None,
                   speed_stats=None, stuck_stats=None, profile_ctx=None,
-                  stuck_by_hour=None):
+                  stuck_by_hour=None, pocket_ctx=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -1221,6 +1367,11 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     if explicit:
         for veh, new_lane in _mobil_lane_pass(by_edge, mobil_ctx, L):
             veh["lane"] = new_lane
+    # 0b) Turn pockets: admit left-turners into the bay AFTER lane changes, so a
+    # car that just merged left can still enter it this step, and so MOBIL never
+    # sees a pocket car as a lane-change candidate (it filters them out itself).
+    if pocket_ctx is not None:
+        _pocket_pass(by_edge, pocket_ctx)
 
     # 1) compute accelerations from the frozen snapshot
     accel = {}
@@ -1231,7 +1382,8 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         # per-lane queues below turn the leader into "the next car in my queue",
         # and with N = 1 both are the single-file base model.
         n_here = lane_counts.get(key, 1) if lane_counts else 1
-        for queue in _lane_queues(group, n_here, explicit):
+        has_pocket = pocket_ctx is not None and key in pocket_ctx["edges"]
+        for queue in _lane_queues(group, n_here, explicit, has_pocket):
             for i, veh in enumerate(queue):
                 edge = veh["route"][veh["idx"]]
                 # per-vehicle IDM params if this car is heterogeneous, else the base
@@ -1361,7 +1513,7 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 veh_idm = veh.get("idm")
                 s0_here = veh_idm["s0"] if veh_idm else config.IDM_S0
                 rear = (_next_segment_rear(next_group, n_next,
-                                           veh.get("lane", 0), explicit)
+                                           _entry_lane(veh, n_next), explicit)
                         if next_group else None)
                 if rear is not None and rear["pos"] < L + s0_here:
                     veh["pos"], veh["v"] = edge[3], 0.0
@@ -1378,9 +1530,11 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                     # highest lane that exists if the new road is narrower (a car
                     # leaving a 3-lane arterial for a 1-lane street ends up in
                     # lane 0). The choice of which lane to enter is deliberately
-                    # simple; a fuller model would pick the emptiest.
+                    # simple; a fuller model would pick the emptiest. A car
+                    # leaving a turn pocket lands in the new road's leftmost lane
+                    # and so drops POCKET_LANE here -- the bay is per-segment.
                     n_new = lane_counts.get(veh["route"][veh["idx"]][:3], 1)
-                    veh["lane"] = min(veh.get("lane", 0), n_new - 1)
+                    veh["lane"] = _entry_lane(veh, n_new)
             else:
                 # reached the destination. Demand profile: a car finishing while
                 # the fleet is over this hour's quota PARKS instead of
@@ -1434,6 +1588,7 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
     mobil_ctx = build_mobil_context(G)              # mirror run_simulation's lane setup
     if mobil_ctx is not None:
         lanes = None
+    pocket_ctx = build_turn_pocket_context(G)       # same physics as the real run
     nox_coeffs = emissions.active_coeffs()
     fleet_ctx = build_fleet_context()
     driver_ctx = build_driver_context()
@@ -1456,7 +1611,7 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
         step_vehicles(vehicles, config.DT, step * config.DT, seg_tot, seg_nox, thru,
                       nox_coeffs, G, nodes, wrng, signals, demand, through,
                       fleet_ctx=fleet_ctx, driver_ctx=driver_ctx, lanes=lanes,
-                      mobil_ctx=mobil_ctx)
+                      mobil_ctx=mobil_ctx, pocket_ctx=pocket_ctx)
 
     window_s = max(warmup_steps - half, 1) * config.DT
     flows = {}
@@ -1529,6 +1684,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     mobil_ctx = build_mobil_context(G)         # explicit per-car lanes (or None)
     if mobil_ctx is not None:
         lanes = None       # mutually exclusive: MOBIL owns the lane counts instead
+    pocket_ctx = build_turn_pocket_context(G)  # left-turn bays (or None)
     if verbose:
         src = "OSM-tagged" if signals["tagged"] else "degree>=4 fallback"
         print(f"{len(signals['nodes'])} signalized intersections ({src})")
@@ -1670,7 +1826,8 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                       signals, demand, through, fleet_ctx=fleet_ctx,
                       driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx,
                       speed_stats=speed_stats, stuck_stats=stuck_stats,
-                      profile_ctx=profile_ctx, stuck_by_hour=stuck_by_hour)
+                      profile_ctx=profile_ctx, stuck_by_hour=stuck_by_hour,
+                      pocket_ctx=pocket_ctx)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)

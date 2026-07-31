@@ -124,6 +124,55 @@ B1. Turn pockets / dedicated turn lanes. THE named corridor mechanism: a
     Expected effect: directly attacks the ~1,570 ceiling AND the
     side-street choke (Division/Chavez jams began at the turn interface).
 
+    B1 STATUS (Jul 31): MECHANISM BUILT AND GATED, off by default; no
+    experiment run yet (that is a deliberate run decision, and the metro
+    sidecar below has to be built first).
+    - DATA (B1a, src/turn_lanes.py): the plan assumed OSM turn:lanes was in
+      the graph. It is NOT -- zero turn-ish attributes on BOTH cached graphs.
+      Cause is OSMnx's default useful_tags_way, which never requests the tag,
+      not missing OSM data (an 800 m probe with it requested found 10 of 33
+      Powell edges carrying one). Re-downloading would break graph identity
+      (graph_metro20k_orca.graphml is the graph behind every Jul 29-31
+      number), so the tag is fetched separately into a SIDECAR keyed by OSM
+      way id and joined by osmid. Corridor sidecar built: 163 of 2,838 edges
+      joined, 131 with a dedicated left lane, 32 of 71 Powell edges.
+      A 'left' token is a pocket; 'left;through' is NOT (a turner there still
+      dams the lane). CAVEAT, loud: 64 of the 163 are merged-osmid edges
+      under an any-way rule that can only ADD pockets, biasing B1 toward more
+      relief -- state the pocket count with any B1 result.
+    - MECHANISM (B1b, generate.py): TURN_POCKETS_ENABLED puts eligible
+      left-turners in a sentinel lane (POCKET_LANE = -1) once within
+      TURN_POCKET_LENGTH_M (30 m a-priori, = 4 cars at 7 m each) of the stop
+      line, so they leave the through queue entirely and stop being anyone's
+      leader. Bay full -> later turners stay in-lane and dam it, the real
+      failure mode. Requires MOBIL (pockets are a claim about lane identity;
+      refused loudly otherwise, like green-wave requiring Webster). A missing
+      sidecar is refused too, rather than running with zero pockets and
+      looking like a result -- this fired for real during the smoke.
+    - WHAT ACTUALLY DAMS THE LANE, worth knowing before reading any B1
+      result: this kernel has no opposing-traffic gap acceptance, so a
+      left-turner onto a CLEAR street just goes and blocks nobody. Turners
+      dam the lane when their DESTINATION is full -- which is exactly the
+      corridor diagnosis ("turners into jammed side streets dam their Powell
+      lane"), so B1 attacks the mechanism that was actually diagnosed. But it
+      means B1's effect is bounded by how often turn destinations are
+      congested, and the permitted-left conflict is B2's job, not B1's.
+    - Gates: src/turn_pocket_scenarios.py 5/5 on a hand-built four-way
+      intersection (jammed left destination: 0 of 4 through cars pass without
+      a bay, 4 of 4 with it; overflow admits exactly the hand-computed 4
+      nearest the line and the rest still dam; bearings read W->C->N left,
+      ->E straight, ->S right; a trip ENDING at the node is never admitted;
+      flag-off inertness; the no-MOBIL refusal). All eleven suites green,
+      kernel_regression bit-identical. End-to-end on the real corridor graph
+      with the real sidecar: 48 distinct pocketed segments used, peak 6 cars
+      in bays, and zero cars in a bay on a segment without one.
+    - TO RUN THE EXPERIMENT: build the METRO sidecar first (a 20 km fetch,
+      `python src/turn_lanes.py --build --graph
+      data/network/graph_metro20k_orca.graphml`), and give it its own harness
+      the way the ablation got one. Do NOT add an arm to
+      metro_calibrated_experiment.ARMS: build_jobs indexes SLURM array tasks
+      by arm order, so inserting one renumbers the 48 existing jobs.
+
 B2. Protected left-turn phases. Two-phase Webster serves EW/NS only;
     permitted lefts across opposing flow are effectively free today
     (unmodeled conflict) yet still dam their lane. Extend the Webster plan
