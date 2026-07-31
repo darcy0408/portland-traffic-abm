@@ -191,15 +191,30 @@ def near_readout(near_km=2.0):
     """
     import pandas as pd
 
+    # Geometry and names as a frame indexed like the results, so the per-seed
+    # work below is vectorized. Row-by-row it would be ~2.5M iterrows plus a
+    # haversine each, which costs minutes per readout for no reason.
     G = ox.load_graphml(os.path.join(config.NETWORK_DIR, "graph.graphml"))
-    mid, name = {}, {}
+    recs = []
     for u, v, k, d in G.edges(keys=True, data=True):
-        mid[(u, v, k)] = (0.5 * (float(G.nodes[u]["y"]) + float(G.nodes[v]["y"])),
-                          0.5 * (float(G.nodes[u]["x"]) + float(G.nodes[v]["x"])))
         nm = d.get("name")
         if isinstance(nm, list):
             nm = nm[0] if nm else None
-        name[(u, v, k)] = str(nm) if nm else "(unnamed)"
+        recs.append((u, v, k,
+                     0.5 * (float(G.nodes[u]["y"]) + float(G.nodes[v]["y"])),
+                     0.5 * (float(G.nodes[u]["x"]) + float(G.nodes[v]["x"])),
+                     str(nm) if nm else "(unnamed)"))
+    geo = pd.DataFrame(recs, columns=["u", "v", "key", "lat", "lon", "name"]) \
+            .set_index(["u", "v", "key"])
+
+    def haversine_np(lat0, lon0, lat, lon):
+        """Vectorized great-circle distance in km, same formula as
+        generate._haversine_m so the two agree."""
+        r = 6_371_000.0
+        p1, p2 = np.radians(lat0), np.radians(lat)
+        dp, dl = np.radians(lat - lat0), np.radians(lon - lon0)
+        a = np.sin(dp / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dl / 2) ** 2
+        return 2 * r * np.arcsin(np.sqrt(a)) / 1000.0
 
     def seg(arm, seed):
         p = os.path.join(config.PROCESSED_DIR,
@@ -218,24 +233,18 @@ def near_readout(near_km=2.0):
             used += 1
             j = o.join(c, how="left", lsuffix="_o", rsuffix="_c").fillna(0.0)
             j["d"] = j.nox_g_c - j.nox_g_o
+            j = j.join(geo, how="inner")
             with open(summary_path(arm, s)) as fh:
-                removed = {tuple(e) for e in json.load(fh)["removed"]}
-            lat = [mid[e][0] for e in removed if e in mid]
-            lon = [mid[e][1] for e in removed if e in mid]
-            clat, clon = sum(lat) / len(lat), sum(lon) / len(lon)
+                removed = [tuple(e) for e in json.load(fh)["removed"]]
+            rem_geo = geo.loc[geo.index.intersection(removed)]
+            clat, clon = rem_geo.lat.mean(), rem_geo.lon.mean()
 
-            agg = {}
-            for idx, row in j.iterrows():
-                if idx in removed or idx not in mid:
-                    continue
-                if generate._haversine_m(clat, clon, *mid[idx]) / 1000.0 > near_km:
-                    continue
-                a = agg.setdefault(name[idx], [0.0, 0.0])
-                a[0] += row.d
-                a[1] += row.nox_g_o
-            for nm, (d, base) in agg.items():
-                if base > 0:
-                    per_seed.setdefault(nm, []).append(100.0 * d / base)
+            j["km"] = haversine_np(clat, clon, j.lat.values, j.lon.values)
+            near = j[(j.km <= near_km) & (~j.index.isin(set(removed)))]
+            g = near.groupby("name").agg(d=("d", "sum"), base=("nox_g_o", "sum"))
+            g = g[g.base > 0]
+            for nm, row in g.iterrows():
+                per_seed.setdefault(nm, []).append(100.0 * row.d / row.base)
 
         print(f"\n{'=' * 72}\n{arm.upper()} near field (<={near_km:.0f} km), "
               f"{used} paired seeds\n{'=' * 72}")
