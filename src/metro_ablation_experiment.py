@@ -106,6 +106,8 @@ def readout():
     for path in glob.glob(os.path.join(config.PROCESSED_DIR, "aba_*_summary.json")):
         with open(path) as f:
             s = json.load(f)
+        if "smoke" in s["name"]:
+            continue
         rows.setdefault(s["arm"], []).append(s)
     for path in glob.glob(os.path.join(config.PROCESSED_DIR,
                                        f"metrocal_*_n{DEMAND}_*_summary.json")):
