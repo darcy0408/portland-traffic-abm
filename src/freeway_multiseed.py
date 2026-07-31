@@ -180,12 +180,88 @@ def readout():
               f"n={len(d)} seeds)")
 
 
+def near_readout(near_km=2.0):
+    """Same unanimity test, applied to the NEAR-FIELD streets.
+
+    The route readout above answers the far-field diversion question from the
+    small summaries. This one answers "are the headline street numbers stable
+    across seeds", which needs the per-segment parquets (pull them from the
+    cluster into data/processed first). Single-seed street percentages like
+    "+459% on McLoughlin" are worth nothing until they survive this.
+    """
+    import pandas as pd
+
+    G = ox.load_graphml(os.path.join(config.NETWORK_DIR, "graph.graphml"))
+    mid, name = {}, {}
+    for u, v, k, d in G.edges(keys=True, data=True):
+        mid[(u, v, k)] = (0.5 * (float(G.nodes[u]["y"]) + float(G.nodes[v]["y"])),
+                          0.5 * (float(G.nodes[u]["x"]) + float(G.nodes[v]["x"])))
+        nm = d.get("name")
+        if isinstance(nm, list):
+            nm = nm[0] if nm else None
+        name[(u, v, k)] = str(nm) if nm else "(unnamed)"
+
+    def seg(arm, seed):
+        p = os.path.join(config.PROCESSED_DIR,
+                         f"{run_name(arm, seed)}_segments.parquet")
+        if not os.path.exists(p):
+            return None
+        return pd.read_parquet(p).set_index(["u", "v", "key"])
+
+    for arm in ("abernethy", "powell"):
+        per_seed = {}      # street -> list of per-seed percent changes
+        used = 0
+        for s in SEEDS:
+            o, c = seg("open", s), seg(arm, s)
+            if o is None or c is None:
+                continue
+            used += 1
+            j = o.join(c, how="left", lsuffix="_o", rsuffix="_c").fillna(0.0)
+            j["d"] = j.nox_g_c - j.nox_g_o
+            with open(summary_path(arm, s)) as fh:
+                removed = {tuple(e) for e in json.load(fh)["removed"]}
+            lat = [mid[e][0] for e in removed if e in mid]
+            lon = [mid[e][1] for e in removed if e in mid]
+            clat, clon = sum(lat) / len(lat), sum(lon) / len(lon)
+
+            agg = {}
+            for idx, row in j.iterrows():
+                if idx in removed or idx not in mid:
+                    continue
+                if generate._haversine_m(clat, clon, *mid[idx]) / 1000.0 > near_km:
+                    continue
+                a = agg.setdefault(name[idx], [0.0, 0.0])
+                a[0] += row.d
+                a[1] += row.nox_g_o
+            for nm, (d, base) in agg.items():
+                if base > 0:
+                    per_seed.setdefault(nm, []).append(100.0 * d / base)
+
+        print(f"\n{'=' * 72}\n{arm.upper()} near field (<={near_km:.0f} km), "
+              f"{used} paired seeds\n{'=' * 72}")
+        if used < 2:
+            print("  need the parquets for at least 2 paired seeds")
+            continue
+        rows = [(nm, np.mean(v), np.std(v, ddof=1) if len(v) > 1 else 0.0, len(v))
+                for nm, v in per_seed.items() if len(v) == used]
+        print(f"{'street':44s} {'mean %':>9s} {'sd %':>8s} {'seeds':>6s}  verdict")
+        for nm, m, sd, n in sorted(rows, key=lambda r: -abs(r[1]))[:15]:
+            vals = per_seed[nm]
+            unanimous = all(x > 0 for x in vals) or all(x < 0 for x in vals)
+            t = abs(m) / (sd / np.sqrt(n)) if sd > 0 else float("inf")
+            verdict = ("SUPPORTED" if unanimous and t > 3
+                       else "weak" if unanimous else "NOT SUPPORTED")
+            print(f"{nm[:44]:44s} {m:+9.1f} {sd:8.1f} {n:6d}  {verdict}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", type=int)
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--count", action="store_true")
     ap.add_argument("--readout", action="store_true")
+    ap.add_argument("--near-readout", action="store_true",
+                    help="near-field street stability; needs the parquets")
     args = ap.parse_args()
 
     if args.count:
@@ -194,6 +270,8 @@ def main():
         for i, (arm, seed) in enumerate(tasks()):
             done = "done" if os.path.exists(summary_path(arm, seed)) else ""
             print(f"{i:3d}  {arm:10s} seed {seed:<5d} {done}")
+    elif args.near_readout:
+        near_readout()
     elif args.readout:
         readout()
     elif args.task is not None:
