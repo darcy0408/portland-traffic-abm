@@ -244,23 +244,38 @@ def near_readout(near_km=2.0):
             g = near.groupby("name").agg(d=("d", "sum"), base=("nox_g_o", "sum"))
             g = g[g.base > 0]
             for nm, row in g.iterrows():
-                per_seed.setdefault(nm, []).append(100.0 * row.d / row.base)
+                per_seed.setdefault(nm, []).append((row.d, row.base))
 
         print(f"\n{'=' * 72}\n{arm.upper()} near field (<={near_km:.0f} km), "
               f"{used} paired seeds\n{'=' * 72}")
         if used < 2:
             print("  need the parquets for at least 2 paired seeds")
             continue
-        rows = [(nm, np.mean(v), np.std(v, ddof=1) if len(v) > 1 else 0.0, len(v))
-                for nm, v in per_seed.items() if len(v) == used]
-        print(f"{'street':44s} {'mean %':>9s} {'sd %':>8s} {'seeds':>6s}  verdict")
-        for nm, m, sd, n in sorted(rows, key=lambda r: -abs(r[1]))[:15]:
-            vals = per_seed[nm]
-            unanimous = all(x > 0 for x in vals) or all(x < 0 for x in vals)
+        # Rank by GRAMS moved, not percent. Percent ranking puts tiny streets
+        # whose baseline is near zero at the top (a dead-end going from 0.01 g
+        # to 0.5 g is +4,900%) and buries the arterials that actually carry the
+        # detour. Percent is still shown, because it is what makes the result
+        # legible, but it is not what decides importance.
+        f = config.F_NO2
+        rows = []
+        for nm, v in per_seed.items():
+            if len(v) != used:
+                continue
+            dg = np.array([x[0] for x in v]) * f
+            base = np.array([x[1] for x in v]) * f
+            pct = 100.0 * dg / np.where(base > 0, base, np.nan)
+            rows.append((nm, dg.mean(),
+                         dg.std(ddof=1) if len(dg) > 1 else 0.0,
+                         float(np.nanmean(pct)), int((dg > 0).sum()), len(dg)))
+        print(f"{'street':34s} {'mean g':>9s} {'sd g':>8s} {'mean %':>9s} "
+              f"{'signs':>6s}  verdict")
+        for nm, m, sd, pct, pos, n in sorted(rows, key=lambda r: -abs(r[1]))[:15]:
+            unanimous = pos == n or pos == 0
             t = abs(m) / (sd / np.sqrt(n)) if sd > 0 else float("inf")
             verdict = ("SUPPORTED" if unanimous and t > 3
                        else "weak" if unanimous else "NOT SUPPORTED")
-            print(f"{nm[:44]:44s} {m:+9.1f} {sd:8.1f} {n:6d}  {verdict}")
+            print(f"{nm[:34]:34s} {m:+9.1f} {sd:8.1f} {pct:+8.1f}% "
+                  f"{pos:3d}/{n:<2d}  {verdict} (t={t:.1f})")
 
 
 def main():
