@@ -234,6 +234,46 @@ TURN_POCKET_LENGTH_M = 30.0   # a-priori storage length. AASHTO/NACTO practice f
                               # VEHICLE_LENGTH_M + IDM_S0 = 7 m per queued car this
                               # holds 4 cars, the capacity the kernel derives.
 
+# --- Non-work demand composition (Phase B3, REAL_DEMAND_UPGRADE_PLAN.md, Aug 1) ---
+# LODES is WORK trips only, and the gravity model's destinations are total jobs --
+# so today every local trip in the model is a commute. Real weekday driving is
+# mostly NOT commuting: NHTS 2022 Table 8-2 (weekday, network-calculated) puts
+# work trips (incl. work-related business) at 36.0% of vehicle trips and non-work
+# at 64.0%. With this flag on, that share of local trips instead draws origins by
+# population and destinations by CONSUMER-FACING job density (retail, health care,
+# entertainment, food service, personal services -- the WAC sector columns in the
+# same LODES file already cached), with a SHORTER distance decay: NHTS 2022 Table
+# 3-5 has shopping at 5.8 mi and errands at 8.7 mi vs work at 13.5 mi, a
+# trip-weighted ratio of 0.54, hence 800 m vs the work layer's 1500 m. Expected
+# effect: loads Powell's retail frontage the way real ADT does (the WHERE
+# counterpart to A1's WHEN). All three knobs are a-priori national NHTS numbers,
+# NEVER fit to the held-out PBOT counts or the ODOT band. Known simplification,
+# stated out loud: social/recreational trips (14.0 mi average, often ending at
+# private homes) are approximated by the same retail attractor and short decay,
+# so the long social-rec tail is not reproduced; a knob for the mentor's
+# calibration gate, not retuned here. Off by default: no committed number moves.
+DEMAND_NONWORK_ENABLED = False
+NONWORK_TRIP_SHARE = 0.64      # NHTS 2022 Table 8-2: weekday non-work share of
+                               # vehicle trips (weekend is 0.87 -- a future
+                               # weekend-demand lever, not used here). At the 7 am
+                               # peak commutes are still under half of all trips
+                               # (NHTS 2022 Fig 8-1 text), so the daily share is
+                               # not wildly wrong even for a peak-hour run.
+NONWORK_DECAY_SCALE_M = 800.0  # 0.54 x GRAVITY_DECAY_SCALE_M (1500), from the
+                               # NHTS 2022 Table 3-5 shopping/errands-to-work
+                               # trip-length ratio (7.3 mi / 13.5 mi).
+NONWORK_WAC_SECTORS = ("CNS07",   # Retail Trade (NAICS 44-45)
+                       "CNS16",   # Health Care and Social Assistance (62)
+                       "CNS17",   # Arts, Entertainment, and Recreation (71)
+                       "CNS18",   # Accommodation and Food Services (72)
+                       "CNS19")   # Other Services: repair, personal care (81)
+                               # The consumer-facing sectors of the LODES WAC file
+                               # (or_wac_*.csv.gz, already cached for total jobs):
+                               # where shopping, errand, meal, and appointment
+                               # trips actually end. Office/industrial sectors are
+                               # deliberately excluded -- they attract commutes,
+                               # which the work layer already carries.
+
 # --- Multi-lane capacity experiment (lanes-experiment worktree, Jul 10) ---
 # The base model gives every directed segment ONE following lane, which caps a
 # signalized segment near 1,070 veh/hr, below Powell's real peak (see

@@ -119,6 +119,42 @@ def _load_jobs(year, force=False):
     return jobs.rename(columns={"C000": "jobs"})
 
 
+def _load_service_jobs(year, sectors, force=False):
+    """Consumer-facing service jobs per block group, for the NON-WORK demand layer
+    (Phase B3). Reads the SAME cached WAC file as _load_jobs -- the download always
+    contained every NAICS sector column (CNS01..CNS20); _load_jobs just never asked
+    for more than the C000 total -- and sums the consumer-facing sectors named in
+    config.NONWORK_WAC_SECTORS. Returns bg_geoid (12-char), service_jobs."""
+    url = LODES_WAC_URL.format(year=year)
+    path = _download(url, os.path.join(config.RAW_DIR, f"or_wac_{year}.csv.gz"), force)
+    cols = list(sectors)
+    wac = pd.read_csv(path, usecols=["w_geocode"] + cols, dtype={"w_geocode": str})
+    wac["bg_geoid"] = wac["w_geocode"].str[:12]      # block -> block group
+    wac["service_jobs"] = wac[cols].sum(axis=1)
+    return wac.groupby("bg_geoid", as_index=False)["service_jobs"].sum()
+
+
+def service_landuse_table(year=None, radius_m=None, force=False, sectors=None):
+    """One row per block group near the study center: bg_geoid, lat, lon,
+    population, service_jobs -- the non-work counterpart of landuse_table.
+    Deliberately a SEPARATE function: landuse_table's output (and the
+    landuse_bg.parquet written from it) is the committed work-demand input and
+    must not change shape underneath its existing consumers."""
+    year = config.LODES_YEAR if year is None else year
+    radius_m = config.STUDY_RADIUS_M if radius_m is None else radius_m
+    sectors = config.NONWORK_WAC_SECTORS if sectors is None else sectors
+
+    pop = _load_population(force)
+    svc = _load_service_jobs(year, sectors, force)
+    df = pop.merge(svc, on="bg_geoid", how="left")
+    df["service_jobs"] = df["service_jobs"].fillna(0.0)
+
+    lat0, lon0 = config.STUDY_CENTER
+    df["dist_m"] = _haversine_m(lat0, lon0, df["lat"].to_numpy(), df["lon"].to_numpy())
+    near = df[df["dist_m"] <= radius_m].drop(columns="dist_m").reset_index(drop=True)
+    return near
+
+
 def _haversine_m(lat1, lon1, lat2, lon2):
     """Great-circle distance in meters between scalar lat1/lon1 and array lat2/lon2."""
     r = 6_371_000.0

@@ -172,6 +172,15 @@ B1. Turn pockets / dedicated turn lanes. THE named corridor mechanism: a
       the way the ablation got one. Do NOT add an arm to
       metro_calibrated_experiment.ARMS: build_jobs indexes SLURM array tasks
       by arm order, so inserting one renumbers the 48 existing jobs.
+      METRO SIDECAR STATUS (Aug 1): BUILT on the local machine
+      (data/network/turn_lanes_20000m.json): 13,807 tagged ways; joined onto
+      graph_metro20k_orca.graphml it reaches 8,646 of 159,425 edges (5.4%),
+      6,686 with a dedicated left pocket; Powell 173 of 468 edges tagged, 156
+      with a pocket. CAVEAT, louder at this scale: 5,317 of the 8,646 tagged
+      edges (61%, vs the corridor's 39%) are merged-osmid edges under the
+      any-way rule that can only ADD pockets -- a metro B1 result is even more
+      of an upper bound than a corridor one. data/ is gitignored, so Orca
+      needs the sidecar scp'd just like the PORTAL csv.
 
 B2. Protected left-turn phases. Two-phase Webster serves EW/NS only;
     permitted lefts across opposing flow are effectively free today
@@ -189,6 +198,54 @@ B3. Non-commute demand composition. LODES is work trips only; most real
     sanity (non-work trips shorter on average — NHTS says ~half the length).
     Expected effect: loads Powell's retail frontage the way real ADT does;
     may matter as much as B1 for WHERE the cars are.
+
+    B3 STATUS (Aug 1): SHIPPED, gated, off by default. The three knobs are
+    pinned to NHTS 2022 Summary of Travel Trends numbers, all a-priori,
+    never fit to the held-out counts:
+    - NONWORK_TRIP_SHARE = 0.64 from Table 8-2's WEEKDAY vehicle-trip split
+      (work incl. work-related business 36.0% / non-work 64.0%) -- weekday,
+      deliberately, because every citable run is one; the same table's
+      weekend split (13/87) is the ready-made lever for the future
+      weekend-demand work. At the 7 am peak commutes are still under half
+      of all trips (Fig 8-1), so the share is not wildly wrong at peak.
+    - Destinations: consumer-facing WAC sectors CNS07/16/17/18/19 (retail,
+      health, entertainment, food, personal services), 292,928 jobs across
+      the 1,003 metro block groups, summed from the SAME cached
+      or_wac_2021.csv.gz the total-jobs load reads (no new download, no new
+      vintage). Origins stay resident population.
+    - NONWORK_DECAY_SCALE_M = 800: Table 3-5 network-calculated lengths,
+      shopping 5.8 mi + errands 8.7 mi trip-weighted = 7.3 mi = 0.54 x
+      work's 13.5 mi, times the work layer's 1500 m.
+    Mechanism: the layer rides INSIDE the demand dict (demand["nonwork"],
+    attached by build_demand_weights), so every consumer -- run_simulation,
+    the Webster measured-flows pre-pass, the harnesses -- sees the same trip
+    mix, and signals are timed to the composition they serve. The
+    share-of-local-trips draw sits before the OD/gravity branch in
+    make_vehicle with a share>0 guard, so share=0.0 consumes ZERO extra RNG
+    draws. Missing/empty/degenerate service table, share outside [0,1], or
+    the flag over a None work layer all REFUSE loudly (turn-pocket
+    precedent), never fall back silently.
+    Gates: src/nonwork_scenarios.py 4/4 -- (A) share 0.0 bitwise identical
+    to no-layer INCLUDING final RNG state, with 562 respawns exercised, and
+    share 1.0 with all service mass hand-placed on one node sends every
+    trip there; (B) Voronoi origin/dest weights on a hand 3-BG/4-node case
+    match hand values exactly, zero-service BGs contribute zero weight, and
+    all five refusals fire; (C) real corridor graph + real Census/WAC
+    masses: non-work trips route SHORTER than work trips (1,387 m vs
+    1,771 m, ratio 0.78 -- direction right; the 1.5 km window truncates
+    both arms toward each other, so 0.54 is not expected at corridor
+    scale); (D) 200 seeded (o, d) pairs identical across two independent
+    builds. All eleven prior suites re-run green, kernel_regression
+    bit-identical.
+    Honest limitation, stated in config: social/recreational trips (14.0 mi
+    average, often ending at private homes) are approximated by the same
+    retail attractor and short decay; the long social-rec tail is not
+    reproduced. A knob for the mentor's calibration gate.
+    NOT DONE: no experiment run. The natural first read is the metro
+    peak-hour arm with the flag on vs the committed metrocal arm -- where
+    do the cars land (Powell retail frontage vs office corridors), and does
+    the count agreement move. Needs its own RUN_NAMEs; nothing on disk is
+    touched.
 
 B4. (Only if B1–B3 leave a gap) Saturation-flow calibration: IDM T=1.5 s
     implies ~1,900 veh/h/lane free-flow — close to the standard 1,900
