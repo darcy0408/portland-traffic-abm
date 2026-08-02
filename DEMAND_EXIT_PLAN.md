@@ -85,12 +85,22 @@ inventing one here would be a second unreviewed mechanism riding along.
 
 **Weights — the part that must not be invented.** Rerouting on the same
 free-flow `travel_time_s` the spawn used would send the car down the same
-blocked path, so the weight has to see congestion. It uses the standard Bureau
-of Public Roads volume-delay function, t = t0 * (1 + a(v/c)^b) with the
-universally cited a = 0.15, b = 4. Those are a-priori published constants, not
-fitted. Occupancy v/c is computed from state the step already has (cars per
-edge from `by_edge`) over a jam capacity derived from existing config
-(`VEHICLE_LENGTH_M`, `IDM_S0`, lane counts) — so C1 adds no new capacity knob.
+blocked path, so the weight has to see congestion. Link cost is free-flow time
+plus **deterministic queueing delay**: `t = travel_time_s + n_cars * IDM_T /
+lanes`, i.e. how long the queue ahead takes to discharge at saturation headway.
+This introduces NO new constant — the saturation headway IS `config.IDM_T`, the
+same time gap the car-following model already enforces, so the router's estimate
+and the kernel's own physics cannot disagree about how fast a queue drains.
+
+> **Rejected: the BPR function.** The first draft used the Bureau of Public
+> Roads volume-delay curve, t = t0(1 + 0.15(v/c)^4), on the grounds that its
+> constants are famously a-priori. That was a category error and the gate caught
+> it. BPR's v/c is an **hourly flow** ratio from static assignment; applying it
+> to instantaneous queue occupancy is not the same quantity. Measured: at 90%
+> jam occupancy BPR returns a **1.10x** penalty, so a fully blocked link still
+> looks essentially free and no driver ever diverts. Queueing delay charges the
+> same link ~3.7x. Recorded here because "the constants are published" is not by
+> itself a reason a function is the right one.
 
 **Throttle.** `REROUTE_MAX_PER_STEP` caps how many vehicles re-plan per step,
 longest-stuck first, ties broken by vehicle id (deterministic). This is a
@@ -138,3 +148,57 @@ computes the quota-aware verdict. The question: does the evening still freeze?
 Cost must be MEASURED before any 24-hour submission: time one simulated hour
 locally with the flag on and off and record the ratio here, the way the SLURM
 resources for B1xB3 and F6 were measured rather than guessed.
+
+COST MEASURED (Aug 2, corridor graph, 1,500 vehicles, 1,800 steps, seed 42,
+each arm in its OWN process so first-run setup caching cannot skew it -- a
+first attempt that reused one process reported the flag-on arm as 3x FASTER,
+which was pure cache artifact):
+
+| arm | wall | stuck veh-h | re-plans |
+|-----|------|-------------|----------|
+| REROUTE_ENABLED=False | 10.3 s | 490.3 | -- |
+| REROUTE_ENABLED=True  | 13.4 s | 369.5 | 2,903 (0 found no path) |
+
+So C1 costs about **+30% wall time** at a cap of 20 re-plans/step. Budget metro
+SLURM time accordingly: the ablation's 1:01-1:56 per metro hour implies roughly
+1:20-2:30 with C1 on, still inside a 4 h request.
+
+The 24.6% stuck-time drop in that table is SUGGESTIVE ONLY and must not be
+quoted as a result: one seed, corridor scale, half a simulated hour, and the
+corridor is exactly the scale the Jul 28 diagnosis declared exhausted. Its only
+legitimate use here is as proof the mechanism fires often enough (2,903
+re-plans) that the cost measurement is meaningful. The real test is the A2
+profiled pair at metro scale.
+
+## C1 STATUS (Aug 2)
+
+MECHANISM BUILT AND GATED, off by default; no experiment run, and no committed
+or cited number moves. Branch `experiment/demand-exit`, worktree
+`C:\dev\pta-exit`, commit `52c6cfe`.
+
+- `config.REROUTE_ENABLED` plus `REROUTE_STUCK_S` (120 s), `REROUTE_COOLDOWN_S`
+  (300 s) and `REROUTE_MAX_PER_STEP` (20, a COMPUTE budget and labeled as one).
+- `generate.build_reroute_context` / `_reroute_pass`, wired into
+  `step_vehicles` as pass 0c (after the pocket pass, before accelerations) and
+  into `run_simulation`. The continuously-stuck timer `veh["stuck_s"]` is only
+  tracked when the flag is on, so flag-off neither pays for it nor carries the
+  key.
+- Gates `src/reroute_scenarios.py` 6/6; all twelve prior suites green;
+  `kernel_regression.py` bit-identical.
+
+WEAKEST LINK, state it with any C1 result: `REROUTE_STUCK_S = 120 s` is the
+softest constant in the phase. Unlike IDM_T (kernel physics) or the NHTS shares
+(a published table), it is a judgement about driver patience with no direct
+source. It is NOT fit to the held-out counts, and it deserves a sensitivity
+sweep before any number leaves this branch.
+
+TWO KNOWN LIMITATIONS of the mechanism as built:
+- The re-plan starts from the node the car is HEADING TOWARD, so a car already
+  committed to the blocked link cannot divert -- correct (no U-turn), but it
+  means C1's relief is bounded by how many cars are still upstream of a fork
+  when they lose patience. Verified as real behavior in gate B, not a bug.
+- Every driver re-plans on perfect, instantaneous knowledge of current
+  occupancy network-wide. That is the optimistic end of the information
+  spectrum; real drivers have partial information. So C1 measures an UPPER
+  BOUND on what rerouting can relieve, the same way the merged-osmid rule made
+  B1 an upper bound.
