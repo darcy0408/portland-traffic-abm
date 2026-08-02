@@ -136,8 +136,11 @@ def check():
         ok = False
 
     # the profiled day arms need the real PORTAL curve; without it they fall
-    # back to a synthetic shape, which would silently not be the A2 comparison
-    portal = os.path.join(config.DATA_DIR, "portal_powell_sample.csv")
+    # back to a synthetic shape, which would silently not be the A2 comparison.
+    # Ask demand_data for the path it will actually read rather than rebuilding
+    # it here, so this check cannot drift from the loader it is checking.
+    import demand_data
+    portal = os.path.abspath(demand_data._DEFAULT_CSV)
     if os.path.exists(portal):
         print(f"  ok       PORTAL hourly curve: {portal}")
     else:
