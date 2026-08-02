@@ -108,6 +108,28 @@ A2. Re-run the two day jobs WITH the profile (Orca, same harness, new
     Still to build when the runs land: the readout that reads the four hourly
     arrays and answers the PM-peak-vs-AM-peak question.
 
+    A2 RESULT (Aug 2, Orca array 117428, 4/4 COMPLETED, seed 42 only --
+    qualitative under the standing day-run caveat; readout is
+    src/day_readout.py): THE DAY-SCALE QUESTION ANSWERS NEGATIVE. No arm
+    meets the PM-stuck ~= AM-stuck criterion. Flat arms are saturated from
+    hour 0 (no peak exists to recover from). Profiled arms start genuinely
+    free-flowing (overnight stuck 0.04-0.06x quota) and seize anyway: by h23
+    prof/base holds 9,591 stuck veh-h against a quota of 2,876 (3.3x) and
+    prof/realism 13,455 (4.7x), both frozen at exact integers for the last
+    3-6 hours, i.e. total deadlock. MECHANISM, now measured not hypothesized:
+    A1 can only shed vehicles when trips COMPLETE, gridlock stops
+    completions, so the fleet cannot ebb -- the congestion the profile
+    relieves is what disables the relief. Realism buys a better morning and
+    a worse night in BOTH regimes (crossover h9 flat / h12 profiled, ends
+    5-8% worse on whole-day stuck); Powell under realism is starved, not
+    flowing (0.0 stuck from h16 while the network freezes) -- "relocates the
+    jam" confirmed at hourly resolution. The flat pair reproduces the Jul 29
+    day runs bit-identically on all six totals, proving the bucketing inert.
+    The honest headline is weaker than the fallback claim: NEITHER a demand
+    profile NOR the realism stack makes day-scale run. What a day needs is
+    an exit for stuck demand (trip abandonment / rerouting / parking
+    timeout), which no built phase provides.
+
 A3. Only after A2 stabilizes: the week run Christof asked about (7×86,400
     steps, checkpointed, long partition — ~3-5 days wall on current rates).
 
@@ -280,6 +302,35 @@ B1 x B3 HARNESS (Aug 1): BUILT and smoke-proved, not submitted.
     TO SUBMIT (after the A2 day array frees the queue): scp the harness is not
     needed (it is committed), but data/ is gitignored -- the metro sidecar was
     scp'd Aug 1 and is already in place.
+
+    B1xB3 RESULT (Aug 2, Orca array 117559, 24/24 COMPLETED, ~2.5 h/task;
+    band readout `--readout`, count agreement src/b13_count_agreement.py):
+    A DOUBLE NULL/NEGATIVE, both read against the pre-registered measures.
+    - B1 (pockets): NULL on both measures. Busiest Powell +2 +/- 2 veh/hr
+      paired vs control (1,406 vs 1,404, both IN BAND), stuck -18 +/- 29,
+      count agreement +0.000 +/- 0.001 (5/8 seeds up). Read as
+      pre-registered: at in-band metro flow there are not enough congested
+      turn destinations for pockets to matter, and the 61% merged-osmid
+      caveat means even this null is an upper bound. The mechanism that
+      could still matter is B2's opposing-flow conflict, not bay capacity.
+    - B3 (nonwork): NEGATIVE as parameterized. Busiest Powell falls OUT of
+      the band, 1,404 -> 889 (-515 +/- 38 paired); network stuck improves
+      14% (-585 +/- 139); and on its OWN payoff measure -- Spearman vs the
+      held-out counts on the metro graph, throughput, geometry snap, 372
+      matched segments -- it does NOT improve: control +0.621 +/- 0.015,
+      nonwork -0.010 +/- 0.012 paired (2/8 seeds up). Diverting 64% of
+      local trips to short service runs takes through-flow off Powell
+      without putting cars anywhere the counts like better.
+    - both ~= nonwork on everything (pockets add nothing on the B3
+      background either).
+    First metro-scale count rho ever computed, so the control's +0.621 is
+    itself a new (unledgered) number; corridor 0.51/0.59 is a different
+    graph and matched set, do not compare across.
+    CONSEQUENCE for the plan: the realism stack with work-only LODES demand
+    remains the best configuration on every measure. B3's NHTS knobs are
+    NOT retuned quietly (calibration-gate rule); the a-priori composition
+    is simply reported as not helping. The open levers are B2 and the
+    day-scale demand-exit problem A2 exposed.
 
 B4. (Only if B1–B3 leave a gap) Saturation-flow calibration: IDM T=1.5 s
     implies ~1,900 veh/h/lane free-flow — close to the standard 1,900
