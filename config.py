@@ -234,6 +234,54 @@ TURN_POCKET_LENGTH_M = 30.0   # a-priori storage length. AASHTO/NACTO practice f
                               # VEHICLE_LENGTH_M + IDM_S0 = 7 m per queued car this
                               # holds 4 cars, the capacity the kernel derives.
 
+# --- En-route rerouting (Phase C1, DEMAND_EXIT_PLAN.md, Aug 2) ---
+# The structural gap Phase A2 measured: a vehicle can leave this network ONLY by
+# reaching its destination (respawn, or park under the demand profile). When the
+# network gridlocks, completions stop, so nothing leaves and the fleet freezes --
+# A2's profiled arms held 9,591 and 13,455 stuck vehicle-hours at exact integers
+# for hours while the PORTAL curve asked for 2,876 active cars. Routes are planned
+# ONCE at spawn against free-flow travel times and never revised, so every car
+# queues for a path that stopped being good long ago.
+# With this flag on, a vehicle stuck (below STUCK_SPEED_KMH, the same threshold the
+# stuck measurement uses) for REROUTE_STUCK_S seconds re-plans from the node it is
+# heading toward to its UNCHANGED destination, on congestion-aware weights. It
+# keeps its id, destination, emission class, IDM parameters and position, and it is
+# never removed -- rerouting conserves total demand and moves only its spatial
+# distribution, which is what separates it from trip abandonment (C2, unbuilt on
+# purpose: a mechanism that deletes stuck cars would flatter the stuck-time metric
+# by construction). Off by default; no committed number moves.
+REROUTE_ENABLED = False
+REROUTE_STUCK_S = 120.0       # how long a car tolerates being stuck before seeking
+                              # an alternative. A-priori and admittedly the softest
+                              # constant here: navigation apps re-plan within a
+                              # minute or two of detecting delay, and 2 minutes is a
+                              # plausible unaided-driver patience. NOT fit to the
+                              # held-out counts; treat as a sensitivity knob and say
+                              # so with any C1 result.
+REROUTE_COOLDOWN_S = 300.0    # a car that just re-planned does not re-plan again for
+                              # this long. Without it a still-stuck car would call
+                              # Dijkstra every step and thrash between two paths.
+REROUTE_MAX_PER_STEP = 20     # COMPUTE BUDGET, NOT PHYSICS -- label it as such in any
+                              # result. In the A2 freeze essentially every vehicle is
+                              # stuck and would qualify, so an uncapped pass would
+                              # re-plan ~13,000 routes per step. Longest-stuck first,
+                              # ties by vehicle id, so the choice stays deterministic.
+# Congested link cost = free-flow time + deterministic queueing delay,
+#   t = travel_time_s + (cars on the link) * IDM_T / lanes,
+# i.e. how long the queue ahead takes to discharge at saturation headway. This is
+# the standard point-queue delay of dynamic traffic assignment, and it introduces
+# NO new constant: the saturation headway IS config.IDM_T, the same time gap the
+# car-following model already enforces, so the router's estimate and the kernel's
+# own physics cannot disagree about how fast a queue drains.
+#
+# Deliberately NOT the BPR function t = t0*(1 + 0.15*(v/c)^4), despite BPR's
+# constants being famously a-priori: BPR's v/c is an HOURLY FLOW ratio from static
+# assignment, and applying it to instantaneous queue occupancy is a category
+# error. Measured here on the C1 gate: at 90% jam occupancy BPR returns a 1.10x
+# penalty, so a fully blocked link still looks essentially free and no driver
+# ever diverts. Queueing delay charges that same link ~3.7x, which is the
+# behavior a re-plan needs.
+
 # --- Non-work demand composition (Phase B3, REAL_DEMAND_UPGRADE_PLAN.md, Aug 1) ---
 # LODES is WORK trips only, and the gravity model's destinations are total jobs --
 # so today every local trip in the model is a commute. Real weekday driving is

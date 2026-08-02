@@ -1098,6 +1098,127 @@ def build_turn_pocket_context(G):
             "zone_m": config.TURN_POCKET_LENGTH_M, "bearings": bearings}
 
 
+def build_reroute_context(G):
+    """Precompute the en-route rerouting pieces (config.REROUTE_ENABLED).
+
+    Phase C1, DEMAND_EXIT_PLAN.md. Routes are planned once at spawn against
+    free-flow travel_time_s and never revised, so a car queues for a path that
+    stopped being good long ago -- and because a vehicle can leave this network
+    only by REACHING its destination, a jam that stops completions freezes the
+    fleet (measured: Phase A2). Rerouting gives the path a way to change while
+    conserving total demand; it never removes a vehicle (that is C2, unbuilt on
+    purpose).
+
+    Returns None when the flag is off, which leaves the kernel untouched.
+
+    The context holds the per-edge free-flow time and jam capacity that the BPR
+    weights need, both derived from data already on the graph and from existing
+    config -- C1 introduces no capacity knob of its own."""
+    if not config.REROUTE_ENABLED:
+        return None
+    if config.REROUTE_STUCK_S <= 0:
+        raise ValueError("REROUTE_STUCK_S must be positive: a non-positive "
+                         "trigger would reroute every car every step")
+    if config.REROUTE_MAX_PER_STEP < 1:
+        raise ValueError("REROUTE_MAX_PER_STEP must be at least 1, or turn "
+                         "REROUTE_ENABLED off")
+    if config.REROUTE_COOLDOWN_S < config.DT:
+        raise ValueError("REROUTE_COOLDOWN_S shorter than one step would let a "
+                         "car re-plan every step and thrash between paths")
+    t0, headway = {}, {}
+    for u, v, k, d in G.edges(keys=True, data=True):
+        key = (u, v, k)
+        t0[key] = float(d.get("travel_time_s", 0.0)) or 1e-6
+        lanes_here = max(1, int(d.get("n_lanes", 1) or 1))
+        # seconds of queue-discharge delay each car ahead costs: saturation
+        # headway shared across the lanes that discharge in parallel
+        headway[key] = config.IDM_T / lanes_here
+    print(f"  en-route rerouting ON: stuck {config.REROUTE_STUCK_S:.0f} s triggers "
+          f"a re-plan, <= {config.REROUTE_MAX_PER_STEP} cars/step "
+          f"(compute budget, not physics), cooldown "
+          f"{config.REROUTE_COOLDOWN_S:.0f} s, queue delay at "
+          f"{config.IDM_T:.1f} s saturation headway")
+    return {"t0": t0, "headway": headway, "n_reroutes": 0, "n_failed": 0}
+
+
+def _reroute_pass(vehicles, by_edge, reroute_ctx, G, t):
+    """Re-plan the worst-stuck vehicles onto congestion-aware shortest paths.
+
+    Runs from the frozen snapshot like every other pass. Deterministic: the
+    candidate order is (longest stuck, then vehicle id), and nothing here draws
+    a random number -- which is what lets the flag-off gate prove bitwise
+    identity INCLUDING the final RNG state.
+
+    A candidate is a car below the stuck speed for at least REROUTE_STUCK_S
+    (tracked on veh["stuck_s"], accumulated in the move pass) whose cooldown has
+    expired. It re-plans from the node it is HEADING TOWARD -- not from where it
+    sits -- because this kernel has no U-turn and inventing one here would smuggle
+    in a second unreviewed mechanism. Its destination, id, class and IDM
+    parameters are untouched, and it is never removed from `vehicles`.
+
+    Edge weights are free-flow time plus deterministic queueing delay on the
+    current occupancy, so the re-plan sees the jam that free-flow weights cannot.
+    The saturation headway is config.IDM_T -- the same gap the car-following
+    model enforces -- so nothing here is fitted (see config for why this is not
+    the BPR function).
+    """
+    trigger = config.REROUTE_STUCK_S
+    cands = [v for v in vehicles
+             if v.get("stuck_s", 0.0) >= trigger
+             and t - v.get("reroute_t", -1e18) >= config.REROUTE_COOLDOWN_S
+             # a car on its final edge has nothing left to re-plan
+             and v["idx"] + 1 < len(v["route"])]
+    if not cands:
+        return
+    # longest-stuck first; vehicle id breaks ties so the cap is deterministic
+    cands.sort(key=lambda v: (-v["stuck_s"], v["id"]))
+    del cands[config.REROUTE_MAX_PER_STEP:]
+
+    occ = {key: len(group) for key, group in by_edge.items()}
+    t0, headway = reroute_ctx["t0"], reroute_ctx["headway"]
+
+    def congested(u, v, d):
+        """Link cost from u to v: free-flow time plus the time the queue ahead
+        takes to discharge at saturation headway.
+
+        G is a MultiDiGraph, and networkx hands a CALLABLE weight the whole
+        parallel-edge dict {key: attrs}, not one edge's attrs -- so this takes
+        the best parallel edge, matching what networkx does itself for a string
+        weight (min over parallel edges). Reading it as a single attrs dict
+        would silently weight every edge wrong."""
+        best = None
+        for k, attrs in d.items():
+            key = (u, v, k)
+            base = t0.get(key) or float(attrs.get("travel_time_s", 0.0)) or 1e-6
+            val = base + occ.get(key, 0) * headway.get(key, config.IDM_T)
+            if best is None or val < best:
+                best = val
+        return best if best is not None else 1e-6
+
+    for veh in cands:
+        here = veh["route"][veh["idx"]][1]      # node this car is heading toward
+        dest = veh["route"][-1][1]              # unchanged destination
+        veh["reroute_t"] = t                    # cooldown starts on the ATTEMPT,
+                                                # so a car with no alternative does
+                                                # not retry Dijkstra every step
+        if here == dest:
+            continue
+        try:
+            path = nx.shortest_path(G, here, dest, weight=congested)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            reroute_ctx["n_failed"] += 1
+            continue                            # leave the car exactly as it was
+        if len(path) < 2:
+            continue
+        tail = [_edge_between(G, path[i], path[i + 1])
+                for i in range(len(path) - 1)]
+        # splice behind the CURRENT edge: idx and pos stay valid, so the car does
+        # not teleport and keeps the progress it already made on this segment
+        veh["route"] = veh["route"][:veh["idx"] + 1] + tail
+        veh["stuck_s"] = 0.0                    # it has a new plan; patience resets
+        reroute_ctx["n_reroutes"] += 1
+
+
 def _pocket_pass(by_edge, pocket_ctx):
     """Admit eligible left-turners into their segment's turn pocket.
 
@@ -1380,7 +1501,7 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
                   fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None,
                   speed_stats=None, stuck_stats=None, profile_ctx=None,
-                  stuck_by_hour=None, pocket_ctx=None):
+                  stuck_by_hour=None, pocket_ctx=None, reroute_ctx=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -1442,6 +1563,14 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     only as fast as trips actually finish -- the honest physics of an ebbing
     rush hour. With profile_ctx=None (the default) this function is untouched.
 
+    En-route rerouting (`reroute_ctx`, config.REROUTE_ENABLED): a car below the
+    stuck speed for config.REROUTE_STUCK_S seconds re-plans its remaining route
+    to its UNCHANGED destination on BPR congestion weights, keeping its id,
+    position, class and IDM parameters. Total demand is conserved -- rerouting
+    moves cars, it never removes them (that is C2, deliberately unbuilt). The
+    pass draws no random numbers, so reroute_ctx=None is bitwise the base model
+    including the final RNG state.
+
     Stuck-time hour buckets (`stuck_by_hour`, needs stuck_stats): None/False
     off; "network" also credits each stuck vehicle-second to its ELAPSED hour
     in stuck_stats["hour_sum"]; "segments" additionally credits it per segment
@@ -1488,6 +1617,12 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     # sees a pocket car as a lane-change candidate (it filters them out itself).
     if pocket_ctx is not None:
         _pocket_pass(by_edge, pocket_ctx)
+    # 0c) En-route rerouting: re-plan the worst-stuck cars from the same frozen
+    # snapshot, BEFORE accelerations are computed, so a car that gets a new path
+    # this step is already braking for the right next segment. Runs after the
+    # pocket pass because a rerouted car's turn may no longer be a left.
+    if reroute_ctx is not None:
+        _reroute_pass(vehicles, by_edge, reroute_ctx, G, t)
 
     # 1) compute accelerations from the frozen snapshot
     accel = {}
@@ -1550,6 +1685,11 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     # 2) move everyone, credit the segment they travelled on, advance routes
     # stuck threshold in m/s, converted once per step, not once per vehicle
     stuck_v = config.STUCK_SPEED_KMH / 3.6 if stuck_stats is not None else 0.0
+    # Reroute trigger threshold: deliberately the SAME stuck speed the A2
+    # measurement uses, so "cars counted as stuck" and "cars that reroute" can
+    # never drift apart. Derived independently of stuck_stats, because rerouting
+    # has to work whether or not this run happens to be measuring stuck time.
+    reroute_v = config.STUCK_SPEED_KMH / 3.6 if reroute_ctx is not None else 0.0
     # stuck-time hour bucket for this step: ELAPSED hour since t=0, deliberately
     # NOT the wrapped clock hour, so a multi-day run shows day-over-day
     # ratcheting instead of averaging it away (the A2 question is whether stuck
@@ -1565,6 +1705,14 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         v_avg = 0.5 * (v_old + v_new)
         veh["pos"] += v_avg * dt                       # trapezoidal step
         veh["v"] = v_new
+
+        # CONTINUOUSLY-stuck time, the reroute trigger: any movement above the
+        # threshold resets it, so a car that inches forward and re-jams starts
+        # its patience over. Only tracked when rerouting is on, so the flag-off
+        # kernel neither pays for it nor carries the key.
+        if reroute_ctx is not None:
+            veh["stuck_s"] = (veh.get("stuck_s", 0.0) + dt) if v_avg < reroute_v \
+                else 0.0
 
         edge_key = veh["route"][veh["idx"]][:3]
         # credit this segment with one vehicle-second of activity (a raw exposure
@@ -1669,6 +1817,11 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                                      fleet_ctx, driver_ctx)
                 if fresh is not None:
                     veh.update(fresh)
+                    # a fresh trip starts with fresh patience: `fresh` carries no
+                    # stuck_s key, so without this the new trip would inherit the
+                    # old one's accumulated stuck time and could reroute instantly
+                    if reroute_ctx is not None:
+                        veh["stuck_s"] = 0.0
                     if explicit:
                         # fresh carries no lane key, so without this the car would
                         # keep a stale index from the route it just finished
@@ -1801,6 +1954,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     if mobil_ctx is not None:
         lanes = None       # mutually exclusive: MOBIL owns the lane counts instead
     pocket_ctx = build_turn_pocket_context(G)  # left-turn bays (or None)
+    reroute_ctx = build_reroute_context(G)     # en-route re-planning (or None)
     if verbose:
         src = "OSM-tagged" if signals["tagged"] else "degree>=4 fallback"
         print(f"{len(signals['nodes'])} signalized intersections ({src})")
@@ -1943,7 +2097,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                       driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx,
                       speed_stats=speed_stats, stuck_stats=stuck_stats,
                       profile_ctx=profile_ctx, stuck_by_hour=stuck_by_hour,
-                      pocket_ctx=pocket_ctx)
+                      pocket_ctx=pocket_ctx, reroute_ctx=reroute_ctx)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -1955,6 +2109,11 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         rate = (max(len(vehicles), 1) * done) / elapsed if elapsed > 0 else float("inf")
         print(f"{len(vehicles):>5} vehicles x {n_steps} steps "
               f"in {elapsed:6.2f}s  ({rate:>10,.0f} vehicle-steps/s)")
+        if reroute_ctx is not None:
+            # report the failures too: a run where most re-plans found no path
+            # is a very different story from one where they all succeeded
+            print(f"  re-plans: {reroute_ctx['n_reroutes']:,} succeeded, "
+                  f"{reroute_ctx['n_failed']:,} found no path")
     return segment_totals, segment_nox, segment_throughput
 
 
