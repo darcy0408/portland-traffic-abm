@@ -24,6 +24,19 @@ partial failure is safe.
     python src/freeway_multiseed.py --list         # show the task table
     python src/freeway_multiseed.py --task 7       # run one task
     python src/freeway_multiseed.py --readout      # analyze saved summaries
+
+F6 (--realism): the original campaign ran the BASE model with the whole
+realism stack off, while the ablation shows lane-changing is what reaches real
+Powell volume -- so its absolute grams are understated (ledger flag F6; the
+paired DIRECTION is unaffected). --realism reruns the same 24 tasks with the
+Jul 29 realism stack on, under the prefix fwmsr so the base campaign's files
+can never be overwritten. Modeling note: Webster's seeded warmup times the
+signals to the flows of the graph each run actually serves, so in the closed
+arms the signals are timed to the CLOSED network -- the result models the
+adapted state, not day one of a surprise closure.
+
+    python src/freeway_multiseed.py --realism --task 7
+    python src/freeway_multiseed.py --realism --readout
 """
 import argparse
 import json
@@ -39,12 +52,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config          # noqa: E402
 import generate        # noqa: E402
 from freeway_runs import SCENARIOS  # noqa: E402  (the verified closure specs)
+import metro_calibrated_experiment as mce  # noqa: E402  (the realism stack)
 
 # the project's pinned seed set, reused so this campaign is comparable with the
 # lane and ablation experiments rather than introducing a new set
 SEEDS = (42, 7, 13, 99, 314, 777, 2024, 8)
 ARMS = ("open", "abernethy", "powell")
-PREFIX = "fwms"
+PREFIX = "fwms"          # base campaign; --realism switches this to "fwmsr"
+
+# The realism-stack flags, referenced from metro_calibrated_experiment rather
+# than retyped so this campaign and the metrocal/ablation experiments can never
+# drift apart (the same rule metro_b13_experiment follows). All-True dict:
+# MOBIL, driver heterogeneity, Webster, green-wave.
+REALISM_FLAGS = dict(mce.ARMS["realism"])
+STACK_REALISM = False    # set by --realism in main(), before any dispatch
 
 # routes whose mainline totals are tracked per run. I-5 is the diversion
 # hypothesis; I-205 is the closed route itself (the sanity check that it drops);
@@ -81,6 +102,12 @@ def run_task(idx):
     config.RANDOM_SEED = seed
     config.RUN_NAME = run_name(arm, seed)
 
+    # F6: set every stack flag EXPLICITLY, True or False, following run_one's
+    # precedent in metro_calibrated_experiment -- a task must never inherit
+    # these from a config default or a reused interpreter.
+    for k in REALISM_FLAGS:
+        setattr(config, k, STACK_REALISM)
+
     removed = []
     if arm != "open":
         removed = generate.apply_freeway_closure(G, SCENARIOS[arm])
@@ -103,6 +130,7 @@ def run_task(idx):
                        for u, v, k in keys}
     rec = {
         "arm": arm, "seed": seed,
+        "stack": "realism" if STACK_REALISM else "base",
         "n_vehicles": config.N_VEHICLES, "n_steps": config.N_STEPS,
         "removed": [[u, v, k] for u, v, k in removed],
         "network_nox_g": float(sum(nox.values())),
@@ -141,7 +169,16 @@ def readout():
         if os.path.exists(p):
             with open(p) as f:
                 summaries[(arm, seed)] = json.load(f)
+    # a summary written under the wrong prefix would silently mix campaigns;
+    # the stack field (absent = the pre-F6 base campaign) makes that fatal
+    want = "realism" if STACK_REALISM else "base"
+    for (arm, seed), s in summaries.items():
+        got = s.get("stack", "base")
+        if got != want:
+            raise SystemExit(f"{summary_path(arm, seed)} records stack={got} "
+                             f"but this readout is for {want}; wrong file")
     have = {a: sum(1 for (arm, _) in summaries if arm == a) for a in ARMS}
+    print(f"stack: {want}")
     print(f"summaries found: " +
           ", ".join(f"{a} {have[a]}/{len(SEEDS)}" for a in ARMS))
     if have["open"] < 2:
@@ -286,7 +323,14 @@ def main():
     ap.add_argument("--readout", action="store_true")
     ap.add_argument("--near-readout", action="store_true",
                     help="near-field street stability; needs the parquets")
+    ap.add_argument("--realism", action="store_true",
+                    help="F6: run/read the realism-stack campaign (fwmsr)")
     args = ap.parse_args()
+
+    if args.realism:
+        global PREFIX, STACK_REALISM
+        PREFIX = "fwmsr"
+        STACK_REALISM = True
 
     if args.count:
         print(len(tasks()))
