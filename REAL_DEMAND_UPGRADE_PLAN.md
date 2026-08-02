@@ -247,6 +247,40 @@ B3. Non-commute demand composition. LODES is work trips only; most real
     the count agreement move. Needs its own RUN_NAMEs; nothing on disk is
     touched.
 
+B1 x B3 HARNESS (Aug 1): BUILT and smoke-proved, not submitted.
+    `src/metro_b13_experiment.py` + `orca/job_b13.sh`. A 2x2 factorial on top
+    of the FULL realism stack (B1 requires MOBIL, and the Jul 31 ablation
+    showed lane-changing is what reaches the band at all), 3 new arms x the
+    same 8 pinned seeds = 24 one-hour jobs at n=16,500:
+      pockets / nonwork / both.
+    The CONTROL is not re-run -- metrocal_realism_n16500_s* (Jul 29, same
+    graph, demand, seeds, steps, both flags off) is joined from disk, which is
+    legitimate ONLY because both features are proved bitwise inert when off
+    (turn_pocket + nonwork gates, kernel_regression). Readout verified against
+    it: control reads 1,404 +/- 42 veh/hr IN BAND, matching ledger ABL6
+    exactly, so the join is right.
+    Readout reports PAIRED per-seed deltas as well as arm means -- the seeds
+    are shared, and the closure work already learned that unpaired single-seed
+    diffs jitter enough to swamp a small effect.
+    `--check` verifies all four prerequisites (metro-radius sidecar, WAC
+    service-jobs file, metro graph, 8 control summaries) in one second before
+    any cluster time is spent. `--smoke` runs all three arms in ONE process and
+    ASSERTS no flag leaked between them (run_one's complement-off loop is
+    supposed to prevent that; the smoke now proves it did).
+    Smoke finding worth knowing before reading the real result: at 120 vehicles
+    on the uncongested corridor graph, the `nonwork` and `both` arms are
+    numerically identical -- turn pockets are inert without congestion, exactly
+    as the mechanism says (turners dam a lane only when their DESTINATION is
+    full). B1 can only show an effect where the network is actually jammed,
+    which is why this must run at metro scale and why a null B1 result would
+    need to be read as "not enough congested turn destinations", not "pockets
+    do not matter".
+    SLURM resources are measured, not guessed: 4 h / 16G, from ablation job
+    115208 (same graph, same demand, same one hour) running 1:01-1:56 at 16G.
+    TO SUBMIT (after the A2 day array frees the queue): scp the harness is not
+    needed (it is committed), but data/ is gitignored -- the metro sidecar was
+    scp'd Aug 1 and is already in place.
+
 B4. (Only if B1–B3 leave a gap) Saturation-flow calibration: IDM T=1.5 s
     implies ~1,900 veh/h/lane free-flow — close to the standard 1,900
     PCU/h/lane, so headway is probably NOT the binder; check before
