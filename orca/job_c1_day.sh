@@ -25,4 +25,4 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 # system-python venv, not the spack modules (they SIGILL on the login node)
 source .venv/bin/activate
-python src/metro_c1_experiment.py --day-task "$SLURM_ARRAY_TASK_ID"
+python -u src/metro_c1_experiment.py --day-task "$SLURM_ARRAY_TASK_ID"
