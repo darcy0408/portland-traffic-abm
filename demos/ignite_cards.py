@@ -230,6 +230,80 @@ def beat14_moved(net_pct):
     return _save(fig, "ignite_beat14.png")
 
 
+def beat08_scale(G):
+    """Beat 8. Scale and real data: the trips are measured, not invented.
+
+    Counts are read off the loaded graph rather than quoted, so the card cannot
+    drift from the network the runs actually used (ledger R3 / M20 config).
+    """
+    fig, ax = _canvas()
+    ax.text(0.5, 0.88, "And the trips are not invented.",
+            ha="center", va="center", color=INK, fontsize=40)
+
+    # Rounded on purpose. Nobody hears "159,410" in a 15-second window, and an
+    # exact count invites precision the audience cannot use. The exact values are
+    # in the chapter; here the magnitude is the message. Rounding is derived from
+    # the live graph so it still cannot drift.
+    n_seg = int(round(G.number_of_edges(), -3))
+    stats = [
+        (f"{config.STUDY_RADIUS_M // 1000} km", "across, the\nwhole metro"),
+        (f"{n_seg // 1000}k", "street\nsegments"),
+        (f"{config.N_VEHICLES:,}", "simulated\nvehicles"),
+        ("531k", "real commuter\njourneys"),
+    ]
+    for i, (big, small) in enumerate(stats):
+        x = 0.13 + i * 0.246
+        ax.text(x, 0.575, big, ha="center", va="center", color=ACCENT,
+                fontsize=42, fontweight="bold", linespacing=1.1)
+        ax.text(x, 0.415, small, ha="center", va="center", color=INK,
+                fontsize=18, linespacing=1.5)
+
+    ax.text(0.5, 0.255,
+            "The journeys come from federal commute records: where people in this\n"
+            "area actually live and where they actually work.",
+            ha="center", va="center", color=MUTED, fontsize=19, linespacing=1.7)
+    ax.text(0.5, 0.075,
+            "US Census LEHD LODES home-to-work flows  ·  OpenStreetMap network  ·  "
+            "HBEFA emission factors",
+            ha="center", va="center", color="#5c6672", fontsize=13)
+    return _save(fig, "ignite_beat08.png")
+
+
+def beat18_failures():
+    """Beat 18. The two honest failures, merged onto one slide.
+
+    Ledger M20.10/M20.11/M20.12 for the season result and M20.16 for the fleet.
+    The season line must never claim a winter LIFT: the apparent one (M20.6) was
+    an artifact of a biased baseline and is retired.
+    """
+    fig, ax = _canvas()
+    ax.text(0.5, 0.89, "Two things that did not work.",
+            ha="center", va="center", color=INK, fontsize=40)
+
+    ax.text(0.06, 0.68, "1", color=WARN, fontsize=64, fontweight="bold",
+            ha="left", va="center")
+    ax.text(0.12, 0.685, "It only helps in summer.",
+            color=INK, fontsize=27, ha="left", va="center")
+    ax.text(0.12, 0.565,
+            "In winter, home heating adds pollution my traffic model knows nothing\n"
+            "about, and my method adds nothing at all. I think that is the right answer.",
+            color=MUTED, fontsize=17, ha="left", va="center", linespacing=1.7)
+
+    ax.text(0.06, 0.36, "2", color=WARN, fontsize=64, fontweight="bold",
+            ha="left", va="center")
+    ax.text(0.12, 0.365, "My numbers were four times too high.",
+            color=INK, fontsize=27, ha="left", va="center")
+    ax.text(0.12, 0.245,
+            "I had made every car a diesel. Fixing the fleet cut emissions from 39.1 to\n"
+            "9.2 grams per vehicle-hour. The scale changed; the ranking of streets did not.",
+            color=MUTED, fontsize=17, ha="left", va="center", linespacing=1.7)
+
+    ax.text(0.5, 0.075,
+            "Both found by checking my own work against measurements I had held back.",
+            ha="center", va="center", color="#5c6672", fontsize=14)
+    return _save(fig, "ignite_beat18.png")
+
+
 def network_totals():
     """Whole-network NO2 per seed, open vs closed, as a percent change."""
     pcts = []
@@ -252,8 +326,10 @@ def main():
     G = ox.load_graphml(os.path.join(config.NETWORK_DIR, "graph.graphml"))
     beat01_title(G)
     beat02_monitors(G)
+    beat08_scale(G)
     beat13_number()
     beat14_moved(network_totals())
+    beat18_failures()
 
 
 if __name__ == "__main__":
