@@ -202,3 +202,65 @@ TWO KNOWN LIMITATIONS of the mechanism as built:
   spectrum; real drivers have partial information. So C1 measures an UPPER
   BOUND on what rerouting can relieve, the same way the merged-osmid rule made
   B1 an upper bound.
+
+## C1 HOUR RESULT (Aug 3) — band NOT wrecked; and a throughput finding
+
+SLURM array 117852, 16/16 COMPLETED, read with `--readout --deep`. Paired
+against the Jul 29 `metrocal_{base,realism}_n16500_s*` controls on the 8 shared
+seeds. Provenance checked on all 32 runs: each parquet's NOx total matches its
+own summary to under 1 g, so no pair can be a mis-join (the `_network_row`
+refusal fires if it ever is).
+
+**The gate question passes.** Busiest Powell, real ODOT band 1,400-1,745 veh/hr:
+
+| arm | control | C1 | paired delta | in band per seed |
+|-----|---------|-----|--------------|------------------|
+| realism | 1,404 +/- 42 | **1,439 +/- 46** | +34 +/- 14, 8/8 up | control 4/8 -> C1 6/8 |
+| base | 884 +/- 41 | 979 +/- 29 | +95 +/- 32, 8/8 up | 0/8 -> 0/8 |
+
+Rerouting does not push the realism arm out of band; per-seed membership
+improves. **The day result will therefore be interpretable.**
+
+**The hour arm also carries more than the regression check it was designed as.**
+Fleet vehicle-seconds are identical across arms to the digit (59,400,000 =
+16,500 x 3,600), fixed by construction, so every line below is an EFFICIENCY
+difference and not a demand difference. Realism arm, paired over 8 seeds:
+
+| measure | change | seeds |
+|---------|--------|-------|
+| stuck veh-h | **-21.6%** | 0/8 up |
+| distance veh-km | **+7.3%** | 8/8 up |
+| mean speed | 39.4 -> 42.3 km/h | 8/8 up |
+| edge traversals | +9.7% | 8/8 up |
+| **network NOx** | **+0.42%** | 8/8 up |
+| NOx per veh-km | **-6.4%** | 0/8 up |
+| edges gaining / losing traffic | 28,930 / 2,057 | -- |
+
+So the same fleet travels about 7% further for about 0.4% more NOx. The obvious
+confound -- that more edge traversals is just detouring through short local
+streets -- was checked and rejected: distance covered rises 8/8 seeds. That
+traversals (+9.7%) outrun distance (+7.3%) says re-planned paths do use somewhat
+shorter edges, but real ground covered is the dominant term.
+
+The honest headline: **rerouting does not reduce emissions, it makes them more
+efficient per km and REDISTRIBUTES them.** The 14:1 ratio of edges gaining to
+edges losing traffic means this is not zero-sum diversion -- the network was
+losing capacity to gridlock, and 1,358 edges carry traffic that carried none.
+
+WHAT THIS RESULT DOES NOT SAY:
+
+- **It is not the day question.** One hour at flat demand is a different regime
+  from the A2 deadlock. Hour-scale relief does not imply the day freeze clears;
+  that is array 117851's call and nothing here should be read as previewing it.
+- **The base arm's numbers are not physical.** Base is out of band in control
+  AND C1 (0/8), so its larger effects (+18.3% distance, +27.7% traversals,
+  +57.9% Powell stuck, +26.4% Powell NOx) describe a model that does not
+  reproduce real Powell flow. The pattern -- base dumps relief onto Powell
+  because Powell has headroom it cannot otherwise fill, realism does not because
+  it already sits at the real band -- is a mechanism HYPOTHESIS, not measured.
+- **"More throughput" is not "more completed trips."** The fleet is fixed and
+  trip completions are not in the summary schema; what is measured is that the
+  same cars got further.
+- Both bounds above still apply: no-U-turn, and perfect network-wide
+  information, so this is an UPPER BOUND. `REROUTE_STUCK_S = 120 s` is still
+  unswept.

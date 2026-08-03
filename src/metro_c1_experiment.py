@@ -57,6 +57,7 @@ Usage:
     python src/metro_c1_experiment.py --task N     # run one hour job
     python src/metro_c1_experiment.py --day-task N # run one day job
     python src/metro_c1_experiment.py --readout    # analyze what is on disk
+    python src/metro_c1_experiment.py --readout --deep   # + network-wide totals
 """
 import argparse
 import glob
@@ -68,6 +69,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
+import pandas as pd
 
 import config
 import metro_calibrated_experiment as mce
@@ -121,6 +123,105 @@ def _summary(stem):
         return json.load(f)
 
 
+# ---------------------------------------------------------------------------
+# network-wide view (--deep)
+#
+# WHY THIS EXISTS: the summary JSON carries busiest-Powell and whole-network
+# stuck time, which answers the band-regression question and nothing else. It
+# cannot say whether rerouting MOVES MORE TRAFFIC or merely reshuffles the same
+# traffic onto emptier streets -- and that distinction is the whole point of
+# giving the path a way to change. The segment parquet can, so read it.
+# ---------------------------------------------------------------------------
+
+# printed in this order; the label carries the unit so no reader has to guess,
+# and the third field is decimal places, because emission INTENSITY is order
+# 0.2 g/veh-km and rounds to nothing at the precision the totals want
+DEEP_FIELDS = [
+    ("fleet_veh_s", "fleet veh-s", 1),       # fixed by construction, see below
+    ("distance_veh_km", "distance veh-km", 1),
+    ("mean_speed_kmh", "mean speed km/h", 2),
+    ("traversals", "edge traversals", 1),
+    ("stuck_veh_h", "stuck veh-h", 1),
+    ("nox_g", "network NOx g", 1),
+    ("nox_g_per_veh_km", "NOx g/veh-km", 5),
+    ("edges_used", "edges carrying traffic", 1),
+]
+
+
+def _network_row(stem):
+    """Network-wide totals for one run, cross-checked against its own summary.
+
+    Columns are generate.segments_dataframe's: `value` is vehicle-SECONDS on
+    the edge (so it sums to fleet x steps and is IDENTICAL across arms by
+    construction -- which is what makes every other number here an efficiency
+    difference rather than a demand difference); `v_sum` is speed x dt summed,
+    i.e. METRES travelled; `stuck_sum` is seconds below config.STUCK_SPEED_KMH.
+
+    Returns (row, dataframe), or (None, None) if the parquet is not on disk.
+    """
+    p = os.path.join(config.PROCESSED_DIR, f"{stem}_segments.parquet")
+    s = _summary(stem)
+    if not os.path.exists(p) or s is None:
+        return None, None
+    d = pd.read_parquet(p)
+
+    veh_s = float(d["value"].sum())
+    metres = float(d["v_sum"].sum())
+    row = {"fleet_veh_s": veh_s,
+           "distance_veh_km": metres / 1000.0,
+           "mean_speed_kmh": 3.6 * metres / veh_s if veh_s else float("nan"),
+           "traversals": float(d["throughput"].sum()),
+           "stuck_veh_h": float(d["stuck_sum"].sum()) / 3600.0,
+           "nox_g": float(d["nox_g"].sum()),
+           "edges_used": float((d["throughput"] > 0).sum())}
+    row["nox_g_per_veh_km"] = row["nox_g"] / row["distance_veh_km"]
+
+    # Provenance. A parquet silently joined to the wrong run is exactly the
+    # class of error the Jul 4 audit found, so refuse loudly rather than print
+    # a mismatched pair that looks like a result.
+    if abs(row["nox_g"] - s["total_nox_g"]) > 1.0:
+        raise ValueError(
+            f"{stem}: parquet NOx {row['nox_g']:.1f} g does not match summary "
+            f"{s['total_nox_g']:.1f} g -- these are not the same run")
+    return row, d
+
+
+def _deep(pairs):
+    """Paired network-wide comparison over a list of (control stem, C1 stem)."""
+    rows, gained, lost = [], [], []
+    for ctrl_stem, c1_stem in pairs:
+        c, cd = _network_row(ctrl_stem)
+        r, rd = _network_row(c1_stem)
+        if c is None or r is None:
+            continue
+        rows.append((c, r))
+        # Per-edge redistribution, aligned on the edge key. Needed because a
+        # diversion that empties one street and fills another cancels exactly
+        # in any network total, so the totals alone cannot see it happen.
+        m = cd.set_index(["u", "v", "key"])[["throughput"]].join(
+            rd.set_index(["u", "v", "key"])[["throughput"]],
+            lsuffix="_c", rsuffix="_r")
+        delta = m["throughput_r"] - m["throughput_c"]
+        gained.append(float((delta > 0).sum()))
+        lost.append(float((delta < 0).sum()))
+
+    if not rows:
+        print("    (no segment parquets on disk)")
+        return
+
+    sd = lambda a: a.std(ddof=1) if len(a) > 1 else 0.0
+    for key, label, dp in DEEP_FIELDS:
+        cv = np.array([c[key] for c, _ in rows])
+        rv = np.array([r[key] for _, r in rows])
+        d = rv - cv
+        pct = 100 * d.mean() / cv.mean() if cv.mean() else float("nan")
+        print(f"    {label:24} {cv.mean():14.{dp}f} {rv.mean():14.{dp}f} "
+              f"{d.mean():+13.{dp}f} +/- {sd(d):<11.{dp}f} "
+              f"{int((d > 0).sum())}/{len(d)} up  {pct:+7.2f}%")
+    print(f"    edges gaining traffic {np.mean(gained):8.0f}, losing "
+          f"{np.mean(lost):8.0f}  (mean over {len(rows)} seed(s))")
+
+
 def check():
     """Verify every prerequisite BEFORE cluster time is spent."""
     ok = True
@@ -168,7 +269,7 @@ def check():
     return ok
 
 
-def readout():
+def readout(deep=False):
     """Paired C1-vs-control, for whatever is on disk."""
     print(f"C1 (en-route rerouting) vs control, n={DEMAND}\n")
 
@@ -218,6 +319,34 @@ def readout():
               f"{rv.mean():8.0f} +/- {sd(rv):<5.0f} "
               f"{d.mean():+8.0f} +/- {sd(d):<5.0f}"
               f"{'  IN BAND' if inband else ''}")
+        # the band verdict above is on the ARM MEAN; per-seed membership is a
+        # different and stricter question, so report it rather than imply it
+        nb = sum(BAND[0] <= v <= BAND[1] for v in rv)
+        nc = sum(BAND[0] <= v <= BAND[1] for v in cv)
+        print(f"{'':18} {'':3} in band per seed: control {nc}/{len(cv)}, "
+              f"C1 {nb}/{len(rv)}  (C1 range {rv.min():.0f}-{rv.max():.0f})")
+
+    if deep:
+        print("\nNETWORK (segment parquets). Fleet veh-s is identical across "
+              "arms by\nconstruction, so every other line is an EFFICIENCY "
+              "difference, not a\ndemand difference. Distance up with NOx flat "
+              "means redistribution and\nbetter emission intensity, NOT less "
+              "pollution.")
+        print(f"\n{'':4}{'measure':24} {'control':>14} {'C1':>14} "
+              f"{'paired delta':>26}  {'seeds':>5}  {'pct':>7}")
+        for arm in C1_ARMS:
+            print(f"\n  HOUR  {arm} vs {HOUR_CONTROL[arm]}")
+            _deep([(f"{HOUR_CONTROL[arm]}_n{DEMAND}_s{s}",
+                    f"c1_hour_{arm}_n{DEMAND}_s{s}") for s in SEEDS])
+        for arm in C1_ARMS:
+            print(f"\n  DAY   {arm} vs {DAY_CONTROL[arm]}")
+            _deep([(f"{DAY_CONTROL[arm]}_n{DEMAND}_s{DAY_SEED}",
+                    f"c1_dayprof_{arm}_n{DEMAND}_s{DAY_SEED}")])
+    elif glob.glob(os.path.join(config.PROCESSED_DIR, "c1_*_segments.parquet")):
+        # the summary-only view above misses the throughput result entirely,
+        # so do not let a reader assume it is the whole story
+        print("\n  Segment parquets are on disk: re-run with --deep for the "
+              "network-wide\n  throughput, distance and NOx-intensity view.")
 
 
 def main():
@@ -229,6 +358,9 @@ def main():
     ap.add_argument("--task", type=int)
     ap.add_argument("--day-task", type=int)
     ap.add_argument("--readout", action="store_true")
+    ap.add_argument("--deep", action="store_true",
+                    help="with --readout: network-wide totals from the segment "
+                         "parquets (slower, reads ~5 MB per run)")
     args = ap.parse_args()
 
     jobs, day_jobs = build_jobs(), build_day_jobs()
@@ -247,7 +379,7 @@ def main():
             print(f"{i:3d}  day   {j['name']}")
         return
     if args.readout:
-        readout(); return
+        readout(deep=args.deep); return
     if args.task is not None:
         mce.run_one(jobs[args.task], graph_file, checkpoint=False)
         return
