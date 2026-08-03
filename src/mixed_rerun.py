@@ -101,6 +101,10 @@ def apply_metro_dirs():
     run lands beside the all-diesel files it will be compared with. Falls back to
     the default dirs for a future layout where the metro caches live on main."""
     wt = os.path.join(config.BASE_DIR, ".claude", "worktrees", "metro5k-scaleup")
+    if not os.path.isdir(os.path.join(wt, "data", "network")):
+        # Running from a sibling worktree (BASE_DIR is .claude/worktrees/<x>):
+        # the metro caches live next door, not underneath us (Aug 3 fix).
+        wt = os.path.join(os.path.dirname(config.BASE_DIR), "metro5k-scaleup")
     if os.path.isdir(os.path.join(wt, "data", "network")):
         config.NETWORK_DIR = os.path.join(wt, "data", "network")
         config.RAW_DIR = os.path.join(wt, "data", "raw")

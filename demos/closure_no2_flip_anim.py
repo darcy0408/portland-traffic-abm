@@ -43,6 +43,11 @@ WORKTREE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     ".claude", "worktrees", "metro5k-scaleup",
 )
+if not os.path.isdir(WORKTREE):
+    # Running from a sibling worktree (repo root is .claude/worktrees/<x>):
+    # the metro caches live next door, not underneath us (Aug 3 fix).
+    WORKTREE = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))), "metro5k-scaleup")
 PROCESSED = os.path.join(WORKTREE, "data", "processed")
 GRAPH_PATH = os.path.join(WORKTREE, "data", "network", "graph.graphml")
 OPEN_PARQUET = os.path.join(PROCESSED, "sweepmix_powell_42_open_segments.parquet")
@@ -125,8 +130,13 @@ def main():
     co, wo = colors_widths(vo, norm, cmap)
     cc, wc = colors_widths(vc, norm, cmap)
 
+    # Full-bleed axes (Aug 3): the window is square by construction, so the
+    # axes can fill the whole frame; the state label and caption draw inside
+    # the map instead of in figure margin space. The slide's own title carries
+    # the beat, so no area is spent on framing.
     fig, ax = plt.subplots(figsize=(5.6, 5.6), facecolor=BG_COLOR)
     ax.set_facecolor(BG_COLOR)
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(CLON - HALF_LON, CLON + HALF_LON)
     ax.set_ylim(CLAT - HALF_LAT, CLAT + HALF_LAT)
     ax.set_aspect(1.0 / math.cos(math.radians(CLAT)))
@@ -156,11 +166,18 @@ def main():
                 ha="right", va="center", zorder=6,
                 bbox=dict(facecolor=BG_COLOR, edgecolor="none", alpha=0.75, pad=1.5))
 
-    state = ax.set_title("NO₂ surface  |  street OPEN", color="#e6edf3",
-                         fontsize=13, pad=10)
-    fig.text(0.5, 0.03, "modeled NO₂ per segment (log color scale) "
-             "· dashed ring = closure zone",
-             color="#9da7b3", fontsize=8.5, ha="center")
+    # The OPEN/CLOSED state label is functional (it is what flips), so it stays,
+    # as an in-map overlay on a dark backing box rather than a title band.
+    state = ax.text(0.5, 0.978, "NO₂ surface  |  street OPEN",
+                    transform=ax.transAxes, color="#e6edf3", fontsize=13,
+                    ha="center", va="top", zorder=7,
+                    bbox=dict(facecolor=BG_COLOR, edgecolor="none",
+                              alpha=0.8, pad=2.5))
+    ax.text(0.5, 0.012, "modeled NO₂ per segment (log color scale) "
+            "· dashed ring = closure zone",
+            transform=ax.transAxes, color="#9da7b3", fontsize=8.5,
+            ha="center", va="bottom", zorder=7,
+            bbox=dict(facecolor=BG_COLOR, edgecolor="none", alpha=0.8, pad=1.5))
 
     # frame plan at 6 fps: open hold, fade, closed hold, fade back = 6 s loop
     HOLD, FADE = 12, 6

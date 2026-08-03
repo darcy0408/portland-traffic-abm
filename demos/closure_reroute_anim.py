@@ -63,7 +63,7 @@ def main():
     render(G, frames_o, sig_xy, geoms_open, open_gif, bbox=BBOX,
            dot_size=45, sig_size=70,
            title="Street OPEN  |  SE Powell at 26th",
-           mark_geoms=closed_geoms, mark_color="#16d6c1")
+           mark_geoms=closed_geoms, mark_color="#16d6c1", tight=True)
 
     # --- state 2: street closed, same demand draw, zone edges removed ---
     G2 = G.copy()
@@ -75,7 +75,7 @@ def main():
     render(G2, frames_c, sig_xy2, geoms_open, closed_gif, bbox=BBOX,
            dot_size=45, sig_size=70,
            title="Street CLOSED  |  same trips, rerouting",
-           mark_geoms=closed_geoms, mark_color="#e74c3c")
+           mark_geoms=closed_geoms, mark_color="#e74c3c", tight=True)
 
     # --- compose the A/B flip: open loop then closed loop, one GIF ---
     from PIL import Image, ImageSequence

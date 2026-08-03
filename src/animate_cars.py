@@ -129,7 +129,7 @@ def record(G):
 def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
            sig_size=30, title="Each dot is one car", box=None,
            mark_geoms=None, mark_color="#e74c3c",
-           street_color="#39424e", street_lw=0.7):
+           street_color="#39424e", street_lw=0.7, tight=False):
     """Draw the recorded frames over the dark network and write a looping GIF.
     bbox = (lon_min, lon_max, lat_min, lat_max) crops to a zoom window.
     box = (lon_min, lon_max, lat_min, lat_max), optional: draws a non-filled
@@ -141,7 +141,11 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
     closed stretch (teal before, red after) without touching the base map.
     street_color/street_lw restyle the base map: zoom renders brighten it so
     the street grid stays visible under dense downtown signals (Jul 28 fix:
-    at the old faint styling the signal squares read as floating in blackness)."""
+    at the old faint styling the signal squares read as floating in blackness).
+    tight=True (Aug 3, for the Ignite deck) fills the whole frame with the map:
+    the title and caption draw INSIDE the axes on dark backing boxes and the
+    clock moves to the top-left, so a slide can show the art full-size under
+    its own title. Default False keeps the framed layout other demos use."""
     segs = [np.asarray(g.coords) for g in geoms.values()]
 
     fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
@@ -164,19 +168,30 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
             colors=mark_color, linewidths=2.5, zorder=3.5))
     ax.set_aspect(1.0 / math.cos(math.radians(config.STUDY_CENTER[0])))
     ax.axis("off")
-    ax.set_title(title, color="#e6edf3", fontsize=15, pad=12)
-    fig.text(0.5, 0.045,
-             "color = speed (red = stopped, green = free-flowing)   "
-             "squares = real traffic signals (east-west approach)",
-             color="#9da7b3", fontsize=10, ha="center")
+    caption = ("color = speed (red = stopped, green = free-flowing)   "
+               "squares = real traffic signals (east-west approach)")
+    dark_box = dict(facecolor="#0d1117", edgecolor="none", alpha=0.8, pad=2.5)
+    if tight:
+        fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+        ax.text(0.5, 0.978, title, transform=ax.transAxes, color="#e6edf3",
+                fontsize=15, ha="center", va="top", zorder=7, bbox=dark_box)
+        ax.text(0.5, 0.012, caption, transform=ax.transAxes, color="#9da7b3",
+                fontsize=10, ha="center", va="bottom", zorder=7, bbox=dark_box)
+    else:
+        ax.set_title(title, color="#e6edf3", fontsize=15, pad=12)
+        fig.text(0.5, 0.045, caption, color="#9da7b3", fontsize=10, ha="center")
 
     # dynamic artists, updated in place each frame (fast: no re-draw of the map)
     sig_scatter = ax.scatter(sig_xy[:, 0], sig_xy[:, 1], s=sig_size, marker="s",
                              c=SIG_RED, zorder=3)
     car_scatter = ax.scatter([], [], s=dot_size, c=[], cmap="RdYlGn",
                              vmin=0.0, vmax=DOT_VMAX, zorder=4, linewidths=0)
-    clock = ax.text(0.02, 0.02, "", transform=ax.transAxes, color="#9da7b3",
-                    fontsize=11, family="monospace")
+    # tight mode: the clock joins the top-left corner so the caption owns the
+    # bottom edge without collision
+    clock_xy = (0.02, 0.955) if tight else (0.02, 0.02)
+    clock = ax.text(*clock_xy, "", transform=ax.transAxes, color="#9da7b3",
+                    fontsize=11, family="monospace",
+                    bbox=dark_box if tight else None)
 
     images = []
     for i, (xy, spd, green_ew) in enumerate(frames):

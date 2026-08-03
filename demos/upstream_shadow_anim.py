@@ -113,9 +113,15 @@ def build(G, mean_seg, center, out_path):
     norm = TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
     base_rgba = cmap(norm(vals))
 
-    fig, ax = plt.subplots(figsize=(10, 7.5), dpi=140)
+    # Square figure, full-bleed axes (Aug 3): the map window is exactly square
+    # (the meters-to-degrees conversion cancels the aspect correction), so the
+    # old 10 x 7.5 frame letterboxed it with dead side margins. On the slide the
+    # art sits under its own title, so the internal title and outside caption
+    # moved inside the axes and the axes now fill the whole frame.
+    fig, ax = plt.subplots(figsize=(7.5, 7.5), dpi=140)
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(BG)
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.add_collection(LineCollection(segs_gray, colors=STREET, linewidths=0.6))
     lc = LineCollection(segs_col, colors=base_rgba, linewidths=2.0, zorder=3)
     ax.add_collection(lc)
@@ -144,7 +150,9 @@ def build(G, mean_seg, center, out_path):
         ("Southeast McLoughlin Boulevard",
          "SE McLoughlin  −12% (−114 g)\nquieter on 12 of 12 runs", (-0.010, 0.004)),
         ("Southeast Foster Road",
-         "SE Foster  −90% (−81 g)\nquieter on 12 of 12 runs", (0.008, -0.006)),
+         # offset pulled left (Aug 3): in the full-bleed square frame the old
+         # (+0.008) offset pushed the label off the right edge
+         "SE Foster  −90% (−81 g)\nquieter on 12 of 12 runs", (-0.013, -0.007)),
     ]:
         x, y = street_anchor(G, mean_seg, street, center, ZONE_M)
         art = ax.annotate(label, xy=(x, y), xytext=(x + dxy[0], y + dxy[1]),
@@ -167,15 +175,19 @@ def build(G, mean_seg, center, out_path):
                            color=INK, fontsize=11, zorder=7)
     timed.append((zone_lbl, 0.0))
 
-    ax.set_title("The closure's shadow reaches upstream", color=INK, fontsize=16, pad=12)
-    fig.text(0.5, 0.030,
-             "mean change in modeled NO₂ across 12 runs  "
-             "(blue = less, orange = more, dark = unchanged)   "
-             "mixed fleet, metro network",
-             color=MUTED, fontsize=9.5, ha="center")
+    # No internal title: slide 15's own title carries the message, and the old
+    # one duplicated it while costing map area. Caption text unchanged, drawn
+    # inside the axes' bottom edge instead of in figure margin space.
+    ax.text(0.5, 0.012, "mean change in modeled NO₂ across 12 runs  "
+            "(blue = less, orange = more, dark = unchanged)   "
+            "mixed fleet, metro network",
+            transform=ax.transAxes, color=MUTED, fontsize=8.2,
+            ha="center", va="bottom", zorder=8)
 
     ring, = ax.plot([], [], color="#ffd447", lw=1.5, alpha=0.75, zorder=5)
-    readout = ax.text(0.015, 0.02, "", transform=ax.transAxes, color="#ffd447",
+    # Sweep readout moved to the top-left corner (gray-street territory) so the
+    # caption owns the bottom edge without collision.
+    readout = ax.text(0.015, 0.965, "", transform=ax.transAxes, color="#ffd447",
                       fontsize=13, family="monospace", zorder=8)
 
     n_hold = int(round(SLIDE_SECONDS * FPS)) - N_SWEEP

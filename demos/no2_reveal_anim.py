@@ -50,6 +50,11 @@ WORKTREE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     ".claude", "worktrees", "metro5k-scaleup",
 )
+if not os.path.isdir(WORKTREE):
+    # Running from a sibling worktree (repo root is .claude/worktrees/<x>):
+    # the metro caches live next door, not underneath us (Aug 3 fix).
+    WORKTREE = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))), "metro5k-scaleup")
 SEGMENTS_PATH = os.path.join(WORKTREE, "data", "processed", "metro20k_mixed_segments.parquet")
 GRAPH_PATH = os.path.join(WORKTREE, "data", "network", "graph.graphml")
 
@@ -168,8 +173,12 @@ def main():
     pad_y = (ymax - ymin) * 0.02
     cos_lat = np.cos(np.deg2rad((ymin + ymax) / 2))
 
+    # Full-bleed axes (Aug 3): the metro extent is square after the aspect
+    # correction, so the axes fill the whole frame and the colorbar becomes an
+    # inset inside the map's sparse right edge instead of stealing figure width.
     fig, ax = plt.subplots(figsize=(5.6, 5.6), facecolor=BG_COLOR)
     ax.set_facecolor(BG_COLOR)
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(xmin - pad_x, xmax + pad_x)
     ax.set_ylim(ymin - pad_y, ymax + pad_y)
     ax.set_aspect(1 / cos_lat)
@@ -184,13 +193,28 @@ def main():
     lc = LineCollection(segments, colors=start_colors, linewidths=widths, zorder=2)
     ax.add_collection(lc)
 
-    # colorbar, matching the static map's log-scale NO2 label
+    # colorbar, matching the static map's log-scale NO2 label; drawn as an
+    # inset over the map's sparse right edge so the map keeps the full frame
     sm = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.01)
-    cbar.set_label("modeled NO2 per segment (g, log scale)", color="white")
-    cbar.ax.yaxis.set_tick_params(color="white")
+    # dark backing panel so the bar, ticks and label stay readable over the
+    # bright arterials at the map's right edge (drawn in ax, below the inset)
+    # zorder 4: above the street LineCollection (2) but below the inset axes
+    # (child axes draw at zorder 5; a higher rect would cover the bar itself)
+    ax.add_patch(mpatches.Rectangle(
+        (0.86, 0.185), 0.14, 0.635, transform=ax.transAxes,
+        facecolor=BG_COLOR, edgecolor="none", alpha=0.85, zorder=4))
+    cax = ax.inset_axes([0.955, 0.22, 0.022, 0.56])
+    cbar = fig.colorbar(sm, cax=cax)
+    # ticks and label on the LEFT of the bar, reaching into the map, so nothing
+    # clips off the frame's right edge
+    cbar.ax.yaxis.set_ticks_position("left")
+    cbar.ax.yaxis.set_label_position("left")
+    cbar.set_label("modeled NO2 per segment (g, log scale)",
+                   color="white", fontsize=8)
+    cbar.ax.yaxis.set_tick_params(color="white", labelsize=7)
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
+    cbar.outline.set_visible(False)
 
     # Update-1 study-area annotation, same as the static map
     lat0, lon0 = config.STUDY_CENTER
