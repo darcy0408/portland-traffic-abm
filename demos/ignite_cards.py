@@ -65,13 +65,16 @@ WARN = "#ff6a3d"
 
 SEEDS = [42, 7, 13, 21, 99, 2024, 1, 5, 8, 100, 314, 777]
 
-# The one Portland NO2 monitor with published coordinates in our sources
-# (DATASETS.md sec. 6 / REFERENCES.md [6]; AQS 41-051-0080, SE Lafayette NCore).
-# The second regulatory monitor is a freeway near-road site on I-5 at MP 290.14
-# in Tualatin, AQS 41-067-0005. NO latitude/longitude for it appears in any of
-# our sources, so it is NOT plotted: an approximate dot on a map reads as a
-# surveyed location. It is stated in text instead, which is what we can support.
+# Both regulatory NO2 monitors, each with surveyed coordinates.
+#   SE Lafayette NCore, AQS 41-051-0080: DATASETS.md sec. 6 / REFERENCES.md [6].
+#   Tualatin - Bradbury Court (TBC), AQS 41-067-0005, 6745 Bradbury Court:
+#     EPA AQS site registry (aqs.epa.gov/aqsweb/airdata/aqs_sites.csv,
+#     retrieved Aug 3 2026), 45.3992 / -122.7455, WGS84. Earlier versions
+#     plotted only Lafayette because no Tualatin coordinate appeared in our
+#     sources and an approximate dot would read as a surveyed location; the
+#     registry lookup resolved that, so both are now marked.
 LAFAYETTE = (45.4966, -122.6029)
+TUALATIN = (45.3992, -122.7455)
 
 # Ledger M20.17 (12-seed mixed-fleet metro closure, near zone <= 1.5 km).
 # Powell -80.7% +/- 4.7, range -87.5 to -69.4. The +/- is a standard deviation,
@@ -142,31 +145,39 @@ def beat02_monitors(G):
     net.set_aspect(1.0 / np.cos(np.radians(config.CLOSURE[0])))
     net.axis("off")
 
-    lat, lon = LAFAYETTE
-    net.plot([lon], [lat], marker="o", ms=15, color=WARN, zorder=5)
-    net.plot([lon], [lat], marker="o", ms=30, mfc="none", mec=WARN, mew=1.6,
-             alpha=0.6, zorder=5)
-    net.annotate("SE Lafayette\n1 of the 2",
-                 xy=(lon, lat), xytext=(lon + 0.055, lat + 0.045),
-                 color=INK, fontsize=13, ha="left",
-                 arrowprops=dict(arrowstyle="->", color=WARN, lw=1.4), zorder=6)
+    # Both dots identically styled: the message is "this is ALL of them", so
+    # neither monitor should look more important than the other.
+    for (lat, lon), label, dx, dy in [
+            (LAFAYETTE, "SE Lafayette", 0.055, 0.045),
+            (TUALATIN, "Tualatin, on I-5", 0.020, 0.052)]:
+        net.plot([lon], [lat], marker="o", ms=15, color=WARN, zorder=5)
+        net.plot([lon], [lat], marker="o", ms=30, mfc="none", mec=WARN, mew=1.6,
+                 alpha=0.6, zorder=5)
+        net.annotate(label, xy=(lon, lat), xytext=(lon + dx, lat + dy),
+                     color=INK, fontsize=13, ha="left",
+                     arrowprops=dict(arrowstyle="->", color=WARN, lw=1.4),
+                     zorder=6)
 
     ax.text(0.045, 0.72, "2", color=WARN, fontsize=150, fontweight="bold",
             ha="left", va="center")
+    # "2.5 million": Portland-Vancouver-Hillsboro MSA, 2,512,859 at the 2020
+    # Census. Verified Aug 3 2026; the DEQ network serves the metro area.
     ax.text(0.045, 0.50, "regulatory NO$_2$ monitors\nfor 2.5 million people",
             color=INK, fontsize=25, ha="left", va="center", linespacing=1.5)
-    # Both monitors fall inside this frame: Tualatin is ~16 km from the study
-    # centre and the plotted network reaches 20 km. An earlier draft said the
-    # second one was "off to the southwest" and called Lafayette the only monitor
-    # in the picture; both were wrong, and checking the bbox is what caught it.
-    ax.text(0.045, 0.28,
-            "One is marked here. The other is a\n"
-            "freeway site on I-5 near Tualatin,\n"
-            "in the southwest of this same area.\n\n"
+    # With both monitors marked on the map, the paragraph no longer has to
+    # describe where the unplotted one is; it only carries the conclusion.
+    ax.text(0.045, 0.30,
+            "Both of them are on this map.\n\n"
             "So almost everything we know about\n"
             "street-level air is modeled, not measured.",
             color=MUTED, fontsize=15, ha="left", va="center", linespacing=1.6)
-    ax.text(0.045, 0.045, "Oregon DEQ 2023 Ambient Monitoring Network Plan",
+    # y raised clear of the deck's "N / 20" counter (bottom-left, top edge at
+    # ~0.067 of slide height), which overlapped the word "Oregon" at y=0.045.
+    # Same collision class as beat 3's paragraph; only this card has a
+    # left-aligned footer, the others are centered and clear the counter.
+    ax.text(0.045, 0.09,
+            "Oregon DEQ 2023 Ambient Monitoring Network Plan  ·  "
+            "coordinates: EPA AQS site registry",
             color="#5c6672", fontsize=11, ha="left", va="center")
     return _save(fig, "ignite_beat02.png")
 
