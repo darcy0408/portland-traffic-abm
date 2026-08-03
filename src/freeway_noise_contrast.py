@@ -37,7 +37,16 @@ TWO THINGS THIS SCRIPT IS CAREFUL ABOUT:
    on/off seed count: the pre-set unanimity bar assumes the full seed set.
 
     python src/freeway_noise_contrast.py            # the contrast table
+    python src/freeway_noise_contrast.py --realism  # same, on the F6 fwmsr campaign
     python src/freeway_noise_contrast.py --verify   # check the vectorized CNOSSOS
+
+--realism (added after ledger section 15): scores the SAME contrast on the F6
+realism-stack rerun (prefix fwmsr, Orca job 117794) instead of the base campaign.
+This matters most for the NOISE column: noise levels depend on realized speed,
+which is exactly what lane-changing moves, so section 14's dB values rest on
+superseded magnitudes until this is run. Every summary's recorded `stack` field
+is checked against the requested campaign; a mismatch aborts, mirroring the
+harness readout's guard, so the two campaigns can never be silently mixed.
 """
 import argparse
 import json
@@ -53,6 +62,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config             # noqa: E402
 import noise              # noqa: E402  (the verified CNOSSOS coefficients)
+import freeway_multiseed as fms   # noqa: E402
 from freeway_multiseed import SEEDS, run_name, summary_path   # noqa: E402
 
 NEAR_KM = 2.0        # same near-field cut as the NO2 readout, set from the measured
@@ -204,7 +214,16 @@ def collect(arm, geo, near_km=NEAR_KM):
         if o is None or c is None:
             continue
         with open(summary_path(arm, s)) as fh:
-            removed = [tuple(e) for e in json.load(fh)["removed"]]
+            summ = json.load(fh)
+        # Same guard as the harness readout: a summary whose recorded stack does
+        # not match the campaign being read under aborts (absent = the pre-F6
+        # base campaign), so base and realism runs can never be silently mixed.
+        want = "realism" if fms.STACK_REALISM else "base"
+        got = summ.get("stack", "base")
+        if got != want:
+            raise SystemExit(
+                f"{summary_path(arm, s)}: stack '{got}' but campaign '{want}'")
+        removed = [tuple(e) for e in summ["removed"]]
         rem = geo.loc[geo.index.intersection(removed)]
         clat, clon = rem.lat.mean(), rem.lon.mean()
 
@@ -325,8 +344,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--verify", action="store_true",
                     help="check the vectorized CNOSSOS against noise.py, then exit")
+    ap.add_argument("--realism", action="store_true",
+                    help="read the F6 realism campaign (fwmsr) instead of the base one")
     ap.add_argument("--near-km", type=float, default=NEAR_KM)
     a = ap.parse_args()
+    if a.realism:
+        # the harness's own switch: run_name/summary_path read these at call time
+        fms.PREFIX = "fwmsr"
+        fms.STACK_REALISM = True
     if a.verify:
         raise SystemExit(0 if verify_vectorized() else 1)
     if not verify_vectorized():

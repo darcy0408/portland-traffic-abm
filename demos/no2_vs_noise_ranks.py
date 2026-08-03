@@ -33,8 +33,14 @@ WHAT THIS FIGURE MAY NOT BE USED TO SAY (ledger section 14 caveats):
     flag F6), which bites the noise column hardest. Direction and rank only.
   - The dB values are paired differences of SOURCE levels. No absolute dB.
 
-Usage:  python demos/no2_vs_noise_ranks.py [--refresh]
-Writes: outputs/figures/no2_vs_noise_ranks.png
+Usage:  python demos/no2_vs_noise_ranks.py [--refresh] [--realism]
+Writes: outputs/figures/no2_vs_noise_ranks.png            (base campaign)
+        outputs/figures/no2_vs_noise_ranks_realism.png    (--realism)
+
+--realism draws the same figure from the F6 realism campaign (fwmsr, ledger
+section 16, IDs FR8-FR10) with its own cache, its own gate, and its own output
+file, so the base figure stays reproducible beside it. The realism version is
+the citable one: quote FR8-FR10, never FW10-FW12 (graveyarded Aug 2).
 """
 import argparse
 import json
@@ -53,9 +59,12 @@ sys.path.append(_ROOT)
 sys.path.append(os.path.join(_ROOT, "src"))
 
 import config
+import freeway_multiseed as fms
 import freeway_noise_contrast as fnc
 
 CACHE = os.path.join(config.PROCESSED_DIR, "fw_no2_noise_contrast_stats.json")
+CACHE_REALISM = os.path.join(config.PROCESSED_DIR,
+                             "fw_no2_noise_contrast_stats_realism.json")
 
 # Ledger FW10/FW11 (mean dNO2 g, mean dNoise dB, rank by NO2, rank by dB) and
 # FW12 (SUPPORTED-only Spearman, street count). Ranks are over the near-field
@@ -75,6 +84,29 @@ GATE = {
             "Southeast 82nd Avenue": (10.2, 1.61, 4, 1),
         },
         "rho": (0.461, 15),
+    },
+}
+
+# Ledger section 16 (FR8/FR9/FR10), the realism-campaign re-score. Same tuple
+# shape. The ramps' sign-flip rows (NO2 up, noise DOWN, both supported) are the
+# section's headline and are pinned here so the figure cannot drift off them.
+GATE_REALISM = {
+    "abernethy": {
+        "streets": {
+            "McLoughlin Boulevard": (720.5, 5.29, 1, 3),
+            "Main Street": (269.3, 7.93, 2, 2),
+            "Moss Street": (28.2, 8.78, 6, 1),
+            "(unnamed)": (104.4, -2.02, 4, None),
+        },
+        "rho": (0.338, 40),
+    },
+    "powell": {
+        "streets": {
+            "(unnamed)": (929.1, -0.20, 1, None),
+            "Southeast Division Street": (67.6, 0.35, 2, None),
+            "Southeast 82nd Avenue": (11.2, 1.58, 4, 1),
+        },
+        "rho": (0.500, 16),
     },
 }
 
@@ -125,13 +157,14 @@ def compute():
     return out
 
 
-def load(refresh=False):
-    if not refresh and os.path.exists(CACHE):
-        with open(CACHE) as fh:
+def load(refresh=False, realism=False):
+    cache = CACHE_REALISM if realism else CACHE
+    if not refresh and os.path.exists(cache):
+        with open(cache) as fh:
             return json.load(fh)
     data = compute()
-    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-    with open(CACHE, "w") as fh:
+    os.makedirs(os.path.dirname(cache), exist_ok=True)
+    with open(cache, "w") as fh:
         json.dump(data, fh, indent=1)
     return data
 
@@ -154,9 +187,9 @@ def ranked_sets(arm_data):
     return ranked, sup, rank_no2, rank_db
 
 
-def check_gate(data):
+def check_gate(data, gate):
     """Abort before rendering if anything drifted from the ledger."""
-    for arm, spec in GATE.items():
+    for arm, spec in gate.items():
         ranked, sup, rank_no2, rank_db = ranked_sets(data[arm])
         by_name = {s["name"]: s for s in ranked}
         for nm, (g, db, r_g, r_db) in spec["streets"].items():
@@ -264,11 +297,22 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--refresh", action="store_true",
                     help="recompute the per-street statistics instead of using the cache")
+    ap.add_argument("--realism", action="store_true",
+                    help="draw from the F6 realism campaign (fwmsr, ledger section 16)")
     a = ap.parse_args()
 
-    data = load(a.refresh)
-    print("checking against ledger section 14 (FW10, FW11, FW12):")
-    check_gate(data)
+    if a.realism:
+        # the harness's own switch; fnc.collect/run_name read these at call time
+        fms.PREFIX = "fwmsr"
+        fms.STACK_REALISM = True
+
+    data = load(a.refresh, a.realism)
+    if a.realism:
+        print("checking against ledger section 16 (FR8, FR9, FR10):")
+        check_gate(data, GATE_REALISM)
+    else:
+        print("checking against ledger section 14 (FW10, FW11, FW12):")
+        check_gate(data, GATE)
 
     fig, axes = plt.subplots(1, 2, figsize=(15.5, 7.2), facecolor=BG)
     for ax in axes:
@@ -283,17 +327,28 @@ def main():
     fig.suptitle("The same closure, scored two ways: the surfaces disagree on "
                  "which streets matter",
                  color=INK, fontsize=16, y=0.968)
+    stack_note = ("full realism stack (lane changing, heterogeneity, signals)"
+                  if a.realism else "base model")
     fig.text(0.5, 0.906,
-             f"Paired {n_seeds}-seed I-205 closure, streets within 2 km. "
+             f"Paired {n_seeds}-seed I-205 closure, streets within 2 km, "
+             f"{stack_note}. "
              "Orange = ranks higher on noise than on NO2; blue = the reverse.",
              ha="center", color=MUTED, fontsize=10.5)
-    fig.text(0.5, 0.028,
-             "Ledger section 14 (FW10-FW12). Direction and rank only: base model "
-             "(flag F6), and statistical support is not audibility "
-             "(~3 dB is noticeable; nothing at the Powell stretch reaches it).",
-             ha="center", color=MUTED, fontsize=8.5)
+    if a.realism:
+        footer = ("Ledger section 16 (FR8-FR10), realism campaign (F6 resolved). "
+                  "Statistical support is not audibility (~3 dB is noticeable; "
+                  "nothing at the Powell stretch reaches it). No absolute dB: "
+                  "paired source-level differences only.")
+    else:
+        footer = ("Ledger section 14 (FW10-FW12), SUPERSEDED by section 16. "
+                  "Direction and rank only: base model (flag F6), and statistical "
+                  "support is not audibility "
+                  "(~3 dB is noticeable; nothing at the Powell stretch reaches it).")
+    fig.text(0.5, 0.028, footer, ha="center", color=MUTED, fontsize=8.5)
 
-    out = os.path.join(config.FIGURES_DIR, "no2_vs_noise_ranks.png")
+    out = os.path.join(config.FIGURES_DIR,
+                       "no2_vs_noise_ranks_realism.png" if a.realism
+                       else "no2_vs_noise_ranks.png")
     os.makedirs(config.FIGURES_DIR, exist_ok=True)
     fig.subplots_adjust(left=0.13, right=0.87, top=0.800, bottom=0.075, wspace=0.62)
     fig.savefig(out, dpi=200, facecolor=BG)
