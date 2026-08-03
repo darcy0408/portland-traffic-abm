@@ -1,8 +1,26 @@
-"""The four graphic cards for the Aug 14 SSRS Ignite talk: beats 1, 2, 13, 14.
+"""The graphic cards for the Aug 14 SSRS Ignite talk.
 
 Read-only, no simulation. Beat 14's numbers are recomputed from the saved 12-seed
 mixed-fleet closure pairs at build time so the card cannot drift from the runs.
 Beats 2 and 13 carry ledger values, quoted with their IDs below.
+
+Beats 3, 4, 10 and 20 were added Aug 2. They were left title-only on purpose:
+choosing them is an editorial call that follows from the script, so they were
+built only once the script existed. Notes on those four:
+
+  - 3 and 4 SHARE ONE MAP, drawn by the same function at the same extent, because
+    beat 4's whole argument is that the picture did not change. The only thing
+    added on 4 is the closure marker. If you edit one, edit both, or the argument
+    silently breaks.
+  - 3 and 4 deliberately draw the static model's INPUTS (road class, block-group
+    population) rather than a fitted land-use surface. Two reasons. The inputs are
+    what beat 4's invariance claim (ledger B3) is actually about, and slide 19
+    already shows a fitted static surface, so a second one here would spend the
+    talk's one blank-panel moment early.
+  - 10 is a locator, not a result. No numbers beyond the closure's own geometry,
+    which comes from config.CLOSURE and the graph, not from a run.
+  - 20 carries no numbers at all, by design (see the script's note on beat 20).
+    It reuses beat 1's faint network so the talk closes where it opened.
 
 Built full-bleed at 16:9 to fill the slide, because these four are pure message
 cards with no map to frame: at 15 seconds a headline the audience reads in two
@@ -24,6 +42,7 @@ import sys
 
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import osmnx as ox
@@ -150,6 +169,311 @@ def beat02_monitors(G):
     ax.text(0.045, 0.045, "Oregon DEQ 2023 Ambient Monitoring Network Plan",
             color="#5c6672", fontsize=11, ha="left", va="center")
     return _save(fig, "ignite_beat02.png")
+
+
+# Road classes the static land-use family uses as a predictor, brightest first.
+# Drawn dim-to-bright so an arterial reads as an arterial without a legend.
+ROAD_CLASSES = [
+    ("motorway", "#4aa8ff", 1.5),
+    ("trunk", "#3f8fd8", 1.2),
+    ("primary", "#3576b0", 1.0),
+    ("secondary", "#2d5f8a", 0.7),
+    ("tertiary", "#254a68", 0.5),
+]
+_CLASS_LOOKUP = {n: (c, w) for n, c, w in ROAD_CLASSES}
+RESIDENTIAL = ("#1a2330", 0.3)
+
+
+def _road_class(d):
+    """OSM 'highway' can be a string or a list; take the first value we know."""
+    hw = d.get("highway")
+    for tag in (hw if isinstance(hw, list) else [hw]):
+        base = str(tag).replace("_link", "")
+        if base in _CLASS_LOOKUP:
+            return _CLASS_LOOKUP[base]
+    return RESIDENTIAL
+
+
+def _static_inputs_panel(fig, G, bg, rect):
+    """The static model's inputs, drawn once and reused by beats 3 and 4.
+
+    Population as soft block-group blobs, streets colored by road class. These are
+    exactly the 'fixed facts' the script names: road type, population, distance to
+    a highway (which is a function of the road classes drawn here). Nothing on this
+    panel is an output of the simulation, which is the entire point of beat 4.
+    """
+    ax = fig.add_axes(rect, facecolor="none")
+
+    # Population first so the streets sit on top of it.
+    pop = bg["population"].to_numpy(dtype=float)
+    scale = 240.0 * pop / max(pop.max(), 1.0)
+    ax.scatter(bg["lon"], bg["lat"], s=scale, c="#8a5a2b", alpha=0.30,
+               linewidths=0, zorder=1)
+
+    by_style = {}
+    for u, v, k, d in G.edges(keys=True, data=True):
+        geom = d.get("geometry")
+        seg = (np.asarray(geom.coords) if geom is not None else
+               np.array([[G.nodes[u]["x"], G.nodes[u]["y"]],
+                         [G.nodes[v]["x"], G.nodes[v]["y"]]]))
+        by_style.setdefault(_road_class(d), []).append(seg)
+    # Dim classes first so arterials draw over residential, not under it.
+    for (color, lw), segs in sorted(by_style.items(), key=lambda kv: kv[0][1]):
+        ax.add_collection(LineCollection(segs, colors=color, linewidths=lw,
+                                         zorder=2))
+
+    ax.autoscale()
+    ax.set_aspect(1.0 / np.cos(np.radians(config.CLOSURE[0])))
+    ax.axis("off")
+    return ax
+
+
+def beat03_static_way(G, bg):
+    """Beat 3. The standard way: fixed facts about a neighborhood.
+
+    The card is deliberately FAIR to the static method. The script's payoff on
+    beat 4 only works if the audience has just been told this approach is good,
+    so 'it never sees a car move' stays SPOKEN and is not printed here as a jab.
+    """
+    fig, ax = _canvas()
+    _static_inputs_panel(fig, G, bg, [0.34, 0.045, 0.63, 0.90])
+
+    ax.set_zorder(2)
+    ax.patch.set_alpha(0.0)
+    ax.text(0.045, 0.88, "The standard way", color=INK, fontsize=40,
+            ha="left", va="center")
+    ax.text(0.045, 0.775, "Predict pollution from fixed facts\nabout a neighborhood.",
+            color=INK, fontsize=21, ha="left", va="top", linespacing=1.6)
+
+    for i, (label, sub) in enumerate([
+            ("Road type", "highway, arterial, residential"),
+            ("Population", "who lives in each block group"),
+            ("Distance to a highway", "how close the big roads are")]):
+        y = 0.545 - i * 0.135
+        ax.text(0.045, y, label, color=ACCENT, fontsize=23, ha="left", va="center")
+        ax.text(0.045, y - 0.055, sub, color=MUTED, fontsize=15, ha="left",
+                va="center")
+
+    ax.text(0.045, 0.10,
+            "This is the established method, and it\nworks. Most street-level "
+            "pollution maps\nyou have seen were made this way.",
+            color=MUTED, fontsize=16, ha="left", va="center", linespacing=1.7)
+    return _save(fig, "ignite_beat03.png")
+
+
+def beat04_the_limit(G, bg):
+    """Beat 4. The limit: close a road and none of those facts change.
+
+    Ledger B3, the invariance argument. The map panel is byte-identical to beat
+    3's by construction (same function, same rect, same data); the ONLY addition
+    is the closure marker, so the slide transition shows a picture that refuses
+    to move. Do not restyle this panel without restyling beat 3's.
+    """
+    fig, ax = _canvas()
+    panel = _static_inputs_panel(fig, G, bg, [0.34, 0.045, 0.63, 0.90])
+
+    lat0, lon0, _ = config.CLOSURE
+    panel.plot([lon0], [lat0], marker="o", ms=16, mfc="none", mec=WARN, mew=2.6,
+               zorder=6)
+    panel.plot([lon0], [lat0], marker="o", ms=38, mfc="none", mec=WARN, mew=1.4,
+               alpha=0.55, zorder=6)
+    # Label kept close and pulled up-left: a long leader crossed I-205 and the
+    # text ran off the right edge of the slide.
+    panel.annotate("road closed here",
+                   xy=(lon0, lat0), xytext=(lon0 - 0.011, lat0 + 0.040),
+                   color=WARN, fontsize=16, ha="center",
+                   arrowprops=dict(arrowstyle="->", color=WARN, lw=1.4), zorder=7)
+
+    ax.set_zorder(2)
+    ax.patch.set_alpha(0.0)
+    ax.text(0.045, 0.88, "Now close a road.", color=INK, fontsize=40,
+            ha="left", va="center")
+    ax.text(0.045, 0.775, "Nothing on this map changed.",
+            color=WARN, fontsize=26, ha="left", va="center")
+
+    for i, line in enumerate(["Same streets.", "Same people.", "Same jobs."]):
+        ax.text(0.045, 0.635 - i * 0.085, line, color=INK, fontsize=23,
+                ha="left", va="center")
+
+    ax.text(0.045, 0.29,
+            "The inputs did not move, so the\nprediction cannot move either.",
+            color=INK, fontsize=20, ha="left", va="center", linespacing=1.7)
+    ax.text(0.045, 0.105,
+            "It still predicts the same pollution\non a street that now has no cars.",
+            color=MUTED, fontsize=16, ha="left", va="center", linespacing=1.7)
+    return _save(fig, "ignite_beat04.png")
+
+
+def beat10_experiment(G):
+    """Beat 10. The locator: what 'close 150 m of SE Powell' actually means.
+
+    A locator, not a result. The zone and the segment count come from
+    config.CLOSURE and the graph through the SAME helper the simulation uses to
+    remove them, so the picture cannot disagree with what was actually closed.
+    """
+    from generate import closed_edges_in_zone
+
+    fig, ax = _canvas()
+    lat0, lon0, radius_m = config.CLOSURE
+    closed = set(closed_edges_in_zone(G))
+    aspect = 1.0 / np.cos(np.radians(lat0))
+
+    def collect(bbox=None):
+        keep, hot = [], []
+        for u, v, k, d in G.edges(keys=True, data=True):
+            geom = d.get("geometry")
+            seg = (np.asarray(geom.coords) if geom is not None else
+                   np.array([[G.nodes[u]["x"], G.nodes[u]["y"]],
+                             [G.nodes[v]["x"], G.nodes[v]["y"]]]))
+            if bbox is not None:
+                x0, x1, y0, y1 = bbox
+                if (seg[:, 0].max() < x0 or seg[:, 0].min() > x1 or
+                        seg[:, 1].max() < y0 or seg[:, 1].min() > y1):
+                    continue
+            (hot if (u, v, k) in closed else keep).append(seg)
+        return keep, hot
+
+    # Left: the whole metro, with a box around the zone so the zoom has an anchor.
+    # Brighter than beat 1's network: at this size the dimmer value read as a grey
+    # smudge rather than as a city.
+    wide = fig.add_axes([0.045, 0.10, 0.42, 0.62], facecolor="none")
+    keep, hot = collect()
+    wide.add_collection(LineCollection(keep, colors="#26313f", linewidths=0.35))
+    wide.autoscale()
+    wide.set_aspect(aspect)
+    wide.axis("off")
+    half = 0.030
+    wide.add_patch(plt.Rectangle((lon0 - half, lat0 - half / aspect),
+                                 2 * half, 2 * half / aspect, fill=False,
+                                 edgecolor=WARN, lw=1.6, zorder=5))
+    wide.set_title("the whole simulated network", color=MUTED, fontsize=15, pad=10)
+
+    # Right: the zone itself. Everything else is context; the closed block is hot.
+    z = 0.016
+    bbox = (lon0 - z, lon0 + z, lat0 - z / aspect, lat0 + z / aspect)
+    near = fig.add_axes([0.53, 0.10, 0.42, 0.62], facecolor="none")
+    keep, hot = collect(bbox)
+    near.add_collection(LineCollection(keep, colors="#273140", linewidths=0.9))
+
+    # The three arterials the rest of the talk is about, named on screen so that
+    # beat 11's "Division and Holgate" lands on streets the room has already seen.
+    # Powell is drawn brightest because it is the one that closes.
+    for street, color, lw in [
+            ("Southeast Powell Boulevard", "#7fb2e0", 2.0),
+            ("Southeast Division Street", "#44607e", 1.6),
+            ("Southeast Holgate Boulevard", "#44607e", 1.6)]:
+        segs, xs, ys = [], [], []
+        for u, v, k, d in G.edges(keys=True, data=True):
+            nm = d.get("name")
+            if street not in (nm if isinstance(nm, list) else [nm]):
+                continue
+            geom = d.get("geometry")
+            seg = (np.asarray(geom.coords) if geom is not None else
+                   np.array([[G.nodes[u]["x"], G.nodes[u]["y"]],
+                             [G.nodes[v]["x"], G.nodes[v]["y"]]]))
+            if (seg[:, 0].max() < bbox[0] or seg[:, 0].min() > bbox[1] or
+                    seg[:, 1].max() < bbox[2] or seg[:, 1].min() > bbox[3]):
+                continue
+            segs.append(seg)
+            xs.extend(seg[:, 0]); ys.extend(seg[:, 1])
+        if not segs:
+            continue
+        near.add_collection(LineCollection(segs, colors=color, linewidths=lw,
+                                           zorder=3))
+        # Label at the street's left-most point inside the frame, nudged inward.
+        i = int(np.argmin(xs))
+        near.text(bbox[0] + 0.0012, ys[i] + 0.0006,
+                  street.replace("Southeast ", "SE "), color=color, fontsize=13,
+                  ha="left", va="bottom", zorder=6)
+
+    near.add_collection(LineCollection(hot, colors=WARN, linewidths=3.4, zorder=4))
+    # The zone itself, so the boxy cluster of removed segments reads as "a circle
+    # of this radius on Powell" rather than as an arbitrary glyph.
+    dlat = radius_m / 111_320.0
+    near.add_patch(mpatches.Ellipse((lon0, lat0), 2 * dlat * aspect, 2 * dlat,
+                                    fill=False, edgecolor=WARN, lw=1.2,
+                                    alpha=0.7, ls="--", zorder=5))
+    near.set_xlim(bbox[0], bbox[1])
+    near.set_ylim(bbox[2], bbox[3])
+    near.set_aspect(aspect)
+    near.axis("off")
+    near.set_title(f"{int(radius_m)} m of SE Powell Boulevard, removed",
+                   color=WARN, fontsize=15, pad=10)
+
+    ax.set_zorder(2)
+    ax.patch.set_alpha(0.0)
+    ax.text(0.5, 0.90, "The experiment", ha="center", va="center", color=INK,
+            fontsize=42)
+    ax.text(0.5, 0.815,
+            "Close one stretch of road. Run the exact same trips again.",
+            ha="center", va="center", color=INK, fontsize=21)
+    ax.text(0.5, 0.045,
+            f"Same drivers, same destinations, same random seed.  "
+            f"{len(closed)} street segments removed.  Nothing else changed.",
+            ha="center", va="center", color="#5c6672", fontsize=14)
+    return _save(fig, "ignite_beat10.png")
+
+
+def beat20_who_this_helps(G):
+    """Beat 20. Who this helps, plus the acknowledgments.
+
+    NO NUMBERS, by design: the room includes family and researchers from other
+    fields, and a figure here would undo the accessibility the whole close is for.
+    The acknowledgments sit on the slide to be READ, not spoken.
+
+    The faint network is beat 1's, so the talk closes on the same picture it
+    opened on.
+
+    The AI-assistance line is not optional politeness: the REU program requires
+    AI assistance to be acknowledged on deliverables, and Christof's Aug 2 email
+    named failure to credit AI as a form of academic misconduct.
+
+    CARRIED, NOT VERIFIED: NSF award 2244551 is taken from the chapter's
+    acknowledgements. It has never been checked against NSF's own records.
+    """
+    fig, ax = _canvas()
+    segs = []
+    for u, v, k, d in G.edges(keys=True, data=True):
+        geom = d.get("geometry")
+        segs.append(np.asarray(geom.coords) if geom is not None else
+                    np.array([[G.nodes[u]["x"], G.nodes[u]["y"]],
+                              [G.nodes[v]["x"], G.nodes[v]["y"]]]))
+    net = fig.add_axes([0, 0, 1, 1], facecolor="none")
+    net.add_collection(LineCollection(segs, colors="#161e29", linewidths=0.3))
+    net.autoscale()
+    net.set_aspect(1.0 / np.cos(np.radians(config.CLOSURE[0])))
+    net.axis("off")
+
+    ax.set_zorder(2)
+    ax.patch.set_alpha(0.0)
+    ax.text(0.5, 0.88, "Closures are not hypothetical.", ha="center", va="center",
+            color=INK, fontsize=42)
+
+    for i, word in enumerate(["Bridge repairs", "Construction", "Emergencies"]):
+        ax.text(0.5, 0.745 - i * 0.085, word, ha="center", va="center",
+                color=ACCENT, fontsize=26)
+
+    ax.text(0.5, 0.415,
+            "They happen constantly, and right now nobody tells\n"
+            "the street that inherits the traffic.",
+            ha="center", va="center", color=INK, fontsize=24, linespacing=1.7)
+    ax.text(0.5, 0.245, "This is a way to find out in advance.",
+            ha="center", va="center", color=INK, fontsize=24)
+
+    ax.text(0.5, 0.165, "Thank you.", ha="center", va="center", color=MUTED,
+            fontsize=22)
+    # Three short lines, not two long ones: at fontsize 11 the single AI sentence
+    # ran off both edges of the slide, which is invisible in a PDF render and
+    # obvious on a projector.
+    ax.text(0.5, 0.075,
+            "Christof Teuscher  ·  Nik Anderson  ·  Dr. Meenakshi Rao (NO$_2$ "
+            "measurements)  ·  Teuscher Lab, Portland State University\n"
+            "NSF REU award 2244551  ·  Orca cluster, NSF award 2346732\n"
+            "AI assistance (Claude, Anthropic) was used for code, figures and "
+            "drafting. All results were checked by the author.",
+            ha="center", va="center", color="#5c6672", fontsize=11,
+            linespacing=1.9)
+    return _save(fig, "ignite_beat20.png")
 
 
 def beat13_number():
@@ -324,12 +648,19 @@ def network_totals():
 def main():
     apply_metro_dirs()
     G = ox.load_graphml(os.path.join(config.NETWORK_DIR, "graph.graphml"))
+    # The static model's inputs, for beats 3 and 4. Same block-group file the
+    # gravity demand and the land-use baseline are built from.
+    bg = pd.read_parquet(os.path.join(config.PROCESSED_DIR, "landuse_bg.parquet"))
     beat01_title(G)
     beat02_monitors(G)
+    beat03_static_way(G, bg)
+    beat04_the_limit(G, bg)
     beat08_scale(G)
+    beat10_experiment(G)
     beat13_number()
     beat14_moved(network_totals())
     beat18_failures()
+    beat20_who_this_helps(G)
 
 
 if __name__ == "__main__":
