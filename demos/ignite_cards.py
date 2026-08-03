@@ -254,10 +254,14 @@ def beat03_static_way(G, bg):
         ax.text(0.045, y - 0.055, sub, color=MUTED, fontsize=15, ha="left",
                 va="center")
 
-    ax.text(0.045, 0.10,
+    # This paragraph has to thread a narrow gap: the deck's "N / 20" counter sits
+    # at the bottom left of every slide, and the input list ends just above. At
+    # fontsize 16 it collided with one or the other, so it is set slightly smaller
+    # and tighter to sit clear of both.
+    ax.text(0.045, 0.118,
             "This is the established method, and it\nworks. Most street-level "
             "pollution maps\nyou have seen were made this way.",
-            color=MUTED, fontsize=16, ha="left", va="center", linespacing=1.7)
+            color=MUTED, fontsize=15, ha="left", va="center", linespacing=1.55)
     return _save(fig, "ignite_beat03.png")
 
 
