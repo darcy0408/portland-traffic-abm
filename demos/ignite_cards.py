@@ -487,7 +487,7 @@ def beat20_who_this_helps(G):
     # ran off both edges of the slide, which is invisible in a PDF render and
     # obvious on a projector.
     ax.text(0.5, 0.075,
-            "Christof Teuscher  ·  Nik Anderson  ·  Dr. Meenakshi Rao (NO$_2$ "
+            "Christof Teuscher  ·  Niklas Anderson  ·  Dr. Meenakshi Rao (NO$_2$ "
             "measurements)  ·  Teuscher Lab, Portland State University\n"
             "NSF REU award 2244551  ·  Orca cluster, NSF award 2346732\n"
             "AI assistance (Claude, Anthropic) was used for code, figures and "
