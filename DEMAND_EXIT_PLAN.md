@@ -265,35 +265,56 @@ WHAT THIS RESULT DOES NOT SAY:
   information, so this is an UPPER BOUND. `REROUTE_STUCK_S = 120 s` is still
   unswept.
 
-## C1 DAY RESULT (Aug 3) — THE FREEZE CLEARS (realism arm; base arm still running)
+## C1 DAY RESULT (Aug 3-4) — the freeze CLEARS on the realism stack; the base arm is relieved but does not recover
 
-SLURM array 117851 task 1 (`realism_reroute`), COMPLETED Aug 3 16:07 Pacific,
-elapsed 23:52:43, exit 0:0. Read with `day_readout.py --runs c1` and
+SLURM array 117851, BOTH tasks COMPLETED: task 1 (`realism_reroute`) Aug 3 16:07
+Pacific, elapsed 23:52:43; task 0 (`base_reroute`) Aug 3 23:56 Pacific, elapsed
+1d 07:41:35. Read with `day_readout.py --runs c1` and
 `metro_c1_experiment.py --readout`, then a `_deep` network pass over the segment
 parquets. The two `metrocal_dayprof_*_segments.parquet` controls were copied down
-from Orca for that pass; `_network_row`'s provenance refusal passed on all three
-runs, so no pair is a mis-join.
-
-**Task 0 (`base_reroute`) is STILL RUNNING** (1d 04h elapsed, ~3d 20h of wall
-left). Everything below is the realism arm ALONE. Do not state a verdict on
-Phase C1 as a whole until the base arm lands: both arms froze in A2 and the
-crossover finding (realism better in the morning, worse at night) means they
-fail differently.
+from Orca for that pass; `_network_row`'s provenance refusal passed on every run,
+so no pair is a mis-join.
 
 **The pre-registered verdict, on the measure it was pre-registered on.** Hour 23
 network stuck vehicle-hours against the PORTAL hour-23 quota of 2,876 active
-vehicles:
+vehicles. The `recovers` test is `final/quota <= 3x overnight`, i.e. does the
+network return to within 3x of its OWN free-flow reference from the quiet small
+hours — not merely whether the total moved:
 
-| arm | h23 stuck veh-h | x quota | verdict |
-|-----|-----------------|---------|---------|
-| ctrl/base (A2) | 9,591 | 3.33x | no recovery — gridlocked |
-| ctrl/realism (A2) | 13,455 | 4.68x | no recovery — gridlocked |
-| **C1/realism** | **133.7** | **0.05x** | **recovers** |
+| arm | h23 stuck veh-h | x quota | overnight ref | verdict |
+|-----|-----------------|---------|---------------|---------|
+| ctrl/base (A2) | 9,591 | 3.33x | 0.06x | no recovery — gridlocked |
+| ctrl/realism (A2) | 13,455 | 4.68x | 0.04x | no recovery — gridlocked |
+| C1/base | 917.4 | 0.32x | 0.06x | no recovery (5.3x its own reference) |
+| **C1/realism** | **133.7** | **0.05x** | 0.04x | **recovers** |
 
-Whole day, network stuck 184,111 -> 28,151 veh-h, **-84.7%**. The heuristic
-deadlock flag fires on 6 hours of the control (18-23, held at exact integers) and
-on **0** hours of the treatment. Peak stuck moves from h18 — i.e. never
-recovering — to h8, and falls monotonically after it.
+Whole day: realism 184,111 -> 28,151 veh-h (**-84.7%**), base 170,083 -> 82,595
+(**-51.4%**). The heuristic deadlock flag fires on 6 hours of the realism control
+(18-23) and 3 of the base control (21-23), and on **0** hours of EITHER
+treatment. Peak stuck moves from h18 — i.e. never recovering — to h8 in both
+treated arms, and falls monotonically after it.
+
+**THE VERDICT ON THE PHASE IS TWO-PART, and the parts must not be collapsed.**
+Rerouting eliminates the frozen deadlock in BOTH arms — no integral-valued hours
+survive anywhere, and even the base arm sheds 90.4% of its hour-23 stuck time.
+But only the realism stack RECOVERS to its own free-flow reference. The base arm
+ends the day at 5.3x its overnight value, hugely better than the 55x of its
+control and still not free-flowing. So A2's gridlock was substantially, but not
+entirely, an artifact of routes planned once at spawn: in the base model
+something beyond routing prevents a return to free flow.
+
+The natural reading is that the arm which reproduces real Powell flow clears and
+the arm which does not, does not — the base model is out of the ODOT band in
+0/8 seeds, so its day behaviour was never physical. That reading is a HYPOTHESIS
+about why the two differ, not a measurement, and it should be labelled as one.
+
+C2 (trip abandonment) remains NOT motivated: it exists to answer true spillback
+deadlock, and no deadlock survives in either arm.
+
+One further change worth recording: the A2 CROSSOVER DISAPPEARS. In the controls
+realism beats base for h0-h11 and is worse from h12 on; with rerouting on,
+`realism never exceeds base` at any hour. The crossover was a property of the
+freeze, not of the realism stack.
 
 **It is not an artifact of the fleet parking itself down.** That was the obvious
 failure mode, and it is the mechanism A2 identified: the hourly profile can only
@@ -357,7 +378,11 @@ WHAT THIS RESULT DOES NOT SAY:
 
 - **Seed 42 only**, inherited from the A2 controls, and so qualitative under the
   project's standing day-run caveat.
-- **The base arm is not in.** See above.
+- **The base arm's day numbers are not physical** for the same reason its hour
+  numbers are not: 0/8 seeds in the ODOT band, in control and treatment alike.
+  Its failure to recover should not be over-read as a fact about traffic.
+- The network totals below are the REALISM pair. The base pair's parquets are on
+  disk but its network-wide view has not been read.
 - Every effect size here is measured against a DEADLOCKED control, so it reads
   "deadlocks vs does not," not "improvement in a working model."
 - Day-run `busiest_powell_veh_hr` (850 C1, 347 control) is a 24-HOUR AVERAGE
