@@ -285,7 +285,7 @@ hours — not merely whether the total moved:
 |-----|-----------------|---------|---------------|---------|
 | ctrl/base (A2) | 9,591 | 3.33x | 0.06x | no recovery — gridlocked |
 | ctrl/realism (A2) | 13,455 | 4.68x | 0.04x | no recovery — gridlocked |
-| C1/base | 917.4 | 0.32x | 0.06x | no recovery (5.3x its own reference) |
+| C1/base | 917.4 | 0.32x | 0.06x | no recovery (4.9x its own reference) |
 | **C1/realism** | **133.7** | **0.05x** | 0.04x | **recovers** |
 
 Whole day: realism 184,111 -> 28,151 veh-h (**-84.7%**), base 170,083 -> 82,595
@@ -298,7 +298,7 @@ treated arms, and falls monotonically after it.
 Rerouting eliminates the frozen deadlock in BOTH arms — no integral-valued hours
 survive anywhere, and even the base arm sheds 90.4% of its hour-23 stuck time.
 But only the realism stack RECOVERS to its own free-flow reference. The base arm
-ends the day at 5.3x its overnight value, hugely better than the 55x of its
+ends the day at 4.9x its overnight value, hugely better than the 51.7x of its
 control and still not free-flowing. So A2's gridlock was substantially, but not
 entirely, an artifact of routes planned once at spawn: in the base model
 something beyond routing prevents a return to free flow.
