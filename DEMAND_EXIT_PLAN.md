@@ -264,3 +264,110 @@ WHAT THIS RESULT DOES NOT SAY:
 - Both bounds above still apply: no-U-turn, and perfect network-wide
   information, so this is an UPPER BOUND. `REROUTE_STUCK_S = 120 s` is still
   unswept.
+
+## C1 DAY RESULT (Aug 3) — THE FREEZE CLEARS (realism arm; base arm still running)
+
+SLURM array 117851 task 1 (`realism_reroute`), COMPLETED Aug 3 16:07 Pacific,
+elapsed 23:52:43, exit 0:0. Read with `day_readout.py --runs c1` and
+`metro_c1_experiment.py --readout`, then a `_deep` network pass over the segment
+parquets. The two `metrocal_dayprof_*_segments.parquet` controls were copied down
+from Orca for that pass; `_network_row`'s provenance refusal passed on all three
+runs, so no pair is a mis-join.
+
+**Task 0 (`base_reroute`) is STILL RUNNING** (1d 04h elapsed, ~3d 20h of wall
+left). Everything below is the realism arm ALONE. Do not state a verdict on
+Phase C1 as a whole until the base arm lands: both arms froze in A2 and the
+crossover finding (realism better in the morning, worse at night) means they
+fail differently.
+
+**The pre-registered verdict, on the measure it was pre-registered on.** Hour 23
+network stuck vehicle-hours against the PORTAL hour-23 quota of 2,876 active
+vehicles:
+
+| arm | h23 stuck veh-h | x quota | verdict |
+|-----|-----------------|---------|---------|
+| ctrl/base (A2) | 9,591 | 3.33x | no recovery — gridlocked |
+| ctrl/realism (A2) | 13,455 | 4.68x | no recovery — gridlocked |
+| **C1/realism** | **133.7** | **0.05x** | **recovers** |
+
+Whole day, network stuck 184,111 -> 28,151 veh-h, **-84.7%**. The heuristic
+deadlock flag fires on 6 hours of the control (18-23, held at exact integers) and
+on **0** hours of the treatment. Peak stuck moves from h18 — i.e. never
+recovering — to h8, and falls monotonically after it.
+
+**It is not an artifact of the fleet parking itself down.** That was the obvious
+failure mode, and it is the mechanism A2 identified: the hourly profile can only
+shed vehicles when trips COMPLETE, so a run that completes trips ends with fewer
+active vehicles and trivially less stuck time. C1 does park more — on-network
+vehicle-hours 263,044 -> 229,138, -12.9%. But normalising stuck time by ACTUAL
+on-network vehicle time rather than the nominal 16,500 x 24 h fleet-day:
+
+| arm | on-network veh-h | stuck veh-h | stuck share |
+|-----|------------------|-------------|-------------|
+| ctrl/base | 244,398 | 170,083 | 69.6% |
+| ctrl/realism | 263,044 | 184,111 | 70.0% |
+| **C1/realism** | **229,138** | **28,151** | **12.3%** |
+
+A 5.7x drop that survives the normalisation. The controls spend 70% of their
+on-network time below stuck speed; C1 spends 12%.
+
+**What the fleet does with the relief** (network totals from the parquets):
+
+| measure | ctrl/realism | C1/realism | change |
+|---------|--------------|------------|--------|
+| distance veh-km | 4,469,108 | 11,051,278 | **+147.3%** |
+| mean speed km/h | 16.99 | 48.23 | +183.9% |
+| edge traversals | 16,840,715 | 43,337,570 | +157.3% |
+| **network NOx** | **2,508,986 g** | **2,303,364 g** | **-8.20%** |
+| NOx per veh-km | 0.56141 | 0.20843 | -62.9% |
+| edges carrying traffic | 130,606 | 140,189 | +7.3% |
+| edges gaining / losing traffic | 135,399 / 12 | | — |
+
+The NOx sign is the OPPOSITE of the hour arm's (+0.42%), and the reason is
+mechanical rather than contradictory: the deadlocked control burns NOx idling for
+almost no distance. **The quotable form is "nearly the same NOx for two and a
+half times the distance."** Do NOT lead with the -62.9% NOx-per-km figure — it is
+arithmetically true but its denominator moved 147%, which flatters it. This also
+settles the "fewer kilometres driven?" alternative explanation for the NOx drop:
+ruled out, and in the opposite direction.
+
+Note `edges gaining / losing = 135,399 / 12`. At day scale this is not the 14:1
+redistribution the hour arm showed — essentially nothing loses traffic, because
+the control is starved network-wide. Read it as the network unlocking, not as
+diversion.
+
+**Two corroborating provenance signals**, worth keeping because they are cheap
+and they check the join independently of the NOx cross-check:
+
+- Hours 0-3 are identical between control and treatment on network stuck
+  vehicle-hours to the reported precision (delta +0.0); the first divergence is
+  h4 at -4.6. Rerouting is correctly inert before congestion exists, and the pair
+  is genuinely the same seed. This is NOT a bit-identity claim about
+  trajectories — `kernel_regression.py` is what makes that claim.
+- The control's Powell goes DEAD after h16 while C1's carries traffic through
+  h23 (Powell 1,172.5 -> 2,980.0 veh-h). The control's quiet Powell is starvation
+  by upstream gridlock, not free flow.
+
+**Interpretation.** A2's day-scale gridlock was substantially an artifact of
+routes planned once at spawn against free-flow times and never revised. This is
+the freeze-CLEARS branch of the two outcomes this phase pre-registered, which
+means **C2 (trip abandonment) is NOT motivated and should stay unbuilt.**
+
+WHAT THIS RESULT DOES NOT SAY:
+
+- **Seed 42 only**, inherited from the A2 controls, and so qualitative under the
+  project's standing day-run caveat.
+- **The base arm is not in.** See above.
+- Every effect size here is measured against a DEADLOCKED control, so it reads
+  "deadlocks vs does not," not "improvement in a working model."
+- Day-run `busiest_powell_veh_hr` (850 C1, 347 control) is a 24-HOUR AVERAGE
+  (throughput / sim_hours), not the peak-hour metric. Do NOT read it against the
+  ODOT band of 1,400-1,745; only the hour arm speaks to the band.
+- Network mean speed of 48.23 km/h is at the high end of plausible for this
+  graph and has not been sanity-checked against a free-flow expectation.
+- Both bounds still apply: no-U-turn, and perfect network-wide information, so
+  this is an UPPER BOUND on what rerouting can relieve.
+- **`REROUTE_STUCK_S = 120 s` is still unswept, and this result makes the sweep
+  MORE load-bearing, not less**: an 85% effect resting on an unsourced
+  driver-patience constant is the exposed flank. Sweep harness:
+  `src/metro_c1_sweep.py`.
