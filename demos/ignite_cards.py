@@ -125,8 +125,14 @@ def beat01_title(G):
             color=INK, fontsize=54, fontweight="light")
     ax.text(0.5, 0.20, "Darcy Van Pelt", ha="center", va="center",
             color=MUTED, fontsize=22)
-    ax.text(0.5, 0.14, "Portland State University REU  ·  Teuscher Lab",
+    # Affiliation is the home school, per Christof's Aug 3 ruling ("you should
+    # list your school ... even for the paper"); the REU is credited as the
+    # program, not the affiliation. Both lines centered: left-aligned text below
+    # y~0.10 collides with the deck's "N / 20" counter, centered text clears it.
+    ax.text(0.5, 0.14, "Colorado State University Global",
             ha="center", va="center", color=MUTED, fontsize=15)
+    ax.text(0.5, 0.09, "NSF REU at Portland State University  ·  Teuscher Lab",
+            ha="center", va="center", color=MUTED, fontsize=12)
     return _save(fig, "ignite_beat01.png")
 
 
