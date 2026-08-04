@@ -78,6 +78,35 @@ RUN_SETS = {
         "pairs": [(f"metrocal_dayprof_base_{SUF}", f"c1_dayprof_base_reroute_{SUF}"),
                   (f"metrocal_dayprof_realism_{SUF}", f"c1_dayprof_realism_reroute_{SUF}")],
     },
+    # REROUTE_STUCK_S sensitivity (src/metro_c1_sweep.py). The C1 day verdict --
+    # freeze clears, stuck time down 84.7% -- currently rests on a 120 s driver-
+    # patience constant with no direct source, so this asks whether the VERDICT is
+    # stable across a plausible range or is an artifact of that one value. Every
+    # arm is the realism stack with rerouting on; only the patience differs, so a
+    # difference between rows cannot be anything else. The 120 s row is the
+    # already-run C1 arm joined from disk, not a re-run.
+    "c1sweep": {
+        "title": ("C1 REROUTE_STUCK_S sweep - does the cleared freeze survive a "
+                  "different\ndriver patience? metro 20 km, 16,500 veh, seed 42, "
+                  "86,400 steps, realism stack"),
+        "runs": [
+            Run(f"metrocal_dayprof_realism_{SUF}", "ctrl/no-reroute", "control", "realism", True),
+            Run(f"c1sw_dayprof_p30_{SUF}", "30 s", "p30", "realism", True),
+            Run(f"c1sw_dayprof_p60_{SUF}", "60 s", "p60", "realism", True),
+            Run(f"c1_dayprof_realism_reroute_{SUF}", "120 s (a-priori)", "p120", "realism", True),
+            Run(f"c1sw_dayprof_p240_{SUF}", "240 s", "p240", "realism", True),
+            Run(f"c1sw_dayprof_p480_{SUF}", "480 s", "p480", "realism", True),
+        ],
+        # same control files as the c1 set, already checked by the a2 set
+        "controls": {},
+        # every patience pairs against the SAME no-reroute control, so the rows
+        # are directly comparable to one another as well as to the control
+        "pairs": [(f"metrocal_dayprof_realism_{SUF}", f"c1sw_dayprof_p30_{SUF}"),
+                  (f"metrocal_dayprof_realism_{SUF}", f"c1sw_dayprof_p60_{SUF}"),
+                  (f"metrocal_dayprof_realism_{SUF}", f"c1_dayprof_realism_reroute_{SUF}"),
+                  (f"metrocal_dayprof_realism_{SUF}", f"c1sw_dayprof_p240_{SUF}"),
+                  (f"metrocal_dayprof_realism_{SUF}", f"c1sw_dayprof_p480_{SUF}")],
+    },
 }
 
 # Whole-run totals that hour bucketing must not have moved. Floats compare
