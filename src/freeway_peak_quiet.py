@@ -168,13 +168,14 @@ def check():
     else:
         print(f"  MISSING  metro graph at {graph}")
         ok = False
-    csv = os.path.join(config.DATA_DIR, "portal_powell_sample.csv")
-    if os.path.exists(csv):
-        print(f"  ok       PORTAL profile csv present (real hourly shape)")
+    # hourly_demand_profile falls back to a synthetic shape silently, which
+    # is the documented failure mode for profiled runs: refuse unless the
+    # real PORTAL csv is what the profile would actually use. demand_data
+    # owns the path (the C1 harness learned this same lesson at 64d70a4).
+    if demand_data.is_using_real_data():
+        print(f"  ok       PORTAL profile is the real csv, not synthetic")
     else:
-        # hourly_demand_profile falls back to a synthetic shape silently,
-        # which is the documented failure mode for profiled runs: refuse
-        print(f"  MISSING  {csv}: the profile would fall back to synthetic")
+        print(f"  REFUSE   demand profile would fall back to synthetic")
         ok = False
     print(f"\n{'READY' if ok else 'NOT READY'}: {len(tasks())} hour jobs")
     return ok

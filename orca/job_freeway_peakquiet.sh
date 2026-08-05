@@ -10,14 +10,15 @@
 #
 #SBATCH --job-name=fwpq
 #SBATCH --partition=normal
-#SBATCH --time=08:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=16G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=logs/fwpq_%A_%a.out
-# time/mem from measured precedent, widened for the peak arms: the fwmsr
+# time/mem from measured precedent, widened hard for the peak arms: the fwmsr
 # campaign at flat 16,500 ran 2:12-2:24 per task at 16G; the peak level
-# carries roughly 1.5x that demand plus a closure, and congestion cost is
-# superlinear near saturation. The quiet arms are small and fast.
+# carries 28,595 vehicles (1.73x, the real PORTAL hour-8 fraction) plus a
+# closure, and congestion cost is superlinear near saturation. The quiet
+# arms (1,780 vehicles) are small and fast.
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
