@@ -37,6 +37,18 @@ adapted state, not day one of a surprise closure.
 
     python src/freeway_multiseed.py --realism --task 7
     python src/freeway_multiseed.py --realism --readout
+
+--reroute: the C1 question applied to the closure. Both prior campaigns plan
+every route ONCE at spawn against free-flow times, so a car pushed off I-205
+never reconsiders its path when the detour jams: the I-5 diversion NULL could
+be an artifact of frozen routing rather than a property of the demand. This
+campaign reruns the same paired design with the realism stack ON plus
+config.REROUTE_ENABLED (stuck cars re-plan on congestion-aware weights, C1),
+under the prefix fwrr and the stack label "realism+reroute", so its files can
+never mix with fwms/fwmsr. Block-1 seeds only, 3 arms x 8 seeds = 24 tasks.
+
+    python src/freeway_multiseed.py --reroute --task 7
+    python src/freeway_multiseed.py --reroute --readout
 """
 import argparse
 import json
@@ -85,6 +97,10 @@ PREFIX = "fwms"          # base campaign; --realism switches this to "fwmsr"
 # MOBIL, driver heterogeneity, Webster, green-wave.
 REALISM_FLAGS = dict(mce.ARMS["realism"])
 STACK_REALISM = False    # set by --realism in main(), before any dispatch
+STACK_REROUTE = False    # set by --reroute in main(); implies the realism stack
+                         # too, because the C1 result was measured ON TOP of
+                         # realism (metro_c1_experiment's realism_reroute arm),
+                         # so that is the arm the closure question extends
 
 # routes whose mainline totals are tracked per run. I-5 is the diversion
 # hypothesis; I-205 is the closed route itself (the sanity check that it drops);
@@ -92,8 +108,25 @@ STACK_REALISM = False    # set by --realism in main(), before any dispatch
 TRACK_ROUTES = ("I 5", "I 205", "OR 213", "OR 99E", "US 26")
 
 
+def stack_name():
+    """One label per campaign, written into every summary and demanded back by
+    the readout guard, so files from different campaigns can never mix."""
+    if STACK_REROUTE:
+        return "realism+reroute"
+    return "realism" if STACK_REALISM else "base"
+
+
+def campaign_seeds():
+    """The seed set the active campaign runs and reads. The reroute campaign is
+    restricted to block 1 (8 seeds, 24 tasks) for now: the first block already
+    answers whether the I-5 null survives replanning, and the blocks are
+    append-only, so extending to block 2 later just lengthens the array without
+    renumbering (run_task skips on the (arm, seed) summary, never the index)."""
+    return SEEDS_BLOCK1 if STACK_REROUTE else SEEDS
+
+
 def tasks():
-    return [(arm, seed) for arm in ARMS for seed in SEEDS]
+    return [(arm, seed) for arm in ARMS for seed in campaign_seeds()]
 
 
 def run_name(arm, seed):
@@ -123,9 +156,22 @@ def run_task(idx):
 
     # F6: set every stack flag EXPLICITLY, True or False, following run_one's
     # precedent in metro_calibrated_experiment -- a task must never inherit
-    # these from a config default or a reused interpreter.
+    # these from a config default or a reused interpreter. The reroute campaign
+    # runs the realism stack too, so its paired partner is fwmsr, not fwms.
     for k in REALISM_FLAGS:
-        setattr(config, k, STACK_REALISM)
+        setattr(config, k, STACK_REALISM or STACK_REROUTE)
+    if STACK_REROUTE:
+        # C1 on top: stuck cars re-plan on congestion-aware weights. The four
+        # constants are pinned HERE to the config defaults rather than read
+        # from config, for the same never-inherit reason as the loop above: a
+        # sweep or a reused interpreter could have left any of them changed,
+        # and a campaign whose knobs drift per task answers nothing.
+        config.REROUTE_ENABLED = True
+        config.REROUTE_STUCK_S = 120.0     # patience before seeking a new path
+        config.STUCK_SPEED_KMH = 5.0       # the stuck threshold, shared with
+                                           # the stuck-time measurement
+        config.REROUTE_COOLDOWN_S = 300.0  # no re-plan thrash between two paths
+        config.REROUTE_MAX_PER_STEP = 20   # compute budget, not physics
 
     removed = []
     if arm != "open":
@@ -149,7 +195,7 @@ def run_task(idx):
                        for u, v, k in keys}
     rec = {
         "arm": arm, "seed": seed,
-        "stack": "realism" if STACK_REALISM else "base",
+        "stack": stack_name(),
         "n_vehicles": config.N_VEHICLES, "n_steps": config.N_STEPS,
         "removed": [[u, v, k] for u, v, k in removed],
         "network_nox_g": float(sum(nox.values())),
@@ -165,7 +211,7 @@ def _paired(summaries, arm, ref, field):
     """Per-seed paired difference on route `ref`, closed arm minus open.
     field 0 = NOx grams, 1 = throughput."""
     diffs, rel = [], []
-    for seed in SEEDS:
+    for seed in campaign_seeds():
         o = summaries.get(("open", seed))
         c = summaries.get((arm, seed))
         if not o or not c or ref not in o["routes"] or ref not in c["routes"]:
@@ -190,7 +236,7 @@ def readout():
                 summaries[(arm, seed)] = json.load(f)
     # a summary written under the wrong prefix would silently mix campaigns;
     # the stack field (absent = the pre-F6 base campaign) makes that fatal
-    want = "realism" if STACK_REALISM else "base"
+    want = stack_name()
     for (arm, seed), s in summaries.items():
         got = s.get("stack", "base")
         if got != want:
@@ -199,7 +245,7 @@ def readout():
     have = {a: sum(1 for (arm, _) in summaries if arm == a) for a in ARMS}
     print(f"stack: {want}")
     print(f"summaries found: " +
-          ", ".join(f"{a} {have[a]}/{len(SEEDS)}" for a in ARMS))
+          ", ".join(f"{a} {have[a]}/{len(campaign_seeds())}" for a in ARMS))
     if have["open"] < 2:
         raise SystemExit("need at least 2 paired seeds for a distribution")
 
@@ -282,7 +328,7 @@ def near_readout(near_km=2.0):
     for arm in ("abernethy", "powell"):
         per_seed = {}      # street -> list of per-seed percent changes
         used = 0
-        for s in SEEDS:
+        for s in campaign_seeds():
             o, c = seg("open", s), seg(arm, s)
             if o is None or c is None:
                 continue
@@ -344,12 +390,22 @@ def main():
                     help="near-field street stability; needs the parquets")
     ap.add_argument("--realism", action="store_true",
                     help="F6: run/read the realism-stack campaign (fwmsr)")
+    ap.add_argument("--reroute", action="store_true",
+                    help="C1: realism stack plus en-route rerouting (fwrr), "
+                         "block-1 seeds only")
     args = ap.parse_args()
 
+    global PREFIX, STACK_REALISM, STACK_REROUTE
+    if args.realism and args.reroute:
+        # each flag names a whole campaign (prefix, stack label, seed set);
+        # combining them would write files no readout could claim
+        ap.error("--realism and --reroute are separate campaigns; give one")
     if args.realism:
-        global PREFIX, STACK_REALISM
         PREFIX = "fwmsr"
         STACK_REALISM = True
+    if args.reroute:
+        PREFIX = "fwrr"
+        STACK_REROUTE = True
 
     if args.count:
         print(len(tasks()))
