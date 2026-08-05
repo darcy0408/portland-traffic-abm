@@ -56,7 +56,26 @@ import metro_calibrated_experiment as mce  # noqa: E402  (the realism stack)
 
 # the project's pinned seed set, reused so this campaign is comparable with the
 # lane and ablation experiments rather than introducing a new set
-SEEDS = (42, 7, 13, 99, 314, 777, 2024, 8)
+SEEDS_BLOCK1 = (42, 7, 13, 99, 314, 777, 2024, 8)
+
+# Second block of 8, pinned Aug 5 2026, doubling the campaign to n=16. These are
+# arbitrary fixed integers written down BEFORE the runs and never re-chosen after
+# seeing a result -- the same discipline the first block follows. Reason for the
+# extension: the I-5 diversion NULL is the most attackable claim in the closure
+# story, and "we found nothing" at n=8 invites the question of whether the test
+# had the power to find anything. Doubling the replicates roughly halves the
+# standard error on every paired difference, so the null gets a tighter interval
+# rather than a louder assertion.
+#
+# APPEND-ONLY, and that is load-bearing. tasks() is arm-major, so adding seeds
+# SHIFTS every task index; that is harmless only because run_task skips on the
+# (arm, seed) summary file, never on the index. Re-submitting the full array
+# therefore re-runs nothing that already exists. Do not reorder or insert into
+# block 1: that would not corrupt anything, but it would make the two campaigns
+# harder to reconcile in the readout.
+SEEDS_BLOCK2 = (1, 3, 21, 55, 101, 555, 1234, 2718)
+
+SEEDS = SEEDS_BLOCK1 + SEEDS_BLOCK2
 ARMS = ("open", "abernethy", "powell")
 PREFIX = "fwms"          # base campaign; --realism switches this to "fwmsr"
 
