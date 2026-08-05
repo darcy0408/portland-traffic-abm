@@ -118,6 +118,35 @@ FLEET_MIXED = True
 # the main arterial is cut and traffic has to divert onto parallel streets.
 CLOSURE = (45.49854, -122.63862, 150.0)
 
+# --- Freeway closure scenario (mentor redirect, Jul 30) ---
+# "Closing Powell is not really that interesting... closures is one thing you use
+# to sell your model." The mentor asked for I-205 or I-5 instead, which have real
+# precedent (the nighttime I-205 closures for Abernethy Bridge repair).
+# A freeway closure cannot use CLOSURE above: that removes every edge in a circle,
+# and freeway segments are so long that any circle big enough to cut the freeway
+# also deletes the surface streets underneath it (measured: an 800 m circle on
+# I-205 closes 245 edges, 240 of them surface streets). So this spec selects by
+# route and road class, leaving the local grid open to receive the detour.
+# Set to None for an ordinary run. Give either `name` or `center` + `radius_m`.
+#   ref         the route as OSM tags it ('I 205', 'I 5')
+#   name        an OSM-named structure to close, e.g. 'Abernethy Bridge'
+#   center      (lat, lon) to close a stretch around instead of a named structure
+#   radius_m    how far along the freeway that stretch reaches
+#   close_ramps also close the on/off ramps stranded inside the closed stretch,
+#               so cars cannot drive onto a shut freeway. The ramps at the two
+#               ends stay open and become the diversion points.
+# Default: the Abernethy Bridge, the stretch with the real closure precedent.
+# NOTE the tradeoff before citing a run: Abernethy sits 15.2 km from the study
+# center where the outer network is under-loaded, while the I-205 stretch beside
+# Powell is 5.7 km out where demand is best supported. Choose with the mentor.
+FREEWAY_CLOSURE = {
+    "ref": "I 205",
+    "name": "Abernethy Bridge",
+    "center": None,
+    "radius_m": None,
+    "close_ramps": True,
+}
+
 # --- Spatial demand (gravity model from population + jobs) ---
 # Trip origins are drawn with probability proportional to resident population, and
 # destinations proportional to jobs, both from real Census/LODES data near the study

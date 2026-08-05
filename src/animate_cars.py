@@ -32,6 +32,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.collections import LineCollection
+from matplotlib.patches import Rectangle
 from PIL import Image
 from shapely.geometry import LineString
 
@@ -44,6 +45,14 @@ WARMUP_S = 600      # simulate this long before recording, so queues are establi
 RECORD_S = 120      # seconds of movement captured (= frames at 1 fps recording)
 FPS = 10            # playback frames per second: 10x real time, 12 s loop
 DOT_VMAX = 13.4     # speed (m/s) mapped to the top of the color scale (30 mph)
+# Signal-square state colors. The red must still read RED at 12-24 px squares
+# on the near-black background: the old #e74c3c coral picked up an orange cast
+# at that size (a Jul 28 talk attendee asked what the "orange squares" were).
+# #e8112d sits slightly blue of pure red, so it cannot drift toward orange, and
+# it beats the coral on red/green colorblind separation from SIG_GREEN
+# (deutan dE 14.3 vs 10.7, dataviz validator, dark surface #0d1117).
+SIG_GREEN = "#2ecc71"
+SIG_RED = "#e8112d"
 ZOOM_HALF_LON = 0.0060   # zoom window half-width in degrees (~470 m at 45.5 N)
 ZOOM_HALF_LAT = 0.0042   # zoom window half-height in degrees (~465 m)
 
@@ -118,20 +127,41 @@ def record(G):
 
 
 def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
-           sig_size=30, title="Each dot is one car"):
+           sig_size=30, title="Each dot is one car", box=None,
+           mark_geoms=None, mark_color="#e74c3c",
+           street_color="#39424e", street_lw=0.7):
     """Draw the recorded frames over the dark network and write a looping GIF.
-    bbox = (lon_min, lon_max, lat_min, lat_max) crops to a zoom window."""
+    bbox = (lon_min, lon_max, lat_min, lat_max) crops to a zoom window.
+    box = (lon_min, lon_max, lat_min, lat_max), optional: draws a non-filled
+    rectangle at those data coords on every frame (not a crop). Used to bake a
+    "zoom window" outline into a full-view render so a companion zoom GIF's
+    crop is registered against it by construction, instead of by hand.
+    mark_geoms = list of shapely LineStrings drawn over the gray map in
+    mark_color on every frame: used by the closure demo to highlight the
+    closed stretch (teal before, red after) without touching the base map.
+    street_color/street_lw restyle the base map: zoom renders brighten it so
+    the street grid stays visible under dense downtown signals (Jul 28 fix:
+    at the old faint styling the signal squares read as floating in blackness)."""
     segs = [np.asarray(g.coords) for g in geoms.values()]
 
     fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
     fig.patch.set_facecolor("#0d1117")
     ax.set_facecolor("#0d1117")
-    ax.add_collection(LineCollection(segs, colors="#39424e", linewidths=0.7))
+    ax.add_collection(LineCollection(segs, colors=street_color, linewidths=street_lw))
     if bbox:
         ax.set_xlim(bbox[0], bbox[1])
         ax.set_ylim(bbox[2], bbox[3])
     else:
         ax.autoscale()
+    if box is not None:
+        lon0, lon1, lat0, lat1 = box
+        ax.add_patch(Rectangle((lon0, lat0), lon1 - lon0, lat1 - lat0,
+                                fill=False, edgecolor="#16d6c1", linewidth=2,
+                                zorder=5))
+    if mark_geoms:
+        ax.add_collection(LineCollection(
+            [np.asarray(g.coords) for g in mark_geoms],
+            colors=mark_color, linewidths=2.5, zorder=3.5))
     ax.set_aspect(1.0 / math.cos(math.radians(config.STUDY_CENTER[0])))
     ax.axis("off")
     ax.set_title(title, color="#e6edf3", fontsize=15, pad=12)
@@ -142,7 +172,7 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
 
     # dynamic artists, updated in place each frame (fast: no re-draw of the map)
     sig_scatter = ax.scatter(sig_xy[:, 0], sig_xy[:, 1], s=sig_size, marker="s",
-                             c="#e74c3c", zorder=3)
+                             c=SIG_RED, zorder=3)
     car_scatter = ax.scatter([], [], s=dot_size, c=[], cmap="RdYlGn",
                              vmin=0.0, vmax=DOT_VMAX, zorder=4, linewidths=0)
     clock = ax.text(0.02, 0.02, "", transform=ax.transAxes, color="#9da7b3",
@@ -152,7 +182,7 @@ def render(G, frames, sig_xy, geoms, out_path, bbox=None, dot_size=14,
     for i, (xy, spd, green_ew) in enumerate(frames):
         car_scatter.set_offsets(xy)
         car_scatter.set_array(spd)
-        sig_scatter.set_color(np.where(green_ew, "#2ecc71", "#e74c3c"))
+        sig_scatter.set_color(np.where(green_ew, SIG_GREEN, SIG_RED))
         clock.set_text(f"t = +{i // 60}:{i % 60:02d}  (10x speed)")
         buf = io.BytesIO()
         fig.savefig(buf, format="png", facecolor=fig.get_facecolor())
