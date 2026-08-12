@@ -279,6 +279,12 @@ def beat03_static_way(G, bg):
             "This is the established method, and it\nworks. Most street-level "
             "pollution maps\nyou have seen were made this way.",
             color=MUTED, fontsize=15, ha="left", va="center", linespacing=1.55)
+    # Rao named on the slide (Christof, Aug 12 practice run: cite the prior
+    # work at the START for credibility, not only at the comparison). Centered
+    # so it clears the bottom-left "N / 20" counter.
+    ax.text(0.655, 0.965, "Portland's published static NO$_2$ model: "
+            "Rao et al. 2017. My starting point, and my benchmark.",
+            ha="center", va="center", color="#5c6672", fontsize=13)
     return _save(fig, "ignite_beat03.png")
 
 
@@ -530,45 +536,36 @@ def beat13_number():
 def beat14_moved(net_pct):
     """Beat 14. Moved, not removed: the total barely budges, the map rearranges.
 
-    net_pct is recomputed from the saved runs, so the claim on the card is the
-    claim in the data. M20.17's discipline is explicit that the network total's
-    SIGN varies across seeds, so this must never read 'rises slightly'.
+    REDESIGNED Aug 12 after the practice run: Christof read the old two-bar
+    panel as roads and waited for it to animate, and called this the deck's
+    most text-heavy slide (nobody can read a paragraph in 15 seconds). Now a
+    beat-13-style big-number card: one claim, one number, two short lines.
+    net_pct is still recomputed from the saved runs, so the claim on the card
+    is the claim in the data. M20.17's discipline is explicit that the network
+    total's SIGN varies across seeds, so this must never read 'rises slightly';
+    the card states the bound and the up/down split instead.
     """
     fig, ax = _canvas()
-    ax.text(0.5, 0.88, "It did not go away. It moved.",
-            ha="center", va="center", color=INK, fontsize=40)
-
     worst = np.abs(net_pct).max()
     n_up = int((net_pct > 0).sum())
     n_dn = int((net_pct < 0).sum())
 
-    bx = fig.add_axes([0.09, 0.26, 0.36, 0.44], facecolor="none")
-    # Both bars the SAME colour on purpose. The message is "these are the same
-    # height"; giving the closed bar its own bright colour makes the eye read a
-    # difference that is not there, which is the opposite of the point.
-    bx.bar([0, 1], [100, 100 + net_pct[0]], color="#3d4d5f", width=0.55)
-    bx.set_ylim(0, 125)
-    bx.set_xticks([0, 1])
-    bx.set_xticklabels(["road open", "road closed"], color=INK, fontsize=15)
-    bx.set_yticks([])
-    for sp in bx.spines.values():
-        sp.set_visible(False)
-    bx.tick_params(length=0)
-    bx.set_title("NO$_2$ across the whole network",
-                 color=MUTED, fontsize=15, pad=12)
-    bx.text(0.5, 112, f"{net_pct[0]:+.1f}%", ha="center", color=ACCENT, fontsize=19)
-
-    ax.text(0.56, 0.60,
-            f"The network total never moves more\nthan {worst:.1f}% in either direction,\n"
-            f"and across 12 runs it goes up {n_up} times\nand down {n_dn}. "
-            "It is a coin flip.",
-            color=INK, fontsize=19, ha="left", va="center", linespacing=1.7)
-    ax.text(0.56, 0.32,
-            "But underneath, the map rearranges:\n"
-            "Powell drops about 81%, and Division\n"
-            "and Holgate rise in 12 runs out of 12.",
-            color=MUTED, fontsize=17, ha="left", va="center", linespacing=1.7)
-    ax.text(0.5, 0.08,
+    ax.text(0.5, 0.88, "It did not go away. It moved.",
+            ha="center", va="center", color=INK, fontsize=40)
+    ax.text(0.5, 0.72, "NO$_2$ across the whole network changes by",
+            ha="center", va="center", color=MUTED, fontsize=21)
+    # ceil keeps the giant number honest: |worst| is 1.7, "under 2%" is true.
+    ax.text(0.5, 0.50, f"under {int(np.ceil(worst))}%",
+            ha="center", va="center", color=ACCENT, fontsize=120,
+            fontweight="bold")
+    ax.text(0.5, 0.29,
+            f"in every one of 12 runs  ·  up {n_up}, down {n_dn}, a coin flip",
+            ha="center", va="center", color=INK, fontsize=20)
+    ax.text(0.5, 0.175,
+            "Underneath, the map rearranges: Powell drops about 81%, and "
+            "Division and Holgate rise, 12 runs of 12.",
+            ha="center", va="center", color=MUTED, fontsize=16)
+    ax.text(0.5, 0.075,
             "Same cars, same destinations, one blocked street.  "
             "The pollution lands on somebody else.",
             ha="center", va="center", color="#5c6672", fontsize=13)
