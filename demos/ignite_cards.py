@@ -591,7 +591,9 @@ def beat08_scale(G):
     # the live graph so it still cannot drift.
     n_seg = int(round(G.number_of_edges(), -3))
     stats = [
-        (f"{config.STUDY_RADIUS_M // 1000} km", "across, the\nwhole metro"),
+        # STUDY_RADIUS_M is a radius; the label says "across", so print the
+        # diameter (fixed Aug 12: the card said 20 km, half the true extent).
+        (f"{2 * config.STUDY_RADIUS_M // 1000} km", "across, the\nwhole metro"),
         (f"{n_seg // 1000}k", "street\nsegments"),
         (f"{config.N_VEHICLES:,}", "simulated\nvehicles"),
         ("531k", "real commuter\njourneys"),
