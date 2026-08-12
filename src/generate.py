@@ -904,8 +904,19 @@ def build_through_context(G, nodes):
         return None
     print(f"  through-traffic: {frac:.0%} of trips cross the area, "
           f"{len(boundary)} boundary entry/exit nodes (arterial-weighted)")
-    return {"nodes": boundary, "weight": weight,
-            "bx": np.array(bx), "by": np.array(by), "fraction": frac}
+    ctx = {"nodes": boundary, "weight": weight,
+           "bx": np.array(bx), "by": np.array(by), "fraction": frac}
+    if config.THROUGH_CORRIDOR_CHOICE:
+        # Lever A: corridor choice needs its own RNG stream (RANDOM_SEED + 4,
+        # alongside +1 signals / +2 fleet / +3 drivers). Candidate draws from the
+        # trip stream would shift every later origin/destination draw, changing
+        # the whole population; with a dedicated stream the flag-off trip
+        # sequence is preserved and only through-trip ENTRIES move.
+        k = config.THROUGH_CORRIDOR_CANDIDATES
+        print(f"  corridor choice ON: each through trip enters at the cheapest "
+              f"of {k} sampled candidates (own RNG stream, seed+4)")
+        ctx["corridor"] = {"rng": random.Random(config.RANDOM_SEED + 4), "k": k}
+    return ctx
 
 
 def build_fleet_context():
@@ -1120,6 +1131,7 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
     drawn from the driver mix at spawn, carried on veh["idm"] for the whole trip.
     Returns None if no route is found after a few tries."""
     for _ in range(25):
+        path = None   # a corridor-choice through trip precomputes its own path below
         if through is not None and rng.random() < through["fraction"]:
             # THROUGH trip: enter on a perimeter node and leave on another, so the
             # trip crosses the study area like regional traffic passing through.
@@ -1134,6 +1146,29 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
             dist = np.sqrt(dx * dx + dy * dy)
             w = np.asarray(bw) * dist
             d = bnodes[rng.choices(range(len(bnodes)), weights=w.tolist())[0]]
+            corr = through.get("corridor")
+            if corr is not None:
+                # Lever A (config.THROUGH_CORRIDOR_CHOICE): the entry above was
+                # drawn closure-blind, so a driver holds their corridor even when
+                # it is closed. Instead, sample k candidate entries from the same
+                # arterial-weighted distribution (the corridor stream, so the
+                # trip-stream draws above are identical to the flag-off run) and
+                # enter at whichever reaches the exit d cheapest on the ACTUAL
+                # graph. One multi-source Dijkstra answers all k candidates at
+                # once and its winning path IS the route, so a corridor trip
+                # costs about the same as the plain shortest_path call below.
+                # The exit d stays as drawn; only the entry moves.
+                picks = corr["rng"].choices(range(len(bnodes)), weights=bw,
+                                            k=corr["k"])
+                sources = {bnodes[i] for i in picks} - {d}
+                if not sources:
+                    continue
+                try:
+                    _, path = nx.multi_source_dijkstra(G, sources, d,
+                                                       weight="travel_time_s")
+                except (nx.NetworkXNoPath, nx.NodeNotFound):
+                    continue   # no candidate reaches the exit; redraw the trip
+                o = path[0]    # the winning candidate is the realized entry
         elif demand is None:
             o, d = rng.choice(nodes), rng.choice(nodes)
         elif demand.get("mode") == "od":
@@ -1160,12 +1195,14 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
                 d = rng.choices(nodes, weights=demand["dest_w_list"])[0]
         if o == d:
             continue
-        try:
-            # route by travel time, not distance: real drivers minimize time, which
-            # favors faster arterials and matches where real counts concentrate.
-            path = nx.shortest_path(G, o, d, weight="travel_time_s")
-        except nx.NetworkXNoPath:
-            continue
+        if path is None:
+            try:
+                # route by travel time, not distance: real drivers minimize time,
+                # which favors faster arterials and matches where real counts
+                # concentrate.
+                path = nx.shortest_path(G, o, d, weight="travel_time_s")
+            except nx.NetworkXNoPath:
+                continue
         if len(path) < 2:
             continue
         route = [_edge_between(G, path[i], path[i + 1]) for i in range(len(path) - 1)]
@@ -1483,10 +1520,41 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
     return flows
 
 
+def _apply_congested_times(G, v_sum, totals, verbose=True):
+    """Lever B, between passes: replace each edge's ROUTING weight travel_time_s
+    with length / realized mean speed measured in pass 1, floored at free-flow
+    (an edge is never cheaper than its empty-road time; edges that carried no car
+    keep free-flow). Only the routing weight moves: v0_mps still drives the IDM,
+    so the car-following physics is untouched. The 0.1 m/s speed floor keeps a
+    fully jammed edge's weight finite; enormous is the honest signal, infinite
+    would poison the Dijkstra."""
+    changed = 0
+    for u, v, k, d in G.edges(keys=True, data=True):
+        secs = totals.get((u, v, k), 0.0)
+        if secs <= 0.0:
+            continue
+        mean_v = max(v_sum.get((u, v, k), 0.0) / secs, 0.1)
+        t_cong = d["length"] / mean_v
+        if t_cong > d["travel_time_s"]:   # floor at free-flow: only ever slower
+            d["travel_time_s"] = t_cong
+            changed += 1
+    if verbose:
+        print(f"  iterated assignment: congested routing weights applied on "
+              f"{changed} of {G.number_of_edges()} edges (rest keep free-flow)")
+    return changed
+
+
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
-                   speed_stats=None, stuck_stats=None):
+                   speed_stats=None, stuck_stats=None, _assignment_pass1=False):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
     per-segment vehicle-seconds of activity, and per-segment NOx grams.
+
+    With config.ROUTE_ITERATED_ASSIGNMENT (lever B), the whole simulation runs
+    TWICE: pass 1 is exactly the base model and measures realized per-edge
+    speeds, then pass 2 re-runs the same seeded population routing on those
+    congested times and is the run whose results are returned/saved.
+    _assignment_pass1 is internal: it marks the recursive pass-1 call so it
+    cannot recurse again.
 
     speed_stats (opt-in, realism readout): pass an empty dict and it is filled
     in place with per-segment time-weighted speed sums, keys "v_sum" and
@@ -1501,6 +1569,24 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
     prepare_network(G)
+    # Lever B (config.ROUTE_ITERATED_ASSIGNMENT): run the full base model once to
+    # measure where congestion actually forms, then re-route pass 2 on those
+    # realized times. Pass 1 recurses with the marker set (so it runs today's
+    # free-flow-routing model exactly, and cannot itself recurse) and its own
+    # speed accumulators; its RNG streams are all rebuilt from config.RANDOM_SEED
+    # inside the call, so pass 2 below re-derives the identical seeded population
+    # and only the routing weights differ. prepare_network above (and again
+    # inside the recursion) resets every weight to free-flow first, so the
+    # override starts from a clean slate on every call.
+    if config.ROUTE_ITERATED_ASSIGNMENT and not _assignment_pass1:
+        if verbose:
+            print("iterated assignment ON: pass 1 (free-flow routing) measures "
+                  "congested times; the pass 2 after it is the reported run")
+        p1_speed = {}
+        p1_totals, _p1_nox, _p1_thru = run_simulation(
+            G, n_vehicles, n_steps, use_checkpoint=False, verbose=verbose,
+            speed_stats=p1_speed, _assignment_pass1=True)
+        _apply_congested_times(G, p1_speed["v_sum"], p1_totals, verbose=verbose)
     # Webster signal timing (Phase 4, increment 2): a measurement pre-pass first,
     # so each intersection can be timed to the volume it actually carries. Off by
     # default -- prepare_signals(G) with no flows is the uniform base signal, and

@@ -221,6 +221,41 @@ THROUGH_TRAFFIC_FRACTION = 0.15
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
+# --- Lever A: closure-aware corridor choice for through trips (Aug 11) ---
+# The I-5 composition diagnostic showed the freeway-diversion null is a missing
+# MECHANISM, not a missing population: a through trip's entry node is drawn
+# closure-blind, so the corridor choice a real driver makes BEFORE entering the
+# study area (I-5 vs I-205 when one is closed) does not exist in the model. With
+# this flag on, each through trip still makes its normal (origin, destination)
+# draw from the trip RNG stream, then samples THROUGH_CORRIDOR_CANDIDATES entry
+# nodes from the same arterial-weighted boundary distribution using a DEDICATED
+# RNG stream (RANDOM_SEED + 4, alongside +1 signals / +2 fleet / +3 drivers), and
+# enters at the candidate with the cheapest path cost to its exit on the ACTUAL
+# graph. The mechanism is applied identically in open and closed arms; only the
+# graph differs, so a closure can now repel entries the way it repels routes.
+# Pre-registered Aug 11 BEFORE any result exists: candidate count 5 is fixed a
+# priori, the verdict bar is the freeway campaign's (unanimous sign AND |t|>3),
+# and the result is reported whatever it shows, including still-null. Off by
+# default: the committed spec and every cited number use the closure-blind draw.
+THROUGH_CORRIDOR_CHOICE = False
+THROUGH_CORRIDOR_CANDIDATES = 5   # entry nodes sampled per through trip, a priori
+
+# --- Lever B: congestion-aware initial routing, one iterated-assignment pass ---
+# Spawn routing is all-or-nothing on FREE-FLOW times, so detour congestion never
+# feeds back into route choice (the second mechanical reason the displaced traffic
+# cannot discover I-5). With this flag on, run_simulation runs the whole
+# simulation TWICE: pass 1 is exactly today's model and measures realized
+# per-edge speeds (the existing speed_stats hook); each edge's routing weight
+# travel_time_s is then set to length / realized speed, floored at free-flow
+# (never faster than empty-road time); pass 2 re-runs the same seeded population
+# on those congested weights and is the run that gets reported. One iteration is
+# fixed a priori (pre-registered Aug 11, same discipline as lever A above). Each
+# campaign arm uses its OWN pass 1, so a closed arm's weights carry the closed
+# network's congestion. Car-following dynamics never change: v0_mps still drives
+# the IDM; only the routing weight moves. Off by default: the committed spec and
+# every cited number route on free-flow times, and pass-1-only equals the base model.
+ROUTE_ITERATED_ASSIGNMENT = False
+
 # --- Multi-lane capacity experiment (lanes-experiment worktree, Jul 10) ---
 # The base model gives every directed segment ONE following lane, which caps a
 # signalized segment near 1,070 veh/hr, below Powell's real peak (see
