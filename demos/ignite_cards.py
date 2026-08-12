@@ -545,6 +545,13 @@ def beat14_moved(net_pct):
     total's SIGN varies across seeds, so this must never read 'rises slightly';
     the card states the bound and the up/down split instead.
     """
+    return _beat14_draw(net_pct, phase=4, name="ignite_beat14.png")
+
+
+def _beat14_draw(net_pct, phase, name):
+    """Draw the beat-14 card up to `phase` (1..4). Phase 4 is the full card;
+    lower phases power the staged-reveal GIF, whose steps land in sync with
+    the four spoken lines so the audience reads one line at a time."""
     fig, ax = _canvas()
     worst = np.abs(net_pct).max()
     n_up = int((net_pct > 0).sum())
@@ -552,24 +559,49 @@ def beat14_moved(net_pct):
 
     ax.text(0.5, 0.88, "It did not go away. It moved.",
             ha="center", va="center", color=INK, fontsize=40)
-    ax.text(0.5, 0.72, "NO$_2$ across the whole network changes by",
-            ha="center", va="center", color=MUTED, fontsize=21)
-    # ceil keeps the giant number honest: |worst| is 1.7, "under 2%" is true.
-    ax.text(0.5, 0.50, f"under {int(np.ceil(worst))}%",
-            ha="center", va="center", color=ACCENT, fontsize=120,
-            fontweight="bold")
-    ax.text(0.5, 0.29,
-            f"in every one of 12 runs  ·  up {n_up}, down {n_dn}, a coin flip",
-            ha="center", va="center", color=INK, fontsize=20)
-    ax.text(0.5, 0.175,
-            "Underneath, the map rearranges: Powell drops about 81%, and "
-            "Division and Holgate rise, 12 runs of 12.",
-            ha="center", va="center", color=MUTED, fontsize=16)
-    ax.text(0.5, 0.075,
-            "Same cars, same destinations, one blocked street.  "
-            "The pollution lands on somebody else.",
-            ha="center", va="center", color="#5c6672", fontsize=13)
-    return _save(fig, "ignite_beat14.png")
+    if phase >= 2:
+        ax.text(0.5, 0.72, "NO$_2$ across the whole network changes by",
+                ha="center", va="center", color=MUTED, fontsize=21)
+        # ceil keeps the giant number honest: |worst| is 1.7, "under 2%" holds.
+        ax.text(0.5, 0.50, f"under {int(np.ceil(worst))}%",
+                ha="center", va="center", color=ACCENT, fontsize=120,
+                fontweight="bold")
+    if phase >= 3:
+        ax.text(0.5, 0.29,
+                f"in every one of 12 runs  ·  up {n_up}, down {n_dn}, a coin flip",
+                ha="center", va="center", color=INK, fontsize=20)
+    if phase >= 4:
+        ax.text(0.5, 0.175,
+                "Underneath, the map rearranges: Powell drops about 81%, and "
+                "Division and Holgate rise, 12 runs of 12.",
+                ha="center", va="center", color=MUTED, fontsize=16)
+        ax.text(0.5, 0.075,
+                "Same cars, same destinations, one blocked street.  "
+                "The pollution lands on somebody else.",
+                ha="center", va="center", color="#5c6672", fontsize=13)
+    return _save(fig, name)
+
+
+def beat14_moved_anim(net_pct):
+    """Beat 14 as a staged-reveal GIF for the animated deck (the stills deck
+    keeps the static card). Frame timings track the spoken script: headline
+    (~2.5 s), the number (~4 s), the coin flip (~3.5 s), then the full card
+    held far longer than the slide's 15 s so a GIF loop restart can never
+    show on screen."""
+    from PIL import Image
+
+    frames, durations = [], [2500, 4000, 3500, 30000]
+    for phase in range(1, 5):
+        p = _beat14_draw(net_pct, phase, f"_beat14_phase{phase}.png")
+        frames.append(Image.open(p).convert("P", palette=Image.ADAPTIVE,
+                                            colors=256))
+    out = os.path.join(config.FIGURES_DIR, "ignite_beat14_reveal.gif")
+    frames[0].save(out, save_all=True, append_images=frames[1:],
+                   duration=durations, loop=0)
+    for phase in range(1, 5):
+        os.remove(os.path.join(config.FIGURES_DIR, f"_beat14_phase{phase}.png"))
+    print(f"wrote {out}")
+    return out
 
 
 def beat08_scale(G):
