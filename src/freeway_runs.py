@@ -39,10 +39,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config          # noqa: E402
 import generate        # noqa: E402
 
-# The two closures under test. Abernethy selects by OSM structure name. The
+# The closures under test. Abernethy selects by OSM structure name. The
 # Powell/Division stretch has no named structure, so it selects by a point on
 # the mainline and a reach; both were verified with freeway_closure_check.py
 # (composition freeway-only, local grid untouched, both diversions exist).
+# rosequarter models the real Sept 11 2026 ODOT closure (project 19071):
+# I-5 SOUTHBOUND only, between the I-405 and I-84 interchanges, so it is the
+# one directional spec; northbound stays open. Zone and SB/NB separation were
+# probe-verified on the metro graph (3 SB mainline edges, 1,628 m, 2 stranded
+# ramps, detour via I-405 exists).
 SCENARIOS = {
     "abernethy": {
         "ref": "I 205", "name": "Abernethy Bridge",
@@ -53,7 +58,18 @@ SCENARIOS = {
         "center": (45.4995, -122.5655), "radius_m": 900.0,
         "close_ramps": True,
     },
+    "rosequarter": {
+        "ref": "I 5", "name": None,
+        "center": (45.5355, -122.6690), "radius_m": 800.0,
+        "close_ramps": True, "direction": "S",
+    },
 }
+
+# This script's own experiment stays the original I-205 pair; later scenarios
+# (rosequarter) are pulled from SCENARIOS by name in their own campaign
+# scripts. Keeping the run set explicit means adding a scenario spec above
+# can never silently grow this script's (hours-long) run list.
+RUN_SET = ("abernethy", "powell")
 
 BASE = "fw205"
 
@@ -113,9 +129,10 @@ def main():
         print(f"{'=' * 66}\nRUN {prefix}_open  (shared baseline, seed 42)\n{'=' * 66}")
         results["open"] = one_run(f"{prefix}_open", None, args.smoke)
 
-        for scen, spec in SCENARIOS.items():
+        for scen in RUN_SET:
             print(f"\n{'=' * 66}\nRUN {prefix}_{scen}_closed  (seed 42)\n{'=' * 66}")
-            results[scen] = one_run(f"{prefix}_{scen}_closed", spec, args.smoke)
+            results[scen] = one_run(f"{prefix}_{scen}_closed", SCENARIOS[scen],
+                                    args.smoke)
     finally:
         config.RUN_NAME = base_run
 

@@ -282,6 +282,31 @@ def _ramp_edges_at(G, nodes):
     return ramps
 
 
+# Compass direction of travel -> (node coordinate axis, sign of displacement).
+_DIRECTION_AXES = {"N": ("y", 1.0), "S": ("y", -1.0),
+                   "E": ("x", 1.0), "W": ("x", -1.0)}
+
+
+def _directional_subset(G, edges, direction):
+    """The subset of `edges` whose net endpoint displacement points along
+    compass `direction` ('N', 'S', 'E', 'W'). Dual carriageways are separate
+    directed ways in OSM, so on a straight stretch the net displacement of an
+    edge identifies its carriageway. An edge with ZERO displacement on the
+    chosen axis is ambiguous, and a wrong guess would close the opposite
+    carriageway, so that is a hard error rather than a silent pick."""
+    axis, sign = _DIRECTION_AXES[direction]
+    keep = []
+    for u, v, k in edges:
+        d = sign * (float(G.nodes[v][axis]) - float(G.nodes[u][axis]))
+        if d > 0:
+            keep.append((u, v, k))
+        elif d == 0:
+            raise ValueError(
+                f"edge ({u}, {v}, {k}) has zero {axis}-displacement, so its "
+                f"direction is ambiguous; refusing to guess for {direction!r}")
+    return keep
+
+
 def closed_freeway_edges(G, spec=None):
     """List the (u, v, k) edge keys a freeway closure removes, without changing G.
 
@@ -294,6 +319,13 @@ def closed_freeway_edges(G, spec=None):
         center      (lat, lon) with radius_m, to close a stretch instead
         radius_m    stretch half-length in meters, used with center
         close_ramps close the on/off ramps stranded inside the closed stretch
+        direction   optional: close ONE direction of travel only, 'N', 'S',
+                    'E' or 'W' (the compass heading of the traffic). Needed
+                    for real closures like the Sept 2026 Rose Quarter work,
+                    which shuts I-5 southbound while northbound stays open.
+                    Direction is judged by net endpoint displacement, which is
+                    unambiguous on a straight stretch; an edge with zero
+                    displacement on the chosen axis raises instead of guessing.
 
     Give either `name` or `center` + `radius_m`, not both. Selecting a named
     structure is the honest way to model 'they closed the bridge', since OSM
@@ -325,6 +357,16 @@ def closed_freeway_edges(G, spec=None):
     if not closed:
         raise ValueError(f"freeway closure on {ref!r} selected no edges; "
                          f"check the name/center against the graph")
+
+    direction = spec.get("direction")
+    if direction is not None:
+        if direction not in _DIRECTION_AXES:
+            raise ValueError(f"direction must be one of "
+                             f"{sorted(_DIRECTION_AXES)}, got {direction!r}")
+        closed = _directional_subset(G, closed, direction)
+        if not closed:
+            raise ValueError(f"freeway closure on {ref!r} selected no "
+                             f"{direction}-bound edges in the zone")
 
     if not spec.get("close_ramps", True):
         return closed
