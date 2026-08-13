@@ -661,8 +661,13 @@ def beat18_failures():
     ax.text(0.12, 0.685, "It only helps in summer.",
             color=INK, fontsize=27, ha="left", va="center")
     ax.text(0.12, 0.565,
-            "In winter, home heating adds pollution my traffic model knows nothing\n"
-            "about, and my method adds nothing at all. I think that is the right answer.",
+            # Darcy's Aug 13 wording: mirrors her spoken line ("home heating
+            # dominates, and the static map already covers it") and states the
+            # measured winter result (M20.10-M20.12: delta R^2 -0.012 to
+            # +0.006, straddles zero). "Rao's" is deliberately NOT named: the
+            # baseline is the rebuilt Rao-style forest, not her fitted model.
+            "In winter, home heating dominates, and the static map already covers it.\n"
+            "Mine adds no detectable improvement.",
             color=MUTED, fontsize=17, ha="left", va="center", linespacing=1.7)
 
     ax.text(0.06, 0.36, "2", color=WARN, fontsize=64, fontweight="bold",
