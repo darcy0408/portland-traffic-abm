@@ -855,6 +855,9 @@ def build_demand_weights(G, nodes):
     if config.DEMAND_LODES_OD:
         od = build_od_demand(G, nodes)
         if od is not None:
+            # the non-work layer rides inside the demand dict so every caller
+            # (spawn, respawn, warmup) threads it without a signature change
+            od["nonwork"] = build_nonwork_demand(G, nodes)
             return od
         # OD requested but unavailable: fall through to the gravity model below
     if not config.DEMAND_GRAVITY:
@@ -903,6 +906,65 @@ def build_demand_weights(G, nodes):
         "node_x": node_x, "node_y": node_y,
         "index": {n: i for i, n in enumerate(nodes)},
         "scale": scale,
+        "nonwork": build_nonwork_demand(G, nodes),   # None unless the B3 flag is on
+    }
+
+
+def build_nonwork_demand(G, nodes):
+    """The non-work (shopping/errand) trip context (config.DEMAND_NONWORK_ENABLED,
+    REAL_DEMAND_UPGRADE_PLAN.md B3). Both commute demand models send every internal
+    trip home -> job; this supplies the second layer real travel is mostly made of:
+    origins by resident population (same home end as commuting), destinations by
+    RETAIL/SERVICE employment (config.NONWORK_SECTORS from the same LODES WAC file),
+    with a shorter gravity decay, both shares and decay set a priori from the 2022
+    NHTS (see config.py). Same Voronoi node-assignment as build_demand_weights so
+    the layers place mass on the same map.
+
+    Returns a dict make_vehicle reads from demand["nonwork"] (share, origin/dest
+    weights, node coords, decay scale), or None when the flag is off or the data is
+    missing, in which case internal trips stay all-commute and, critically, the
+    trip RNG stream is consumed exactly as before the layer existed."""
+    if not config.DEMAND_NONWORK_ENABLED:
+        return None
+    try:
+        lu = landuse_data.nonwork_table()
+    except Exception as e:
+        print(f"  non-work demand unavailable ({e}); internal trips stay all-commute")
+        return None
+    if len(lu) == 0 or lu["nonwork_attr"].sum() <= 0 or lu["population"].sum() <= 0:
+        print("  no non-work attraction mass in the study area; staying all-commute")
+        return None
+
+    # identical projection and nearest-centroid rule as build_demand_weights, so
+    # the commute and non-work layers share one node-to-block-group map
+    lat0, lon0 = config.STUDY_CENTER
+    mx = 111_320.0 * math.cos(math.radians(lat0))
+    nx_ = np.array([float(G.nodes[n]["x"]) for n in nodes]) - lon0
+    ny_ = np.array([float(G.nodes[n]["y"]) for n in nodes]) - lat0
+    node_x, node_y = nx_ * mx, ny_ * 110_540.0
+    bg_x = (lu["lon"].to_numpy() - lon0) * mx
+    bg_y = (lu["lat"].to_numpy() - lat0) * 110_540.0
+    d2 = (node_x[:, None] - bg_x[None, :]) ** 2 + (node_y[:, None] - bg_y[None, :]) ** 2
+    nearest = d2.argmin(axis=1)
+    pop = lu["population"].to_numpy(dtype=float)
+    attr = lu["nonwork_attr"].to_numpy(dtype=float)
+    counts = np.bincount(nearest, minlength=len(lu)).astype(float)
+    counts[counts == 0] = 1.0
+    origin_w = pop[nearest] / counts[nearest]
+    dest_w = attr[nearest] / counts[nearest]
+    if origin_w.sum() <= 0 or dest_w.sum() <= 0:
+        return None
+
+    print(f"  non-work demand ON: share {config.NONWORK_SHARE:.3f} of internal trips, "
+          f"{len(lu)} block groups, {int(attr.sum()):,} retail/service jobs, "
+          f"decay {config.NONWORK_DECAY_SCALE_M:.0f} m")
+    return {
+        "share": float(config.NONWORK_SHARE),
+        "origin_w": origin_w.tolist(),
+        "dest_w": dest_w,
+        "node_x": node_x, "node_y": node_y,
+        "index": {n: i for i, n in enumerate(nodes)},
+        "scale": float(config.NONWORK_DECAY_SCALE_M),
     }
 
 
@@ -1160,7 +1222,15 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
     steady-state population tracks the mix shares). With a `driver_ctx`
     (config.DRIVER_HETEROGENEITY), the vehicle also gets its own IDM parameter set
     drawn from the driver mix at spawn, carried on veh["idm"] for the whole trip.
-    Returns None if no route is found after a few tries."""
+    Returns None if no route is found after a few tries.
+
+    With a non-work layer (demand["nonwork"], config.DEMAND_NONWORK_ENABLED), that
+    share of internal trips draws its origin from population and its destination
+    from retail/service attraction with the shorter non-work decay, modeling
+    shopping/errand travel; the rest keep the commute pattern. When the layer is
+    absent this branch draws nothing from the RNG, so runs without the flag are
+    bit-identical to the pre-layer model."""
+    nonwork = demand.get("nonwork") if demand is not None else None
     for _ in range(25):
         if through is not None and rng.random() < through["fraction"]:
             # THROUGH trip: enter on a perimeter node and leave on another, so the
@@ -1176,6 +1246,17 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
             dist = np.sqrt(dx * dx + dy * dy)
             w = np.asarray(bw) * dist
             d = bnodes[rng.choices(range(len(bnodes)), weights=w.tolist())[0]]
+        elif nonwork is not None and rng.random() < nonwork["share"]:
+            # NON-WORK trip (shopping/errand): home end drawn from population like
+            # any internal trip, but the destination is pulled by retail/service
+            # employment under the shorter NHTS-derived decay, not by total jobs.
+            o = rng.choices(nodes, weights=nonwork["origin_w"])[0]
+            oi = nonwork["index"][o]
+            dx = nonwork["node_x"] - nonwork["node_x"][oi]
+            dy = nonwork["node_y"] - nonwork["node_y"][oi]
+            dist = np.sqrt(dx * dx + dy * dy)
+            w = nonwork["dest_w"] * np.exp(-dist / nonwork["scale"])
+            d = rng.choices(nodes, weights=w.tolist())[0]
         elif demand is None:
             o, d = rng.choice(nodes), rng.choice(nodes)
         elif demand.get("mode") == "od":

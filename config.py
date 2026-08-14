@@ -221,6 +221,39 @@ THROUGH_TRAFFIC_FRACTION = 0.15
 THROUGH_BOUNDARY_FRAC = 0.80   # a node is a boundary entry/exit if it lies beyond this
                                # fraction of STUDY_RADIUS_M from the study center
 
+# --- Non-work (shopping/errand) demand layer (REAL_DEMAND_UPGRADE_PLAN.md B3, Aug 13) ---
+# Every internal trip above is a COMMUTE: LODES OD and the gravity model both send
+# people from homes to jobs. Real household vehicle travel is mostly NOT commuting:
+# per the 2022 NHTS (FHWA-HPL-24-009, Table 3-6), work trips are 25.7% of household
+# vehicle trips while shopping + family/personal errands are 38.6%. With this flag on,
+# that measured share of internal (non-through) trips instead draws its origin from
+# resident population and its destination from RETAIL/SERVICE employment (the WAC
+# sectors below), with a shorter gravity decay, so retail frontage like Powell's gets
+# loaded the way real ADT loads it. Origins, attractions, share, and decay are all
+# public data set A PRIORI, never tuned against the held-out PBOT counts. Off by
+# default: the committed model stays the pure-commute spec until a comparison says
+# otherwise; a run with this on must say so in its RUN_NAME.
+DEMAND_NONWORK_ENABLED = False
+# Share of INTERNAL trips that are non-work. NHTS 2022 Table 3-6 (household vehicle
+# trips/yr: work 324, shopping 229, errands 258, all purposes 1,262): (229+258)/1262.
+# Applied after the through-traffic split: through trips model a different population
+# (regional pass-through), so the household share applies to the internal remainder.
+# Social/recreational trips (25.8%) stay on the commute pattern: we have no attraction
+# data for them, and that simplification is documented, not hidden.
+NONWORK_SHARE = 0.386
+# Gravity decay for non-work destinations. NHTS 2022 Table 3-5: shopping trips average
+# 5.8 mi and errands 8.7 mi, trip-weighted mean 7.3 mi = 11.7 km, about half the
+# 13.5 mi work trip. For an exponential deterrence over a uniform 2D opportunity
+# field the mean trip length is ~2x the scale, so scale = 11.7/2 km. A derivation
+# with an idealized assumption, stated so it can be checked: nonwork_check.py MEASURES
+# the realized mean and reports it rather than re-tuning this number.
+NONWORK_DECAY_SCALE_M = 5900.0
+# LODES WAC sectors that attract shopping/errand trips: CNS07 retail trade
+# (NAICS 44-45), CNS18 accommodation + food services (NAICS 72), CNS19 other
+# services incl. repair/personal/laundry (NAICS 81). Chosen a priori as "places
+# household errands go"; groceries and big-box are in retail, restaurants in 72.
+NONWORK_SECTORS = ("CNS07", "CNS18", "CNS19")
+
 # --- Multi-lane capacity experiment (lanes-experiment worktree, Jul 10) ---
 # The base model gives every directed segment ONE following lane, which caps a
 # signalized segment near 1,070 veh/hr, below Powell's real peak (see

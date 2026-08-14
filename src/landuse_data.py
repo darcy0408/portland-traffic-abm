@@ -148,6 +148,41 @@ def landuse_table(year=None, radius_m=None, force=False):
     return near
 
 
+def _load_nonwork_attraction(year, force=False):
+    """Retail/service jobs per block group from LODES WAC: the attraction mass for
+    shopping/errand trips (config.NONWORK_SECTORS: retail trade, accommodation +
+    food services, other services). Same file and aggregation as _load_jobs, so no
+    new download; only the columns differ. Returns bg_geoid, nonwork_attr."""
+    url = LODES_WAC_URL.format(year=year)
+    path = _download(url, os.path.join(config.RAW_DIR, f"or_wac_{year}.csv.gz"), force)
+    cols = list(config.NONWORK_SECTORS)
+    wac = pd.read_csv(path, usecols=["w_geocode"] + cols, dtype={"w_geocode": str})
+    wac["bg_geoid"] = wac["w_geocode"].str[:12]      # block -> block group
+    wac["nonwork_attr"] = wac[cols].sum(axis=1)
+    attr = wac.groupby("bg_geoid", as_index=False)["nonwork_attr"].sum()
+    return attr
+
+
+def nonwork_table(year=None, radius_m=None, force=False):
+    """One row per block group near the study center: bg_geoid, lat, lon,
+    population, nonwork_attr (retail/service jobs). The origin mass (population)
+    is the same one landuse_table uses; only the attraction column differs. Kept in
+    its OWN parquet (landuse_nonwork_bg.parquet) so landuse_bg.parquet, the
+    committed runs' demand input, stays byte-identical."""
+    year = config.LODES_YEAR if year is None else year
+    radius_m = config.STUDY_RADIUS_M if radius_m is None else radius_m
+
+    pop = _load_population(force)
+    attr = _load_nonwork_attraction(year, force)
+    df = pop.merge(attr, on="bg_geoid", how="left")
+    df["nonwork_attr"] = df["nonwork_attr"].fillna(0.0)
+
+    lat0, lon0 = config.STUDY_CENTER
+    df["dist_m"] = _haversine_m(lat0, lon0, df["lat"].to_numpy(), df["lon"].to_numpy())
+    near = df[df["dist_m"] <= radius_m].drop(columns="dist_m").reset_index(drop=True)
+    return near
+
+
 def _load_population_state(st, force=False):
     """Block-group population + centroid for one state ('or' or 'wa'). Same format
     as _load_population, which stays OR-hardcoded for the sim-demand path."""
@@ -231,6 +266,22 @@ def landuse_polygons(year=None, radius_m=None, margin_m=None, states=("or", "wa"
 
 if __name__ == "__main__":
     force = "--refresh" in sys.argv
+    if "--nonwork" in sys.argv:
+        # build ONLY the non-work attraction table; landuse_bg.parquet untouched
+        df = nonwork_table(force=force)
+        out = os.path.join(config.PROCESSED_DIR, "landuse_nonwork_bg.parquet")
+        df.to_parquet(out, index=False)
+        print(f"Non-work (retail/service) attraction near {config.STUDY_AREA_LABEL}:")
+        print(f"  {len(df)} block groups within {config.STUDY_RADIUS_M} m "
+              f"(LODES {config.LODES_YEAR}, sectors {'+'.join(config.NONWORK_SECTORS)})")
+        print(f"  total attraction jobs {int(df['nonwork_attr'].sum()):,}")
+        print(f"  saved to {out}")
+        if len(df):
+            print("  biggest attractors:")
+            for r in df.sort_values("nonwork_attr", ascending=False).head(4).itertuples():
+                print(f"    attr {int(r.nonwork_attr):>6}  pop {int(r.population):>5}  "
+                      f"({r.lat:.4f}, {r.lon:.4f})")
+        sys.exit(0)
     df = landuse_table(force=force)
     out = os.path.join(config.PROCESSED_DIR, "landuse_bg.parquet")
     df.to_parquet(out, index=False)

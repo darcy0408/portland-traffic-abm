@@ -175,6 +175,36 @@ a clean held-out test set.
   need realistic destinations; the decay scale was set a priori (1.5 km), NOT tuned
   against PBOT, to keep the test set honest.
 
+## 5c. Non-work demand: shopping/errand trips (B3 layer, Aug 13)
+
+The commute layers above (gravity and LODES OD) send every internal trip home to
+job. Real household vehicle travel is mostly not commuting, so the B3 layer
+(`config.DEMAND_NONWORK_ENABLED`, off by default) adds shopping/errand trips:
+origins by population (same as 5b), destinations by RETAIL/SERVICE employment.
+Everything a priori, nothing tuned to the held-out PBOT counts.
+
+- **LODES WAC sector columns (already on disk, no new download).** The same
+  `or_wac_2021.csv.gz` as 5b carries jobs by NAICS sector. Attraction mass =
+  CNS07 (retail trade, 44-45) + CNS18 (accommodation + food services, 72) +
+  CNS19 (other services, 81): "places household errands go", chosen a priori.
+  Loader: `landuse_data.nonwork_table()`; optional inspection parquet via
+  `python src/landuse_data.py --nonwork` (kept separate so `landuse_bg.parquet`
+  stays byte-identical to what the committed runs used).
+- **2022 NHTS, FHWA Summary of Travel Trends (FHWA-HPL-24-009, Jan 2024).** Sets
+  the two a-priori constants. Share: shopping + family/personal errands are
+  (229+258)/1,262 = **38.6%** of household vehicle trips (Table 3-6). Length:
+  shopping 5.8 mi / errands 8.7 mi, trip-weighted 7.3 mi = 11.7 km, ~54% of the
+  13.5 mi work trip (Table 3-5); the non-work gravity decay is derived from it
+  (`config.NONWORK_DECAY_SCALE_M`, derivation in config.py). Values transcribed
+  from the primary PDF tables and cross-checked (VMT / trips reproduces length
+  per cell). CAUTION: the widely quoted BTS "Daily Travel Quick Facts" shares
+  (45% shopping etc.) trace to the 2001-2002 NHTS; do not cite them.
+  https://nhts.ornl.gov/assets/2022/pub/2022_NHTS_Summary_Travel_Trends.pdf
+  2022 caveat: redesigned push-to-web survey, ~7.5k households (vs ~130k in
+  2017), larger margins of error; FHWA prints 2017 alongside for comparability.
+- Gates: `python src/nonwork_check.py` (data mass, weight alignment,
+  reproducibility, non-work-shorter-than-work, and flag-off inertness).
+
 ## 6. NO2 monitoring (context only, NOT a validation spine)
 
 - **Oregon DEQ / EPA AQS** ambient NO2. Confirmed against the source (2023 Oregon
