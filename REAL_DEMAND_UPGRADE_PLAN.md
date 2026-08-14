@@ -83,6 +83,12 @@ B3. Non-commute demand composition. LODES is work trips only; most real
     sanity (non-work trips shorter on average — NHTS says ~half the length).
     Expected effect: loads Powell's retail frontage the way real ADT does;
     may matter as much as B1 for WHERE the cars are.
+    BUILT Aug 13 (commit f57c519), all gates PASS on the metro graph
+    (src/nonwork_check.py: 1,003 BGs / 161,304 retail+service jobs; nonwork
+    8.3 km vs work 11.0 km crow-fly; flag-off spawn stream bit-identical).
+    Share 38.6% and decay 5.9 km from the 2022 NHTS (DATASETS.md 5c; the
+    stale 2001 quick-facts shares are explicitly NOT used). Still owed: the
+    flagged-on metro evaluation run and the Phase C recalibration.
 
 B4. (Only if B1–B3 leave a gap) Saturation-flow calibration: IDM T=1.5 s
     implies ~1,900 veh/h/lane free-flow — close to the standard 1,900
