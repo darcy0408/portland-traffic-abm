@@ -117,3 +117,81 @@ ready before Sept 11, its predictions will be added as a separately labeled
 pre-registered arm in a dated appendix to this file BEFORE the closure
 begins. The primary registered predictions are the base-model campaign
 above, and they do not change.
+
+## Appendix A (2026-08-14): the numeric predictions, computed and banked
+
+Nothing above this appendix changes. This fulfills section 4's promise: the
+campaign has run (SLURM array 126285, 16/16 tasks, Aug 13 2026) and the
+trip-level instrument defined in section 2 has run (src/rosequarter_d123.py,
+Aug 14 2026, routing analysis only, no simulation). These are the model's
+numeric predictions for the Sept 11 closure, banked before it begins.
+
+### A.1 Corridor route totals (campaign, paired per-seed, closed minus open)
+
+Frozen verdict bar: unanimous sign across the 8 paired seeds AND |t| > 3 on
+the paired relative differences. Values are per-route NOx totals, percent.
+
+| route | mean % | sd | range | signs | verdict |
+|-------|--------|----|-------|-------|---------|
+| I 405 (signed detour) | +84.9 | 16.7 | +55.6 to +108.3 | 8/8 | SUPPORTED, t=14.4 |
+| I 205 (regional detour) | +3.1 | 8.1 | -4.1 to +17.7 | 4/8 | not supported, t=1.1 |
+| I 5 (route total, both directions) | -0.8 | 2.0 | -5.0 to +1.8 | 3/8 | not supported, t=1.1 |
+| OR 213 | +2.9 | 10.9 | -10.4 to +26.9 | 5/8 | not supported, t=0.8 |
+| US 26 | -0.6 | 3.6 | -6.0 to +3.9 | 4/8 | not supported, t=0.4 |
+
+Absolute companions, because these percentages sit on very different bases
+and are never to be cited alone: I-405 gains +813 +/- 159 g NOx per
+simulated hour on an open-arm base of 959 g; I-205 gains +450 +/- 1,249 g
+on a base of 16,333 g. The I-405 percentage is large because its base is
+small; the closed span's own volume goes to zero by construction.
+
+Predicted rank order of relative gains across detour corridors, for the
+frozen PORTAL comparison (section 5, rule 2): I-405 first, I-205 second and
+weak, surface alternates indistinguishable from seed noise. Predicted
+directions per frozen station group (section 5): in-span I-5 SB down to the
+local-access residual, upstream I-5 SB down, I-405 SB up, I-205 SB up
+weakly.
+
+### A.2 Trip-level D1-D3 (instrument, 8 seeds, mean +/- sd)
+
+Affected trips (open-arm planned route touches the frozen span): 575 to 667
+per seed, 4,962 total, 3.8% of the 16,500 spawned per seed.
+
+| metric | I 405 | I 205 |
+|--------|-------|-------|
+| D1 share of affected trips on detour mainline, open | 0.164 +/- 0.020 | 0.075 +/- 0.008 |
+| D1 same share, closed | 0.584 +/- 0.017 | 0.101 +/- 0.009 |
+| D2 share increasing detour mainline distance | 0.489 +/- 0.021 | 0.058 +/- 0.007 |
+| D3 added detour mainline veh-km per seed | +1,187 +/- 117 | +132 +/- 56 |
+
+The D1 movement (closed above open) and D3 sign are positive in every seed
+on both detours, and the trip-level rank order matches A.1 in every seed:
+the smallest I-405 D3 (+1,010 veh-km) exceeds the largest I-205 D3 (+223).
+Affected trips lengthen by 0.9 min free-flow travel time on average.
+
+Dropped ODs: 55 of 4,962 affected trips (1.1%), where section 2 expected 0.
+All 55 share one mechanism, found on inspection: the trip's endpoint is on
+the closed roadway itself, either on a span node (47 trips) or on the short
+SB mainline stretch immediately downstream of the closure that the closure
+leaves with no feeding edge before the next merge (8 trips, all one node).
+Such endpoints have no closed-graph path by construction. The frozen rule
+(drop and report the count) is applied unchanged; no rule or parameter was
+altered after seeing results.
+
+### A.3 Model-variant clause status
+
+As of this appendix the non-work demand variant (section 6) is built and
+gated off, and has NOT been evaluated against held-out counts; it has
+therefore earned no second pre-registered arm. If it earns one before
+Sept 11 it will be added as its own dated appendix below this one.
+
+### A.4 Provenance
+
+Instrument: src/rosequarter_d123.py in this repository. Population
+identity with the campaign is checked, not assumed: the instrument runs on
+the campaign's own graph file (md5 6707ddf25d63f2b5b4d2948b37cdb783), and
+refuses to run unless the demand context it builds matches the campaign
+log's fingerprint (215,655 placeable OD pairs, 531,245 commuters, 20,857
+boundary entry nodes; SLURM log fwrq_126285_7.out). Per-seed outputs
+(rqd123_s{seed}.json, rqd123_affected_s{seed}.parquet) are data files,
+banked with the campaign summaries, not committed.
