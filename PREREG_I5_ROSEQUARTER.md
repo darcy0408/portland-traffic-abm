@@ -195,3 +195,56 @@ log's fingerprint (215,655 placeable OD pairs, 531,245 commuters, 20,857
 boundary entry nodes; SLURM log fwrq_126285_7.out). Per-seed outputs
 (rqd123_s{seed}.json, rqd123_affected_s{seed}.parquet) are data files,
 banked with the campaign summaries, not committed.
+
+## Appendix B (2026-08-14): two additional arms, registered before their campaigns run
+
+Nothing above changes. Appendix A's base-model predictions remain the
+primary registration. The two arms below are registered BEFORE any of
+their tasks run; their numeric results will be appended in a dated
+appendix, before Sept 11, whatever they show. Further dated appendices
+(noise-change predictions computed from the Appendix A campaign, and a
+protocol for a measured-NO2 monitor comparison if a suitably placed
+regulatory monitor exists) may follow before Sept 11 under the same rule:
+registered or computed before the closure, nothing above ever edited.
+
+### B.1 Realism-stack robustness arm (prefix fwrqr)
+
+- Same frozen scenario, span, seeds, pairing, routes, and verdict bar as
+  sections 1-3. Model variant: the project's realism stack (MOBIL lane
+  changing, per-vehicle driver heterogeneity, Webster signal timing,
+  green-wave coordination), mixed fleet. Runner already committed:
+  `python src/freeway_rosequarter.py --realism`, 16 tasks.
+- Purpose: does Appendix A's supported I-405 corridor result survive the
+  realism dynamics.
+- Stated now, before running: vehicles route once at spawn at free-flow
+  times in every model variant, so the trip populations and planned
+  routes, and therefore D1-D3, are identical to the base arm by
+  construction. This arm tests realized flow and emission totals only.
+- Prediction: I-405 NOx up, the closed span down; rank of relative gains
+  I-405 above I-205.
+
+### B.2 Peak and quiet time-of-day arm (prefix rqpq)
+
+- Script src/rosequarter_peak_quiet.py in this repository. 2 demand
+  levels x 2 arms (open, closed) x the standing 8 block-1 seeds = 32
+  tasks. BASE stack and mixed fleet, identical to the Appendix A
+  campaign, so the demand level is the only new variable. The frozen-span
+  guard runs in every closed task.
+- Levels: hour 8 (peak) and hour 1 (quiet), the same two hours the
+  project's day experiment fixed long before this registration; demand is
+  round(16,500 x profile[hour] x 24) with the PORTAL-derived hourly
+  profile that day experiment already uses.
+- Metrics and verdict: the same paired per-seed route-total rules as
+  section 3, applied per level. Citation rule, frozen now: quiet-hour
+  route bases are small, so absolute grams lead and a percentage is never
+  cited alone.
+- PORTAL comparison addition (extends section 5 without changing it):
+  the peak/quiet predictions are compared against PORTAL by hour band
+  (peak morning hours vs overnight hours), each station against itself,
+  direction and rank only, same as rules 1-4.
+- Predictions, banked now: I-405 goes UP at both levels; the rank of
+  relative gains is I-405 above I-205 at both levels; the ABSOLUTE added
+  I-405 NOx (grams) is larger at peak than at quiet. Whether the added
+  grams are SUPER-proportional to the peak/quiet demand ratio (congestion
+  amplification) is the registered open question; either answer is
+  reported.
