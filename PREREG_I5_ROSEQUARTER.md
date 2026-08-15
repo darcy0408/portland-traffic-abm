@@ -248,3 +248,59 @@ registered or computed before the closure, nothing above ever edited.
   grams are SUPER-proportional to the peak/quiet demand ratio (congestion
   amplification) is the registered open question; either answer is
   reported.
+
+## Appendix C (2026-08-14): measured-NO2 monitor protocol and predictions
+
+Nothing above changes. The Portland metro has exactly two regulatory NO2
+monitors (Oregon DEQ, 2023 Annual Ambient Criteria Pollutant Air
+Monitoring Network Plan, Table 2 and Appendix C):
+
+- SE Lafayette NCore station, AQS 41-051-0080, 5824 SE Lafayette St,
+  Portland (45.4966, -122.6029), hourly NO2 since 1984, urban scale,
+  80 m from its nearest major road (SE Powell Blvd).
+- Portland Near Roadway station, AQS 41-067-0005, 6745 SW Bradbury Ct,
+  Tualatin, 27 m from I-5 at milepost 290.14, hourly NO2 since 2015,
+  microscale, purpose "Source (Freeway)". (The DEQ table prints latitude
+  45.8992, which contradicts the site's own address, county, and
+  milepost; the address places it near 45.384, -122.747.) Milepost
+  290.14 is NORTH of the I-205 rejoin (exit 288) and SOUTH of the I-405
+  rejoin, so traffic passing this monitor keeps the I-405-detoured
+  through trips and loses only the I-205-diverted share.
+
+Protocol, frozen before the closure: hourly NO2 from the public DEQ/EPA
+records for both monitors; each monitor compared against ITSELF, before
+vs during the closure; direction of change only; the closure's first days
+preferred, before adaptation accumulates; baseline days are the same
+weekday before Sept 11, avoiding Labor Day week (the section 5 rules,
+applied to monitors). Absolute concentrations are never compared to the
+model: the model produces per-segment NOx mass, and chemistry, background,
+and meteorology sit between that and an ambient ppb reading. If the
+second near-road site DEQ has planned for the CBSA becomes active before
+Sept 11, it is added under these same rules before any during-closure
+data is seen.
+
+Model predictions at the monitors, computed from the Appendix A
+campaign's saved per-segment results (src/rosequarter_monitors.py; edges
+within an a-priori 500 m radius of each site; 8 paired seeds; output
+banked as rosequarter_monitors.json):
+
+- Near Roadway (Tualatin): the SB I-5 carriageway past the monitor loses
+  -2.6% of its throughput (sd 1.0), negative in 8 of 8 seeds, t = 7.1;
+  all traffic within 500 m: -1.0% (sd 0.4), negative in 8 of 8, t = 7.6.
+  The modeled NOx change at this site is not distinguishable from seed
+  noise. Prediction, direction only: a SMALL decrease in traffic-driven
+  NO2, plausibly below meteorological variance; no large change. A LARGE
+  observed drop would indicate real-driver adaptation (canceled, shifted,
+  or re-moded trips) that the fixed-demand model explicitly excludes, and
+  would be reported as a limitation confirmed, not explained away.
+- SE Lafayette: no detectable change predicted. Local NOx within 500 m
+  moves -1.2% (sd 27), signs 4 of 8; local traffic -0.3% (sd 0.3), 7 of
+  8 seeds negative but not unanimous. Consistent with Appendix A's null
+  on the US 26 route total.
+
+Stated plainly: neither monitor sits where the model predicts its largest
+signal (the I-405 SB detour through downtown has no NO2 monitor), so the
+monitor comparison tests the model's null and small-decrease predictions,
+not the headline diversion. The PORTAL traffic comparison (section 5)
+remains the primary scoring; this appendix adds measured pollution as a
+secondary, direction-only check.
