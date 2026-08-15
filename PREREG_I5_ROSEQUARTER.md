@@ -518,3 +518,40 @@ run had not yet been started when this was written; the base numbers it
 comes from are the already-published Appendix A.2 outputs.
 
 Results will be appended, dated, before Sept 11 2026, whatever they show.
+
+## Appendix H (2026-08-15): the section 2 "expected 0" dropped-OD count is wrong as written
+
+Nothing above is edited. This corrects an EXPECTATION stated in section 2,
+not a result, and it is written before the fwrqn D1-D3 run of Appendix G
+has produced its own dropped count, so it cannot be a post-hoc reading of
+that number.
+
+Section 2 says ODs with no path on the closed graph are "expected 0". The
+base arm's published outputs do not show 0: across the 8 seeds, 55
+affected trips were dropped (5 to 9 per seed, about 1.1% of the roughly
+620 affected trips per seed). The instrument reported this honestly all
+along; the expectation beside it was simply wrong.
+
+Cause, from a read-only comparison of each seed's open-pass affected list
+against the routed rows that survived: 45 of the 55 have a DESTINATION
+that is a head node of a removed span edge (40413533, 3427976322,
+1343610044, 40397036). Those trips terminate inside the closed stretch.
+Removing the edges leaves the destination with no inbound path, so no
+closed-graph route can exist for them. That is a property of closing a
+road, not a defect in the routing. The remaining 10 land on three other
+nodes (256180952 with 8, plus two singletons) and are most likely
+stranded pockets reachable only through the span; that is stated as
+unconfirmed and a reachability check will be reported with the Appendix G
+results.
+
+Corrected expectation, replacing "expected 0" for all future scoring
+including the fwrqn arm and the September comparison: zero dropped trips
+whose destination lies OUTSIDE the closed stretch. Trips destined into
+the closed stretch are expected to drop, and their count is reported.
+
+Effect on the D-metrics: none that favors the registered claim. Dropped
+trips are excluded from the paired set entirely, in both arms, so the
+pairing stays valid on what remains. The excluded trips are the ones most
+disrupted by the closure, so omitting them is conservative for a
+diversion claim rather than generous to it. No published D1-D3 value
+changes as a result of this appendix.
