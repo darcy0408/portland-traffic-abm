@@ -508,4 +508,13 @@ this arm D3 is never cited without the affected count beside it, and the
 per-affected-trip value (added veh-km per affected trip) is reported with
 it, so a smaller D3 cannot be misread as weaker diversion.
 
+Correction to G2, same day, BEFORE the arm was run (2026-08-15): the 0.039
+quoted above is seed 42's affected share alone. The base arm's 8-seed mean
+is 0.0376 +/- 0.0016, which is the like-for-like comparison and the
+stricter one, so G2 is scored against 0.0376. Nothing else changes. This
+is recorded rather than edited away because the two values can give
+opposite verdicts for a result landing between them, and the fwrqn D1-D3
+run had not yet been started when this was written; the base numbers it
+comes from are the already-published Appendix A.2 outputs.
+
 Results will be appended, dated, before Sept 11 2026, whatever they show.

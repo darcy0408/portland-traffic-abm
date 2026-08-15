@@ -35,6 +35,15 @@ boundary nodes).
     python src/rosequarter_d123.py --run                  # all 8 seeds
     python src/rosequarter_d123.py --readout              # aggregate D1-D3
 
+--nonwork runs the same metrics for the fwrqn demand arm (prereg Appendix G,
+registered before this mode existed). The realism arm did NOT need this:
+routing is once-at-spawn at free-flow, so a dynamics-only variant inherits the
+base arm's population and routes (Appendix B.1). fwrqn changes DEMAND, so the
+drawn population genuinely differs and the metrics must be recomputed. The mode
+turns the B3 flag on for this process only, guards the fwrqn campaign's own
+non-work fingerprint on top of the LODES one, and writes under an rqd123n_
+prefix so the base arm's outputs can never be overwritten.
+
 Data paths default to the repo's config but are overridable, because the
 campaign's bit-verified metro graph and raw demand files live outside this
 working copy:
@@ -65,6 +74,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config          # noqa: E402
 import generate        # noqa: E402
+import landuse_data    # noqa: E402  (non-work attraction table, --nonwork guard)
 from freeway_rosequarter import (SEEDS, EXPECTED_SB,      # noqa: E402
                                  EXPECTED_REMOVED_N, _verify_span)
 from freeway_runs import SCENARIOS  # noqa: E402  (the verified closure specs)
@@ -82,6 +92,13 @@ EXPECTED_OD_PAIRS = 215_655
 EXPECTED_COMMUTERS = 531_245
 EXPECTED_BOUNDARY_NODES = 20_857
 
+# The non-work arm's own fingerprint, from the fwrqn campaign log
+# (~/pta-freeway/logs/fwrqn_126805_7.out, job 126805, Aug 14 2026). That log
+# also shows the LODES numbers above are UNCHANGED by the layer, which is why
+# the commute guard still applies in --nonwork mode: the layer is additive.
+EXPECTED_NONWORK_BGS = 1_003
+EXPECTED_NONWORK_JOBS = 161_304
+
 
 def _md5(path):
     h = hashlib.md5()
@@ -91,16 +108,24 @@ def _md5(path):
     return h.hexdigest()
 
 
-def _guard_config():
-    """The campaign stack (base arm): refuse to draw under any other config,
-    because every flag here changes what the trip RNG stream produces."""
+def _guard_config(nonwork=False):
+    """The campaign stack: refuse to draw under any other config, because every
+    flag here changes what the trip RNG stream produces. The non-work flag is
+    expected to match the requested MODE, so a config.py edited to True cannot
+    silently turn a base-arm run into a non-work one, or the reverse."""
     checks = [
         ("N_VEHICLES", config.N_VEHICLES, 16500),
         ("DEMAND_LODES_OD", config.DEMAND_LODES_OD, True),
         ("THROUGH_TRAFFIC_FRACTION", config.THROUGH_TRAFFIC_FRACTION, 0.15),
-        ("DEMAND_NONWORK_ENABLED", config.DEMAND_NONWORK_ENABLED, False),
+        ("DEMAND_NONWORK_ENABLED", config.DEMAND_NONWORK_ENABLED, nonwork),
         ("STUDY_RADIUS_M", config.STUDY_RADIUS_M, 20000),
     ]
+    if nonwork:
+        # the two a-priori NHTS constants the fwrqn campaign ran under
+        checks += [
+            ("NONWORK_SHARE", config.NONWORK_SHARE, 0.386),
+            ("NONWORK_DECAY_SCALE_M", config.NONWORK_DECAY_SCALE_M, 5900.0),
+        ]
     bad = [f"{k} = {got!r} (campaign ran {want!r})"
            for k, got, want in checks if got != want]
     if bad:
@@ -120,12 +145,30 @@ def _load_graph(path):
     return G
 
 
-def _build_contexts(G, nodes):
+def _build_contexts(G, nodes, nonwork=False):
     """Demand + through contexts, then the log-fingerprint guard."""
     demand = generate.build_demand_weights(G, nodes)
     through = generate.build_through_context(G, nodes)
     if demand is None or demand.get("mode") != "od":
         raise SystemExit("demand context is not LODES OD; the campaign's was")
+    nw = demand.get("nonwork")
+    if nonwork:
+        # the layer must be live, and be the one the fwrqn campaign built
+        if nw is None:
+            raise SystemExit("--nonwork asked for the B3 layer but the demand "
+                             "context has none (missing data?); refusing")
+        lu = landuse_data.nonwork_table()
+        got = (len(lu), int(round(float(lu["nonwork_attr"].sum()))))
+        want = (EXPECTED_NONWORK_BGS, EXPECTED_NONWORK_JOBS)
+        if got != want:
+            raise SystemExit(
+                f"non-work context differs from the fwrqn campaign's: got "
+                f"{got[0]} block groups / {got[1]:,} retail-service jobs, "
+                f"campaign log says {want[0]} / {want[1]:,}")
+        print("non-work context matches the fwrqn campaign log fingerprint")
+    elif nw is not None:
+        raise SystemExit("the B3 non-work layer is live but this is a base-arm "
+                         "run; refusing (use --nonwork)")
     n_pairs = len(demand["weights"])
     n_comm = int(round(sum(demand["weights"])))
     n_bound = len(through["nodes"]) if through else 0
@@ -155,12 +198,18 @@ def _route_edges(G, path):
             for i in range(len(path) - 1)]
 
 
-def _open_path(out_dir, seed):
-    return os.path.join(out_dir, f"rqd123_open_s{seed}.json")
+def _prefix(args):
+    """Separate namespace per arm, so a non-work run can never overwrite the
+    base arm's registered outputs (prereg Appendix G)."""
+    return "rqd123n" if args.nonwork else "rqd123"
 
 
-def _final_path(out_dir, seed):
-    return os.path.join(out_dir, f"rqd123_s{seed}.json")
+def _open_path(args, seed):
+    return os.path.join(args.out_dir, f"{_prefix(args)}_open_s{seed}.json")
+
+
+def _final_path(args, seed):
+    return os.path.join(args.out_dir, f"{_prefix(args)}_s{seed}.json")
 
 
 def _open_pass(G, nodes, demand, through, mains, span_set, seed):
@@ -247,12 +296,19 @@ def _closed_pass(G_closed, open_rec, mains, out_dir, graph_md5, args):
             "span_edges": sorted([list(e) for e in
                                   {tuple(e) for e in open_rec["span_edges"]}]),
             "instrument": "src/rosequarter_d123.py",
+            "arm": "nonwork" if args.nonwork else "base",
+            "nonwork_layer": ({"block_groups": EXPECTED_NONWORK_BGS,
+                               "retail_service_jobs": EXPECTED_NONWORK_JOBS,
+                               "share": config.NONWORK_SHARE,
+                               "decay_m": config.NONWORK_DECAY_SCALE_M}
+                              if args.nonwork else None),
             "closed_seconds": round(time.perf_counter() - t0, 1),
         },
     }
-    df.to_parquet(os.path.join(out_dir, f"rqd123_affected_s{seed}.parquet"),
+    df.to_parquet(os.path.join(out_dir,
+                               f"{_prefix(args)}_affected_s{seed}.parquet"),
                   index=False)
-    with open(_final_path(out_dir, seed), "w") as f:
+    with open(_final_path(args, seed), "w") as f:
         json.dump(summary, f, indent=1)
     print(f"  seed {seed}: {len(df)} affected routed closed "
           f"({n_dropped} dropped), D3 I405 {d3['I 405']:+.0f} vkm, "
@@ -261,7 +317,7 @@ def _closed_pass(G_closed, open_rec, mains, out_dir, graph_md5, args):
 
 
 def run(args):
-    _guard_config()
+    _guard_config(args.nonwork)
     G = _load_graph(args.graph)
     graph_md5 = _md5(args.graph)
     print(f"graph md5 {graph_md5}")
@@ -271,7 +327,7 @@ def run(args):
     span_set = set(removed)
     print(f"frozen span OK: {len(removed)} edges")
     nodes = list(G.nodes)
-    demand, through = _build_contexts(G, nodes)
+    demand, through = _build_contexts(G, nodes, args.nonwork)
     mains = {ref: set(generate.freeway_mainline_edges(G, ref)) for ref in TRACK}
 
     # open passes first for every seed that needs one, on the pristine graph;
@@ -279,10 +335,10 @@ def run(args):
     # never see a modified graph
     open_recs = {}
     for seed in SEEDS:
-        if os.path.exists(_final_path(args.out_dir, seed)):
+        if os.path.exists(_final_path(args, seed)):
             print(f"seed {seed}: final summary exists, skipping")
             continue
-        op = _open_path(args.out_dir, seed)
+        op = _open_path(args, seed)
         if os.path.exists(op):
             with open(op) as f:
                 open_recs[seed] = json.load(f)
@@ -312,7 +368,7 @@ def run(args):
 def readout(args):
     sums = []
     for seed in SEEDS:
-        p = _final_path(args.out_dir, seed)
+        p = _final_path(args, seed)
         if os.path.exists(p):
             with open(p) as f:
                 sums.append(json.load(f))
@@ -343,6 +399,17 @@ def readout(args):
             shown = " ".join(f"{v:.3f}" if abs(v) < 10 else f"{v:.0f}"
                              for v in vals)
             print(f"{label:<34s} {m:>10.3f} {sd:>8.3f}   {shown}")
+    # Appendix G citation rule: D3 is a per-seed total over the affected
+    # population, so it falls mechanically when that population shrinks. Print
+    # the affected share and the per-affected-trip value beside it, always, so
+    # a smaller D3 can never be read as weaker diversion.
+    m, sd = stats([s["descriptive"]["affected_share_of_spawned"] for s in sums])
+    print(f"\n{'affected share of spawned':<34s} {m:>10.4f} {sd:>8.4f}")
+    for ref in DETOURS:
+        per = [s["D3_added_vkm"][ref] / s["n_affected"] for s in sums]
+        m, sd = stats(per)
+        print(f"{'D3 ' + ref + ' vkm per affected trip':<34s} {m:>10.3f} {sd:>8.3f}")
+
     m, sd = stats([s["descriptive"]["added_fft_min_mean"] for s in sums])
     print(f"\ndescriptive (not a frozen metric): affected trips add "
           f"{m:.1f} +/- {sd:.1f} min free-flow travel time")
@@ -358,10 +425,17 @@ def main():
                     default=os.path.join(config.NETWORK_DIR, "graph.graphml"))
     ap.add_argument("--raw-dir", default=config.RAW_DIR)
     ap.add_argument("--out-dir", default=config.PROCESSED_DIR)
+    ap.add_argument("--nonwork", action="store_true",
+                    help="score the fwrqn demand arm (prereg Appendix G)")
     args = ap.parse_args()
 
+    # the arm is chosen HERE and nowhere else: the committed config default
+    # stays False, and the guards below assert the flag matches the mode
+    config.DEMAND_NONWORK_ENABLED = args.nonwork
+    print(f"arm: {'nonwork (fwrqn)' if args.nonwork else 'base (fwrq)'}")
+
     if args.check:
-        _guard_config()
+        _guard_config(args.nonwork)
         G = _load_graph(args.graph)
         generate.prepare_network(G)
         removed = _verify_span(G)
@@ -370,7 +444,7 @@ def main():
               f"({len(EXPECTED_SB)} SB mainline + "
               f"{len(removed) - len(EXPECTED_SB)} stranded ramps)")
         config.RAW_DIR = args.raw_dir
-        _build_contexts(G, list(G.nodes))
+        _build_contexts(G, list(G.nodes), args.nonwork)
     elif args.run:
         run(args)
     else:
