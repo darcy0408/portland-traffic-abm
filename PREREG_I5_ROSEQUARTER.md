@@ -352,3 +352,33 @@ Honest bounds on this prediction:
    grader during the closure. It is banked for the record, dated, so a
    future comparison (a field measurement, or another group's surface)
    meets a prediction that provably predates the closure.
+
+## Appendix E (2026-08-14): the non-work demand arm, registered before it runs
+
+This is the arm section 6 reserved. The demand-realism variant is ready:
+the non-work (shopping/errand) trip layer is committed
+(config.DEMAND_NONWORK_ENABLED; 38.6% of internal trips draw destinations
+from retail/service employment under a 5.9 km decay, both constants a
+priori from the 2022 NHTS, nothing tuned to counts), and it has now
+passed its evaluation against the held-out PBOT counts. Evaluation
+result, stated before this arm runs: one flagged-on metro run (seed 42,
+identical configuration to the flag-off baseline in every other respect)
+scores Spearman rho 0.636 against the counts where the baseline scores
+0.614, and puts model traffic on 273 of the 372 counted street segments
+where the baseline covers 248. One seed, a modest gain, reported as
+such; the direction is right and the mechanism (commute-only demand
+leaves retail streets empty) is exactly what the layer was built to fix.
+
+- Arm: prefix fwrqn, `python src/freeway_rosequarter.py --nonwork`.
+  Identical to the Appendix A campaign (same frozen span, guard, seeds,
+  arms, routes, verdict bar, base stack, mixed fleet) except
+  DEMAND_NONWORK_ENABLED is True in every task. 16 tasks.
+- Predictions, banked now: same directions as Appendix A (the closed
+  span down, I-405 up, I-205 up weakly, rank I-405 above I-205). The
+  registered open question: whether adding non-commute trips CHANGES the
+  diversion shares (shoppers make shorter, more local trips, so the
+  affected population may lean more heavily commuter than the network
+  average); whatever it shows is reported.
+- The primary registered predictions remain Appendix A's and do not
+  change. This arm's numeric results will be appended, dated, before
+  Sept 11.

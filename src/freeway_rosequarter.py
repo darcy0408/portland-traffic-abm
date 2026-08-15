@@ -55,6 +55,8 @@ EXPECTED_REMOVED_N = 5
 
 REALISM_FLAGS = dict(mce.ARMS["realism"])
 STACK_REALISM = False    # set by --realism in main(), before any dispatch
+STACK_NONWORK = False    # set by --nonwork in main(): the demand-variant arm
+                         # (prefix fwrqn) registered in prereg Appendix E
 
 # routes whose per-edge mainline values are stored per run. I 405 is the signed
 # detour (the pre-registered "up"); I 205 the regional detour ("up"); I 5 the
@@ -132,6 +134,9 @@ def run_task(idx):
     # absolute grams are cited under the mixed fleet (the live setting, gate
     # G2); explicit for the same reason as the stack flags
     config.FLEET_MIXED = True
+    # the Appendix E demand-variant arm: non-work trips ON for fwrqn tasks,
+    # explicitly OFF otherwise (the F6 rule), so no task can inherit the flag
+    config.DEMAND_NONWORK_ENABLED = STACK_NONWORK
 
     removed = []
     if arm != "open":
@@ -157,6 +162,7 @@ def run_task(idx):
     rec = {
         "arm": arm, "seed": seed,
         "stack": "realism" if STACK_REALISM else "base",
+        "nonwork": STACK_NONWORK,
         "fleet": "mixed",
         "n_vehicles": config.N_VEHICLES, "n_steps": config.N_STEPS,
         "removed": [[u, v, k] for u, v, k in removed],
@@ -202,6 +208,10 @@ def readout():
         if got != want:
             raise SystemExit(f"{summary_path(arm, seed)} records stack={got} "
                              f"but this readout is for {want}; wrong file")
+        if bool(s.get("nonwork", False)) != STACK_NONWORK:
+            raise SystemExit(f"{summary_path(arm, seed)} records "
+                             f"nonwork={s.get('nonwork', False)} but this "
+                             f"readout is for nonwork={STACK_NONWORK}; wrong file")
     have = {a: sum(1 for (arm, _) in summaries if arm == a) for a in ARMS}
     print("stack: " + want)
     print("summaries found: " +
@@ -231,7 +241,7 @@ def readout():
 
 
 def main():
-    global STACK_REALISM, PREFIX
+    global STACK_REALISM, STACK_NONWORK, PREFIX
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--check", action="store_true")
@@ -241,11 +251,19 @@ def main():
     g.add_argument("--readout", action="store_true")
     ap.add_argument("--realism", action="store_true",
                     help="run/readout the realism-stack secondary arm (fwrqr)")
+    ap.add_argument("--nonwork", action="store_true",
+                    help="run/readout the non-work demand-variant arm (fwrqn, "
+                         "prereg Appendix E)")
     args = ap.parse_args()
 
+    if args.realism and args.nonwork:
+        raise SystemExit("--realism with --nonwork is not a registered arm")
     if args.realism:
         STACK_REALISM = True
         PREFIX = "fwrqr"
+    if args.nonwork:
+        STACK_NONWORK = True
+        PREFIX = "fwrqn"
 
     if args.check:
         check()
