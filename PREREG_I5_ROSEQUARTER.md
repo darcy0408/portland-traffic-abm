@@ -449,3 +449,63 @@ five of five tests, every one registered before it ran. The
 corridor-level I-205 signal reached the bar in none of them, which is
 why the pre-registered trip-level D1-D3 metrics (Appendix A) carry that
 part of the prediction.
+
+## Appendix G (2026-08-15): trip-level D1-D3 for the non-work arm, registered before it runs
+
+Nothing above changes. Appendix E registered the non-work arm (fwrqn) at
+the corridor level only, and Appendix F reported those results: I-405
++75.8% SUPPORTED, the I-205 corridor mean unresolvable. Appendix E's
+registered open question, whether adding non-commute trips changes the
+diversion shares, is a trip-level question, and section 2's D1-D3 are the
+instrument built for exactly that case. This appendix registers that
+application, with its predictions, before any of it runs.
+
+Why this arm needs D1-D3 recomputed when B.1 said the realism arm did
+not: vehicles route once at spawn at free-flow times in every model
+variant, so a variant that changes only DYNAMICS leaves the trip
+population and its planned routes identical, and D1-D3 are inherited.
+fwrqn changes DEMAND. 38.6% of internal trips draw destinations from
+retail/service employment under a 5.9 km decay instead of the commute
+distribution, so the drawn population and its routes genuinely differ and
+the metrics must be recomputed rather than carried over.
+
+- Instrument: `src/rosequarter_d123.py`, metric definitions unchanged,
+  run in a new `--nonwork` mode. The mode flips the config guard to
+  DEMAND_NONWORK_ENABLED = True and adds the fwrqn campaign's own
+  non-work fingerprint (1,003 block groups, 161,304 retail/service jobs,
+  share 0.386, decay 5,900 m; campaign log, job 126805) to the existing
+  LODES identity guard, which the campaign log shows the layer leaves
+  unchanged (215,655 placeable pairs, 531,245 commuters, 20,857 boundary
+  nodes). Same 8 block-1 seeds, same frozen 5-edge span, same graph
+  (md5 6707ddf25d63f2b5b4d2948b37cdb783). Outputs take a separate
+  `rqd123n_` prefix so the base arm's files cannot be overwritten.
+- Verdict bar: section 3 unchanged. Unanimous sign across the 8 paired
+  seeds AND |t| > 3.
+
+Predictions, banked now:
+
+- G1. The registered direction holds under non-work demand: D1 for I-405
+  higher closed than open, and D3 for I-405 positive, in all 8 seeds,
+  with I-405 ranked above I-205 on D3. Base arm for reference
+  (Appendix A.2): D1 I-405 0.164 -> 0.584, D3 +1,187 +/- 117 veh-km.
+- G2. The AFFECTED share falls below the base arm's 0.039 of spawned
+  trips, because non-work trips are shorter and more local, so a smaller
+  fraction of the population routes over a downtown freeway span at all.
+
+Registered open question: whether the CONDITIONAL magnitudes among the
+affected trips move, and in which direction. Two mechanisms point
+opposite ways and I am deliberately not predicting which wins.
+DILUTION: if the non-work trips that do cross the span are short and
+local, they would detour onto surface streets rather than commit to a
+freeway, pushing D1 and D2 down. SELECTION: if non-work trips mostly drop
+out of the affected set, what remains leans more heavily on through
+traffic and commuting, which are already freeway-committed, pushing D1
+and D2 up. Whatever it shows is reported.
+
+Citation rule, frozen now: D3 is a per-seed total over the affected
+population, so it falls mechanically if the affected count falls. For
+this arm D3 is never cited without the affected count beside it, and the
+per-affected-trip value (added veh-km per affected trip) is reported with
+it, so a smaller D3 cannot be misread as weaker diversion.
+
+Results will be appended, dated, before Sept 11 2026, whatever they show.
