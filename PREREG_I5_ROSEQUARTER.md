@@ -304,3 +304,51 @@ monitor comparison tests the model's null and small-decrease predictions,
 not the headline diversion. The PORTAL traffic comparison (section 5)
 remains the primary scoring; this appendix adds measured pollution as a
 secondary, direction-only check.
+
+## Appendix D (2026-08-14): noise-change predictions (CNOSSOS v1)
+
+Nothing above changes. This appendix banks the closure's predicted effect
+on the project's second output surface, road-traffic noise, computed from
+the same Appendix A campaign runs (src/rosequarter_noise.py, reading the
+saved per-segment results; no simulation). The noise model is the
+project's verified CNOSSOS v1 (Directive (EU) 2015/996 category-1
+coefficients, verified element-by-element; congestion-aware speeds
+recovered per segment; geometric divergence to a 10 m receiver). The
+corridor metric is the length-weighted acoustic energy total over the
+corridor's mainline segments, paired closed minus open per seed, in dB.
+
+| corridor | mean dB | sd | signs | note |
+|----------|---------|----|-------|------|
+| I-405 | -0.39 | 0.13 | 8/8 down | quieter DESPITE more traffic |
+| I-205 | -0.04 | 0.02 | 8/8 down | negligible |
+| I-5 (whole route) | -0.41 | 0.03 | 8/8 down | span removed + upstream slowing |
+| closed SB span | to silence | | 8/8 | the SB source vanishes; NB unchanged |
+
+The I-405 row is the registered headline: the SAME closure that raises
+modeled I-405 NOx by 84.9% (Appendix A) LOWERS modeled I-405 noise by
+0.4 dB. Mechanism, stated before any data: the diverted traffic adds
+vehicles to I-405 but slows them, and CNOSSOS rolling noise falls
+steeply with speed at freeway speeds, so the per-vehicle quieting
+outweighs the added vehicle density. The two exposure surfaces this
+project produces move in OPPOSITE directions on the same corridor under
+the same intervention.
+
+Honest bounds on this prediction:
+
+1. All corridor-level changes are far below the roughly 3 dB difference
+   people reliably notice; no one standing beside I-405 would hear this.
+   The one humanly perceptible change is at the closed span itself,
+   where the southbound source vanishes entirely.
+2. The prediction is CONDITIONAL on the v1 cars-only source model.
+   Heavy vehicles (CNOSSOS categories 2 and 3) are propulsion-dominated
+   with a weaker speed dependence, so a mixed-category model could
+   attenuate or even reverse the I-405 sign. If the category upgrade is
+   completed before Sept 11, its numbers are added as a separately dated
+   appendix; this one does not change.
+3. The v1 jammed-segment speed treatment deviates from textbook CNOSSOS
+   deliberately (documented in src/noise.py).
+4. No noise measurement network exists along these corridors, so unlike
+   the PORTAL and monitor comparisons this prediction has no scheduled
+   grader during the closure. It is banked for the record, dated, so a
+   future comparison (a field measurement, or another group's surface)
+   meets a prediction that provably predates the closure.
