@@ -555,3 +555,79 @@ pairing stays valid on what remains. The excluded trips are the ones most
 disrupted by the closure, so omitting them is conservative for a
 diversion claim rather than generous to it. No published D1-D3 value
 changes as a result of this appendix.
+
+## Appendix I (2026-08-15): results of the non-work trip-level D1-D3 arm
+
+Nothing above changes. Appendix G registered these predictions before this
+run existed; this reports what they showed, supported or not. Instrument:
+`src/rosequarter_d123.py --nonwork`, 8 paired seeds, same frozen 5-edge
+span, same graph (md5 6707ddf25d63f2b5b4d2948b37cdb783), outputs under the
+`rqd123n_` prefix. Affected trips per seed: 597, 630, 596, 606, 617, 586,
+558, 565.
+
+### I.1 G1 is SUPPORTED
+
+| metric (8 paired seeds) | mean | sd | signs | t |
+|---|---|---|---|---|
+| D1 I-405, closed minus open | +0.4115 | 0.0229 | 8/8 | 50.7 |
+| D3 I-405 added veh-km | +1,141 | 77 | 8/8 | 42.2 |
+| D3 I-405 minus D3 I-205 (the rank) | +958 | 109 | 8/8 | 24.9 |
+
+Underlying shares: D1 I-405 0.155 open to 0.566 closed; D1 I-205 0.073 to
+0.101; D2 I-405 0.478; D2 I-205 0.059; D3 I-205 +183 +/- 62 veh-km. The
+smallest I-405 D3 in any seed (1,010) exceeds the largest I-205 D3 in any
+seed (298), so the registered rank order never rests on a marginal seed.
+
+### I.2 G2 is NOT SUPPORTED
+
+Affected share of spawned trips: base 0.0376 +/- 0.0016, non-work 0.0360
++/- 0.0015. The mean falls in the predicted direction, but the paired
+per-seed difference is negative in only 5 of 8 seeds and |t| = 1.76,
+under the frozen bar of 3. Recorded as NOT SUPPORTED. The reasoning behind
+G2, that shorter and more local non-work trips less often cross a downtown
+freeway span, may still be correct; this replication cannot certify it and
+the prediction is not claimed.
+
+### I.3 The registered open question: answered, and the answer is a null
+
+Neither of the two named mechanisms dominates. Non-work minus base, paired
+per seed: D1 I-405 closed share -0.0176 (t -1.56, lower in 5 of 8 seeds);
+D2 I-405 -0.0106 (t -0.82, 4 of 8); D1 I-205 closed share -0.0003
+(t -0.05); D2 I-205 +0.0010 (t +0.27). Nothing clears the bar. Adding
+non-commute demand does not measurably change the diversion shares among
+affected trips at this replication, so dilution and selection either
+cancel or are both small. Reported as the null it is.
+
+### I.4 The Appendix G citation rule was necessary, not decorative
+
+D3 for I-405 fell from +1,187 veh-km in the base arm to +1,141 here. Read
+alone that looks like weaker diversion under non-work demand. Per affected
+trip it is 1.911 to 1.918 veh-km (t +0.14): unchanged. The whole of the
+difference in the total is the smaller affected population, exactly the
+misreading the rule was frozen to prevent, and it would have happened.
+I-205 per affected trip rose 0.215 to 0.308 (t +2.24, up in 5 of 8), which
+does not clear the bar and is not claimed.
+
+### I.5 Appendix H completed, and one of its guesses corrected
+
+The non-work arm dropped 45 ODs against the base arm's 55. Both arms were
+then diagnosed on the closed graph. All 100 dropped trips across the two
+arms are accounted for, with none left over:
+
+- 80: the destination is a span head with in-degree 0 once the span is
+  removed, so the trip ends inside the closed stretch.
+- 13: the destination is node 256180952, which exactly 1 node can still
+  reach, a pocket the closure seals off.
+- 7: the ORIGIN is sealed off, with 0 nodes reachable from it. Every one of
+  these origins is itself a span node (40382443, 40413533), so the trip
+  starts on the closed stretch.
+
+Appendix H guessed the non-span-head cases were "most likely stranded
+pockets". That is right for the 13 and wrong for the 7, which are stranded
+at the ORIGIN end, not the destination end. Corrected here rather than left
+standing.
+
+Appendix H's corrected expectation holds exactly: every dropped trip either
+starts or ends inside the closed stretch, and no dropped trip has both ends
+outside it. That is the condition future scoring should check, including in
+September.
