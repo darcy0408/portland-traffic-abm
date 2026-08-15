@@ -382,3 +382,70 @@ leaves retail streets empty) is exactly what the layer was built to fix.
 - The primary registered predictions remain Appendix A's and do not
   change. This arm's numeric results will be appended, dated, before
   Sept 11.
+
+## Appendix F (2026-08-14): results of the three registered arms
+
+Nothing above changes. All three arms registered in Appendices B and E
+ran to completion the same day they were registered (SLURM arrays 126757,
+126758, 126805; 64 of 64 tasks COMPLETED; readouts by the committed
+scripts). Registration provably preceded every run.
+
+### F.1 Realism-stack arm (fwrqr, registered in B.1)
+
+| route | mean % | sd | signs | verdict |
+|-------|--------|----|-------|---------|
+| I-405 | +35.6 | 10.9 | 8/8 | SUPPORTED, t = 9.3 |
+| I-205 | +2.3 | 6.0 | 5/8 | not supported, t = 1.1 |
+| I-5 (route total) | -2.6 | 3.6 | 1/8 | not supported, t = 2.0 |
+| OR-213 | +0.8 | 11.6 | 2/8 | not supported, t = 0.2 |
+| US-26 | -3.9 | 3.5 | 0/8 | clears the bar, see note |
+
+The registered predictions hold: I-405 up (at reduced magnitude, +35.6%
+under realism dynamics vs +84.9% in the base arm), rank I-405 above
+I-205. The US-26 row clears the numeric bar (unanimous down, t = 3.2)
+but was NOT a registered prediction; it is reported as an exploratory
+finding only and claims nothing.
+
+### F.2 Peak and quiet arm (rqpq, registered in B.2)
+
+Peak (hour 8, demand 28,595): I-405 +730 g NOx, +59.4% (sd 13.8), 8/8,
+t = 12.1, SUPPORTED. No other route reaches the bar.
+
+Quiet (hour 1, demand 1,780): I-405 +51 g NOx, +21.9% (sd 17.2), 8/8,
+t = 3.6, SUPPORTED (grams lead per the frozen citation rule; the
+percentage sits on a small base). No other route reaches the bar.
+
+Registered predictions hold at BOTH levels: I-405 up, rank I-405 above
+I-205. The registered open question is answered: the added I-405 grams
+ratio peak/quiet is 14.4 against a demand ratio of 16.1, so the absolute
+diversion is NOT super-proportional to demand; it scales slightly under
+it. The RELATIVE concentration of diversion is higher at peak (+59.4%
+vs +21.9%), but the congestion-amplification hypothesis in absolute
+grams is not supported, and is reported as such.
+
+### F.3 Non-work demand arm (fwrqn, registered in E)
+
+| route | mean % | sd | signs | verdict |
+|-------|--------|----|-------|---------|
+| I-405 | +75.8 | 19.1 | 8/8 | SUPPORTED, t = 11.2 |
+| I-205 | -4.2 | 3.3 | 1/8 | not supported, t = 3.6 |
+| I-5 (route total) | -3.1 | 2.6 | 1/8 | not supported, t = 3.4 |
+| OR-213 | -5.8 | 5.8 | 2/8 | not supported, t = 2.8 |
+| US-26 | +6.0 | 8.9 | 5/8 | not supported, t = 1.9 |
+
+The registered predictions hold: I-405 up, rank I-405 above I-205. The
+registered open question (does adding non-commute trips change the
+diversion): at corridor level the story is unchanged and modestly
+attenuated (+75.8% vs the base arm's +84.9%); the weak I-205 mean flips
+sign and remains unresolvable, consistent with the dilution result that
+motivated the trip-level metrics.
+
+### F.4 Summary
+
+The headline registered prediction, I-405 absorbs the diversion and its
+relative gain outranks I-205, is SUPPORTED in the base arm, the realism
+arm, the non-work arm, and at both the peak and quiet demand levels:
+five of five tests, every one registered before it ran. The
+corridor-level I-205 signal reached the bar in none of them, which is
+why the pre-registered trip-level D1-D3 metrics (Appendix A) carry that
+part of the prediction.
