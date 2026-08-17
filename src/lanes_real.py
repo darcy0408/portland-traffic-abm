@@ -47,7 +47,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
-import generate
+
+# NOTE: `generate` is imported inside main() only. generate.py imports this
+# module to build its lane counts, so importing it back at module scope would
+# be circular. main() needs it purely to print the old parser for comparison.
 
 DEFAULT_GRAPH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -174,6 +177,8 @@ def directional_lanes(d, medians=None):
 # --- standalone report ------------------------------------------------------
 
 def main(path):
+    import generate                            # comparison only; see note above
+
     print(f"loading {path}")
     G = ox.load_graphml(path)
     print(f"{G.number_of_nodes():,} nodes, {G.number_of_edges():,} directed edges")
@@ -184,6 +189,7 @@ def main(path):
         print(f"  {cls:<18}{m}")
 
     config.LANES_ENABLED = True                     # measure the real old path
+    config.LANES_REAL = False                       # ...without this module in it
     rows = collections.defaultdict(lambda: {"n": 0, "old": 0, "new": 0})
     old_single = new_single = 0
     for _u, _v, d in G.edges(data=True):

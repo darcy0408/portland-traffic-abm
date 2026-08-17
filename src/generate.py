@@ -402,6 +402,15 @@ def prepare_network(G):
     """Give every edge a desired speed in m/s ('v0_mps'), a free-flow travel time
     ('travel_time_s'), and ensure a length. Each car uses its current segment's
     v0_mps as its target speed in the IDM, and routes on travel_time_s."""
+    # Lane counts come from lanes_real when config.LANES_REAL is on. Its
+    # imputation for untagged edges is the median of the same road class in THIS
+    # graph, so it is computed once here, from the network being prepared, rather
+    # than per edge. With LANES_REAL off this stays None and _parse_lanes runs.
+    medians = None
+    if getattr(config, "LANES_REAL", False) and (config.LANES_ENABLED
+                                                 or config.MOBIL_ENABLED):
+        import lanes_real
+        medians = lanes_real.class_medians(G)
     for _u, _v, _k, data in G.edges(keys=True, data=True):
         if "length" not in data or data["length"] is None:
             data["length"] = 10.0
@@ -414,7 +423,11 @@ def prepare_network(G):
         # is how real trips concentrate on the main roads the city counts as busy.
         data["travel_time_s"] = data["length"] / data["v0_mps"]
         # per-direction lane count (1 unless the lanes experiment is on)
-        data["n_lanes"] = _parse_lanes(data)
+        if medians is None:
+            data["n_lanes"] = _parse_lanes(data)
+        else:
+            import lanes_real
+            data["n_lanes"] = lanes_real.directional_lanes(data, medians)
     return G
 
 

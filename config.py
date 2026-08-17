@@ -274,6 +274,28 @@ NONWORK_SECTORS = ("CNS07", "CNS18", "CNS19")
 LANES_ENABLED = False
 LANES_MAX = 3         # per-direction cap; keeps a mistagged edge from getting absurd capacity
 
+# --- Corrected lane counts (real-capacity branch, Aug 17) ---
+# The rules above lose road capacity three ways, all measured on the 20 km metro
+# graph by src/capacity_audit.py and src/lane_tag_survey.py:
+#   1. OSMnx's default download never requested 'lanes:forward'/'lanes:backward',
+#      so a two-way street had its lane total halved AND floored: a 3-lane street
+#      became 1 lane each way instead of 2 and 1. That hit 20.6% of two-way
+#      tagged arterials;
+#   2. the 32% of arterial edges with no 'lanes' tag silently fell back to 1;
+#   3. one flat LANES_MAX clamped freeways to a residential street's ceiling,
+#      catching 100 of the 438 motorway edges.
+# With this on, src/lanes_real.py supplies the count instead: directional tags
+# win where OSM has them, one-way tags are taken as-is, two-way splits preserve
+# the tagged total rather than flooring both directions, untagged edges impute
+# the median of their own road class IN THIS GRAPH, exclusive bus/HOV lanes are
+# subtracted, and the cap becomes per-class. All from map data; nothing here is
+# tuned to the held-out PBOT counts.
+# Requires the widened graph from src/build_capacity_graph.py: on the old cached
+# graph the directional tags are simply absent and the result degrades to the
+# tag-only rules. Off reproduces the committed spec exactly.
+LANES_REAL = True
+LANES_REAL_GRAPH = "graph_metro20k_lanes.graphml"   # cache written by build_capacity_graph.py
+
 # --- MOBIL lane changing (traffic-realism Phase 3) ---
 # Phase 1 (LANES_ENABLED) models a segment's lanes as VIRTUAL lanes with implicit,
 # freely-reshuffling identity: a frictionless upper bound on capacity, no real
