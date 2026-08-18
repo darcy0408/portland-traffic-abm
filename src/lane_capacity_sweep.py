@@ -212,19 +212,36 @@ def readout():
              for s in SEEDS if (arm_a, n, s) in got and (arm_b, n, s) in got]
         return np.array(d) if d else None
 
+    def verdict(agree, have, bar=6, total=None):
+        """Registered bar is an ABSOLUTE count: at least `bar` of 8 seeds.
+
+        On a partial campaign that count can only RISE as runs land, so:
+          - once `agree` reaches the bar the verdict is already final;
+          - it is only refuted when the remaining seeds cannot get there;
+          - otherwise it is PENDING, NOT 'not supported'.
+        Calling an incomplete campaign NOT SUPPORTED would report a missing run
+        as evidence against the prediction, which is exactly the error the
+        pre-registration exists to prevent."""
+        total = total or len(SEEDS)
+        if agree >= bar:
+            return "SUPPORTED"
+        if agree + (total - have) < bar:
+            return "NOT SUPPORTED"
+        return f"PENDING ({have}/{total} seeds in; needs {bar - agree} more)"
+
     print("\nREGISTERED PREDICTIONS")
     d = paired("realism_oldlanes", "realism_reallanes", 16500, 0)
     if d is not None:
         agree = int(np.sum(np.abs(d) < 100))
         print(f"  P1 arms agree at 16,500 within 100 veh/hr: "
               f"mean {d.mean():+,.0f}, {agree}/{len(d)} seeds  "
-              f"{'SUPPORTED' if agree >= 6 else 'NOT SUPPORTED'}")
+              f"{verdict(agree, len(d))}")
     d = paired("realism_oldlanes", "realism_reallanes", 33000, 1)
     if d is not None:
         agree = int(np.sum(d < 0))
         print(f"  P2 corrected has less stuck time at 33,000: "
               f"mean {d.mean():+,.0f} veh-h, {agree}/{len(d)} seeds  "
-              f"{'SUPPORTED' if agree >= 6 else 'NOT SUPPORTED'}")
+              f"{verdict(agree, len(d))}")
 
     a = "realism_reallanes"
     g1 = [got[(a, 24750, s)][0] - got[(a, 16500, s)][0]
@@ -233,12 +250,12 @@ def readout():
           for s in SEEDS if (a, 33000, s) in got and (a, 24750, s) in got]
     if g1 and g2:
         n_sat = sum(1 for x, y in zip(g1, g2) if y < 0.5 * x)
+        v = verdict(n_sat, len(g2))
         print(f"  P3 throughput still saturates (2nd gain < half the 1st): "
               f"+{np.mean(g1):,.0f} then +{np.mean(g2):,.0f} veh/hr, "
-              f"{n_sat}/{len(g2)} seeds  "
-              f"{'SUPPORTED' if n_sat >= 6 else 'NOT SUPPORTED'}")
-        if n_sat < 6:
-            print(f"     -> P3 failing means lane supply WAS the binding "
+              f"{n_sat}/{len(g2)} seeds  {v}")
+        if v == "NOT SUPPORTED":
+            print(f"     -> P3 refuted means lane supply WAS the binding "
                   f"constraint and the capacity audit's conclusion is wrong.")
 
     print(f"\nCITATION RULE: 16,500 stays the cited demand whatever this shows. "
