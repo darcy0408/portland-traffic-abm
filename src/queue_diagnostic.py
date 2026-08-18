@@ -4,12 +4,12 @@ Read-only. Runs no simulation. Reads the finished lane-capacity sweep parquets
 and answers the question behind "the cars are queuing, is that wrong": a queue
 is only a defect if it forms somewhere real Portland traffic does not queue.
 
-For each edge, realized speed is recovered the same way noise.py does:
-    v_mean = length * throughput / value
-where value is vehicle-seconds of occupancy. An edge with high occupancy and
-low realized speed is a jam. Ranking edges by occupancy, averaged across the 8
-seeds, names the model's worst bottlenecks; comparing 16,500 against 33,000
-demand shows where the EXTRA queueing concentrates as load rises.
+The segments parquets carry everything needed directly:
+    value      vehicle-seconds of occupancy on the edge
+    v_sum      sum of instantaneous speeds over those vehicle-seconds (m/s)
+    stuck_sum  vehicle-seconds spent stuck
+so mean speed = v_sum / value and stuck share = stuck_sum / value, no graph
+join required for the physics. The graph supplies street names only.
 
 Usage (after the lcap campaign has run):
     python src/queue_diagnostic.py
@@ -20,7 +20,6 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import numpy as np
 import pandas as pd
 import osmnx as ox
 
@@ -32,31 +31,31 @@ ARM = "lcap_realism_reallanes"
 
 
 def load_arm(n):
-    """Mean per-edge occupancy (veh-s) and throughput across seeds, as frames
-    indexed by (u, v, key)."""
+    """Per-edge means across seeds, keyed by (u, v, key)."""
     frames = []
     for s in SEEDS:
-        p = os.path.join(config.PROCESSED_DIR, f"{ARM}_n{n}_s{s}_segments.parquet")
+        p = os.path.join(config.PROCESSED_DIR,
+                         f"{ARM}_n{n}_s{s}_segments.parquet")
         if os.path.exists(p):
             frames.append(pd.read_parquet(p))
     if not frames:
         raise SystemExit(f"no parquets for demand {n}")
     cat = pd.concat(frames)
-    return cat.groupby(cat.index).mean(), len(frames)
+    return cat.groupby(["u", "v", "key"]).mean(), len(frames)
 
 
 def main():
-    print(f"loading graph for names/lengths: {GRAPH}")
+    print(f"loading graph for street names: {GRAPH}")
     G = ox.load_graphml(GRAPH)
     meta = {}
     for u, v, k, d in G.edges(keys=True, data=True):
-        nm = d.get("name")
+        nm = d.get("name") or d.get("ref") or "(unnamed)"
         if isinstance(nm, list):
             nm = nm[0]
         hw = d.get("highway")
         if isinstance(hw, list):
             hw = hw[0]
-        meta[str((u, v, k))] = (str(nm), str(hw), float(d.get("length", 0)))
+        meta[(int(u), int(v), int(k))] = (str(nm), str(hw))
 
     lo, n_lo = load_arm(16500)
     hi, n_hi = load_arm(33000)
@@ -64,43 +63,53 @@ def main():
 
     def enrich(df):
         df = df.copy()
-        info = [meta.get(str(i), ("?", "?", 0.0)) for i in df.index]
+        info = [meta.get(i, ("?", "?")) for i in df.index]
         df["name"] = [x[0] for x in info]
         df["hwy"] = [x[1] for x in info]
-        df["len_m"] = [x[2] for x in info]
-        # realized mean speed on the edge, km/h (same recovery as noise.py)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            df["kmh"] = 3.6 * df["len_m"] * df["throughput"] / df["value"]
+        df["kmh"] = 3.6 * df["v_sum"] / df["value"].where(df["value"] > 0)
+        df["stuck_frac"] = df["stuck_sum"] / df["value"].where(df["value"] > 0)
         return df
 
     lo, hi = enrich(lo), enrich(hi)
 
     print("=== worst bottlenecks at the CITED demand (16,500) ===")
-    print("ranked by vehicle-seconds of occupancy; kmh is realized speed")
-    top = lo.sort_values("value", ascending=False).head(15)
-    for i, r in top.iterrows():
-        print(f"  {r['value']:>10,.0f} veh-s  {r['kmh']:>5.1f} km/h  "
-              f"{r['throughput']:>6,.0f} veh  {r['hwy']:<14} {r['name']}")
+    print("ranked by vehicle-seconds of occupancy (mean over 8 seeds)")
+    print(f"{'veh-s':>10}  {'km/h':>5}  {'stuck%':>6}  {'veh':>6}  street")
+    for i, r in lo.sort_values("value", ascending=False).head(20).iterrows():
+        print(f"{r['value']:>10,.0f}  {r['kmh']:>5.1f}  "
+              f"{100 * r['stuck_frac']:>5.0f}%  {r['throughput']:>6,.0f}  "
+              f"{r['hwy']:<15} {r['name']}")
 
     print("\n=== where the EXTRA queueing goes as demand doubles ===")
     print("ranked by growth in occupancy, 16,500 -> 33,000")
-    j = lo[["value", "name", "hwy", "kmh"]].join(
-        hi[["value", "kmh"]], rsuffix="_hi", how="inner")
+    j = lo.join(hi[["value", "kmh"]], rsuffix="_hi", how="inner")
     j["growth"] = j["value_hi"] - j["value"]
-    top = j.sort_values("growth", ascending=False).head(15)
-    for i, r in top.iterrows():
-        print(f"  +{r['growth']:>9,.0f} veh-s  {r['kmh']:>5.1f} -> "
-              f"{r['kmh_hi']:>5.1f} km/h  {r['hwy']:<14} {r['name']}")
+    for i, r in j.sort_values("growth", ascending=False).head(20).iterrows():
+        print(f"+{r['growth']:>10,.0f}  {r['kmh']:>5.1f} -> {r['kmh_hi']:>5.1f} km/h  "
+              f"{r['hwy']:<15} {r['name']}")
 
-    # How much of the network ever congests at all, both demands.
+    # network-level congestion shape at each demand
     for label, df in (("16,500", lo), ("33,000", hi)):
-        used = df[df["throughput"] > 0]
+        used = df[df["value"] > 0]
         slow = used[used["kmh"] < 10]
         print(f"\nat {label}: {len(used):,} edges carried traffic; "
-              f"{len(slow):,} ({100 * len(slow) / len(used):.1f}%) "
-              f"ran below 10 km/h; they hold "
-              f"{100 * slow['value'].sum() / used['value'].sum():.1f}% "
-              f"of all vehicle-time")
+              f"{len(slow):,} ({100 * len(slow) / len(used):.1f}%) had mean "
+              f"speed under 10 km/h, holding "
+              f"{100 * slow['value'].sum() / used['value'].sum():.1f}% of all "
+              f"vehicle-time; network mean speed "
+              f"{3.6 * used['v_sum'].sum() / used['value'].sum():.1f} km/h; "
+              f"stuck share {100 * used['stuck_sum'].sum() / used['value'].sum():.1f}%")
+
+    # class profile of where vehicle-time is spent at the cited demand
+    print("\n=== vehicle-time by road class at 16,500 ===")
+    byc = lo[lo["value"] > 0].groupby("hwy").agg(
+        vehs=("value", "sum"), v=("v_sum", "sum"), stuck=("stuck_sum", "sum"))
+    byc["kmh"] = 3.6 * byc["v"] / byc["vehs"]
+    byc["share"] = 100 * byc["vehs"] / byc["vehs"].sum()
+    byc["stuckpct"] = 100 * byc["stuck"] / byc["vehs"]
+    for cls, r in byc.sort_values("share", ascending=False).head(10).iterrows():
+        print(f"  {cls:<16} {r['share']:>5.1f}% of vehicle-time  "
+              f"{r['kmh']:>5.1f} km/h  stuck {r['stuckpct']:>4.0f}%")
 
 
 if __name__ == "__main__":
