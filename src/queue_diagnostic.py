@@ -36,7 +36,7 @@ def load_arm(n):
     indexed by (u, v, key)."""
     frames = []
     for s in SEEDS:
-        p = os.path.join(config.PROCESSED_DIR, f"{ARM}_n{n}_s{s}.parquet")
+        p = os.path.join(config.PROCESSED_DIR, f"{ARM}_n{n}_s{s}_segments.parquet")
         if os.path.exists(p):
             frames.append(pd.read_parquet(p))
     if not frames:
