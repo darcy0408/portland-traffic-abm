@@ -94,7 +94,15 @@ def osm_ref(hwy_name):
     return None
 
 
-def main():
+def build():
+    """Everything main() needs, importable: run the station-to-edge comparison
+    and return its pieces so other read-only diagnostics (blackspot_trace) can
+    start from the same matched stations instead of re-deriving the join.
+
+    Returns (res, seg, G, n_seeds): res is one row per matched station with the
+    snapped edge key kept in "edge"; seg is the seed-summed per-edge stats keyed
+    by (u, v, key); G is the loaded lanes graph.
+    """
     # --- PORTAL metadata ---------------------------------------------------
     hmeta = fetch("hwymeta.json", f"{API}/highwaymetadata/?format=json")
     if isinstance(hmeta, dict):
@@ -211,11 +219,6 @@ def main():
     seg["mph"] = 2.23694 * seg["v_sum"] / seg["value"].where(seg["value"] > 0)
 
     # --- the comparison ----------------------------------------------------
-    print(f"\nmodel = realized mean speed at the cited 16,500 demand "
-          f"({len(frames)} seeds, corrected lanes)")
-    print(f"real  = PORTAL volume-weighted station speed, {DAYS[0]}..{DAYS[-1]}")
-    hdr = (f"{'station':<44}{'real day':>9}{'real AM':>8}{'real PM':>8}"
-           f"{'model':>7}{'ratio':>7}")
     out = []
     for sid, st in stations.items():
         if sid not in day_mph.index:
@@ -228,10 +231,20 @@ def main():
             continue
         out.append({
             "sid": sid, "ref": st["ref"], "text": st["text"][:42],
-            "day": day_mph[sid], "am": am_mph.get(sid, np.nan),
+            "edge": key, "day": day_mph[sid], "am": am_mph.get(sid, np.nan),
             "pm": pm_mph.get(sid, np.nan), "model": m,
             "ratio": m / day_mph[sid], "frozen": sid in FROZEN})
     res = pd.DataFrame(out).sort_values(["ref", "sid"])
+    return res, seg, G, len(frames)
+
+
+def main():
+    res, seg, G, n_seeds = build()
+    print(f"\nmodel = realized mean speed at the cited 16,500 demand "
+          f"({n_seeds} seeds, corrected lanes)")
+    print(f"real  = PORTAL volume-weighted station speed, {DAYS[0]}..{DAYS[-1]}")
+    hdr = (f"{'station':<44}{'real day':>9}{'real AM':>8}{'real PM':>8}"
+           f"{'model':>7}{'ratio':>7}")
 
     for ref, grp in res.groupby("ref"):
         print(f"\n--- {ref} ({len(grp)} stations) ---")
