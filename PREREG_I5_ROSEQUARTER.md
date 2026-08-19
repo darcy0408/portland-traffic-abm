@@ -631,3 +631,67 @@ Appendix H's corrected expectation holds exactly: every dropped trip either
 starts or ends inside the closed stretch, and no dropped trip has both ends
 outside it. That is the condition future scoring should check, including in
 September.
+
+## Appendix J (2026-08-19): the scoring pipeline, its measured null floor, and the interpretation rule
+
+Nothing above changes. Section 5 froze WHAT October compares (direction of
+change per corridor group, the rank of relative gains, each station against
+itself) but not the implementation, and not how large a change must be
+before a direction label means anything. Both are pinned here, before the
+closure.
+
+The pipeline: `src/rosequarter_score.py` (committed 2026-08-19, before any
+closure data exists). Implementation choices pinned in that commit: a
+station's volume is its full-day total (the closure is 24/7); only
+detectors that report in BOTH periods count toward a station, so a detector
+dying between periods cannot masquerade as a traffic change; a station-day
+with fewer than 20 of 24 reporting hours is dropped and said so; a corridor
+group's change is the mean of its stations' relative changes, with the
+per-station values always printed beside it. Coverage as of today: all 13
+frozen stations active and usable (the drop rule fired once, station 3105
+on Aug 13 with 11 of 24 hours, and was handled).
+
+The null floor, measured: the pipeline was run on three disjoint pairs of
+ordinary pre-closure Tue-Thu weeks, scored exactly as October will be,
+with no closure anywhere in the data (`--null` for the first pair;
+`--score --before ... --during ...` reproduces the other two).
+
+| null pair (A vs B)      | in-span | upstream | downstream | I-405 | I-205 | detour gap | rank |
+|-------------------------|--------:|---------:|-----------:|------:|------:|-----------:|------|
+| Aug 4-6 vs Aug 11-13    |   -0.8% |    -2.4% |      -3.1% | +1.1% | +2.9% |    1.8 pts | I-205 first |
+| Jul 7-9 vs Jul 14-16    |   +5.1% |    +3.2% |      +6.8% | +2.3% | +6.3% |    4.0 pts | I-205 first |
+| Jul 21-23 vs Jul 28-30  |   -3.4% |    -2.5% |      -0.5% | +2.7% | -3.5% |    6.2 pts | I-405 first |
+
+Group means on pure noise reach 6.8% in magnitude; a single station
+reaches 11.2% (3110 Jefferson, third pair); the detour rank FLIPPED
+across draws; and every registered direction label fired on noise at
+least once. The second pair sits one week after July 4 and likely carries
+vacation-recovery drift; it is kept anyway, because dropping the largest
+draw after seeing it would defeat the purpose of a floor.
+
+The interpretation rule, registered now, with an a-priori 2x safety
+margin on the largest observed null values:
+
+1. A corridor-group direction verdict is worded by where its change falls
+   against the largest null group magnitude (6.8%): at or under 6.8%,
+   "within the measured null floor, no evidence either way"; over 6.8% up
+   to 13.6%, "direction consistent, weak evidence"; over 13.6%, "clear of
+   the null floor".
+2. The detour rank verdict (registered in Appendix A: I-405 above I-205)
+   is worded by the gap between the two groups' changes against the
+   largest null gap (6.2 points): at or under 6.2, the rank is reported
+   as meaningless; over 6.2 up to 12.4, weak; over 12.4, clear.
+3. These floors govern the wording of verdicts, not the frozen metrics:
+   every number is still computed and reported.
+
+One expected consequence, stated up front: Appendix A registers the I-205
+gain as weak. If the real I-205 change lands under the floor, it is
+reported as "no evidence either way", not as support and not as failure.
+The in-span collapse and the signed I-405 detour are expected to clear
+these floors by an order of magnitude.
+
+Caveats registered with the rule: three draws is a small sample of weekly
+variability, so the floor is a measured minimum, not a distribution
+quantile, which is why the 2x margin is applied; and the null pairs are
+adjacent or near-adjacent weeks, matching section 5's same-weekday
+pre-closure baseline rule.
