@@ -2011,11 +2011,14 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         rate = (max(len(vehicles), 1) * done) / elapsed if elapsed > 0 else float("inf")
         print(f"{len(vehicles):>5} vehicles x {n_steps} steps "
               f"in {elapsed:6.2f}s  ({rate:>10,.0f} vehicle-steps/s)")
-        if reroute_ctx is not None:
-            # report the failures too: a run where most re-plans found no path
-            # is a very different story from one where they all succeeded
-            print(f"  re-plans: {reroute_ctx['n_reroutes']:,} succeeded, "
-                  f"{reroute_ctx['n_failed']:,} found no path")
+    if reroute_ctx is not None:
+        # NOT gated by verbose: campaign runners pass verbose=False, and the
+        # rrt campaign lost its promised re-plan counts to exactly that
+        # (ledger RR35, registration gap). Report the failures too: a run
+        # where most re-plans found no path is a very different story from
+        # one where they all succeeded.
+        print(f"  re-plans: {reroute_ctx['n_reroutes']:,} succeeded, "
+              f"{reroute_ctx['n_failed']:,} found no path")
     return segment_totals, segment_nox, segment_throughput
 
 
