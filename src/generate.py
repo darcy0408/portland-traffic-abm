@@ -1156,6 +1156,59 @@ def _next_segment_rear(next_group, n_next, veh_lane, explicit):
     return next_group[n_next - 1] if len(next_group) >= n_next else None
 
 
+def _entry_choice(next_group, n_next, veh_lane, explicit, claims=None):
+    """config.MERGE_ENTRY_IMPROVED's counterpart of _next_segment_rear: the lane
+    an entering car will ACTUALLY take -- the one with the most room at the
+    entrance -- and the effective rearmost car in it (None = that lane is clear).
+
+    Returns (target_lane, rear). Used by BOTH the accel pass's spillback-leader
+    lookup and the crossing itself, so the car brakes for exactly the car it
+    will end up behind. Ties prefer the lane nearest the car's current index,
+    so on a plain edge-to-edge continuation with equal room the car keeps its
+    lane and the improved rule reduces to the legacy clamp.
+
+    `claims` (crossing pass only) maps target lane -> the rearmost car that
+    already crossed into this segment THIS step. Those cars are invisible in
+    the frozen snapshot, so without claims two competing feeders read the same
+    gap and land on top of each other; with them, same-step entries serialize:
+    the second car sees the first as its effective rear, holds one step, and
+    each feeder's queue then follows its own leader across as a wave. Claims
+    apply in explicit and single-lane modes; virtual multi-lane keeps lane
+    identity implicit, so per-lane claims do not map onto it and it stays on
+    the frozen-snapshot rule.
+
+    In virtual-lane and single-lane modes lane identity is implicit, so only
+    the rear lookup matters and it already picks the emptiest lane; the legacy
+    helper is reused unchanged."""
+    def rearmost(a, b):
+        if a is None or (b is not None and b["pos"] < a["pos"]):
+            return b
+        return a
+
+    if not explicit or n_next == 1:
+        lane_t = min(veh_lane, n_next - 1) if explicit else veh_lane
+        rear = _next_segment_rear(next_group, n_next, veh_lane, explicit) \
+            if next_group else None
+        if claims and (explicit or n_next == 1):
+            rear = rearmost(rear, claims.get(lane_t if explicit else 0))
+        return lane_t, rear
+    rears = {}
+    for other in next_group:                    # ascending by pos: first = rearmost
+        ln = min(other.get("lane", 0), n_next - 1)
+        if ln not in rears:
+            rears[ln] = other
+            if len(rears) == n_next:
+                break
+    best_lane, best_rear, best_room = None, None, -1.0
+    for ln in range(n_next):
+        rear = rearmost(rears.get(ln), claims.get(ln) if claims else None)
+        room = float("inf") if rear is None else rear["pos"]
+        if room > best_room or (room == best_room and
+                                abs(ln - veh_lane) < abs(best_lane - veh_lane)):
+            best_lane, best_rear, best_room = ln, rear, room
+    return best_lane, best_rear
+
+
 def _mobil_lane_pass(by_edge, mobil_ctx, L):
     """Decide every car's lane for this step, from the frozen snapshot.
 
@@ -1435,9 +1488,16 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                         next_key = veh["route"][veh["idx"] + 1][:3]
                         next_group = by_edge.get(next_key)
                         n_next = lane_counts.get(next_key, 1) if lane_counts else 1
-                        rear = (_next_segment_rear(next_group, n_next,
-                                                   veh.get("lane", 0), explicit)
-                                if next_group else None)
+                        if next_group is None:
+                            rear = None
+                        elif config.MERGE_ENTRY_IMPROVED:
+                            # brake for the rear car of the lane the crossing
+                            # will actually target (the one with the most room)
+                            _, rear = _entry_choice(next_group, n_next,
+                                                    veh.get("lane", 0), explicit)
+                        else:
+                            rear = _next_segment_rear(next_group, n_next,
+                                                      veh.get("lane", 0), explicit)
                         if rear is not None:
                             gap = (edge[3] - veh["pos"]) + rear["pos"] - L
                             lead_v = rear["v"]
@@ -1460,6 +1520,10 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
     # 2) move everyone, credit the segment they travelled on, advance routes
     # stuck threshold in m/s, converted once per step, not once per vehicle
     stuck_v = config.STUCK_SPEED_KMH / 3.6 if stuck_stats is not None else 0.0
+    # improved entry only: (segment key, lane) -> rearmost car that crossed into
+    # that lane THIS step, so later crossings in the same step see it (claims in
+    # _entry_choice) instead of reading the frozen snapshot and overlapping it
+    entered_rear = {}
     for veh in vehicles:
         v_old = veh["v"]
         a = accel[veh["id"]]
@@ -1513,22 +1577,47 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             # (with n_next lanes, that is the n_next'th-rearmost car; fewer cars
             # than lanes means a free lane, so entry is never blocked). This is
             # the spillback counterpart to the red-light hold above.
+            entry_lane = None      # improved-entry target lane, decided below
             if veh["idx"] + 1 < len(veh["route"]):
                 next_key = veh["route"][veh["idx"] + 1][:3]
                 next_group = by_edge.get(next_key)
                 n_next = lane_counts.get(next_key, 1) if lane_counts else 1
-                # the minimum gap is this driver's OWN jam distance when the car is
-                # heterogeneous (config.IDM_S0 otherwise), matching the s0 the accel
-                # pass above used for the same car. A driver who keeps a shorter jam
-                # distance should also squeeze into a tighter entrance.
-                veh_idm = veh.get("idm")
-                s0_here = veh_idm["s0"] if veh_idm else config.IDM_S0
-                rear = (_next_segment_rear(next_group, n_next,
-                                           veh.get("lane", 0), explicit)
-                        if next_group else None)
-                if rear is not None and rear["pos"] < L + s0_here:
-                    veh["pos"], veh["v"] = edge[3], 0.0
-                    break
+                if config.MERGE_ENTRY_IMPROVED:
+                    # improved rule: cross as soon as there is physical room for
+                    # the car BODY past the entrance in the roomiest lane. The
+                    # car keeps whatever approach speed the IDM left it (it was
+                    # already braking for this same rear car via the spillback
+                    # leader above), so a queue drains across the junction as a
+                    # wave instead of stop-restart cycles at full jam spacing.
+                    claims = ({ln: c for (k2, ln), c in entered_rear.items()
+                               if k2 == next_key}
+                              if entered_rear else None)
+                    if next_group or claims:
+                        entry_lane, rear = _entry_choice(
+                            next_group or [], n_next, veh.get("lane", 0),
+                            explicit, claims)
+                        overhang = veh["pos"] - edge[3]
+                        if (rear is not None and rear["pos"] - overhang
+                                < L + config.MERGE_ENTRY_EPS_M):
+                            # no room even for the body: bumper-to-bumper stop
+                            veh["pos"], veh["v"] = edge[3], 0.0
+                            break
+                else:
+                    # legacy rule: hold at the line, speed zeroed, until the
+                    # rearmost car has cleared a full jam distance. The minimum
+                    # gap is this driver's OWN jam distance when the car is
+                    # heterogeneous (config.IDM_S0 otherwise), matching the s0
+                    # the accel pass above used for the same car. A driver who
+                    # keeps a shorter jam distance should also squeeze into a
+                    # tighter entrance.
+                    veh_idm = veh.get("idm")
+                    s0_here = veh_idm["s0"] if veh_idm else config.IDM_S0
+                    rear = (_next_segment_rear(next_group, n_next,
+                                               veh.get("lane", 0), explicit)
+                            if next_group else None)
+                    if rear is not None and rear["pos"] < L + s0_here:
+                        veh["pos"], veh["v"] = edge[3], 0.0
+                        break
             # the car has fully traversed this segment: count one vehicle through it.
             # This is the model analog of a real traffic count (vehicles per period),
             # the apples-to-apples match for ADT, distinct from vehicle-seconds.
@@ -1537,13 +1626,25 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
             if veh["idx"] + 1 < len(veh["route"]):
                 veh["idx"] += 1
                 if explicit:
-                    # keep the lane index across the intersection, dropping to the
-                    # highest lane that exists if the new road is narrower (a car
-                    # leaving a 3-lane arterial for a 1-lane street ends up in
-                    # lane 0). The choice of which lane to enter is deliberately
-                    # simple; a fuller model would pick the emptiest.
+                    # legacy: keep the lane index across the intersection,
+                    # dropping to the highest lane that exists if the new road
+                    # is narrower (a car leaving a 3-lane arterial for a 1-lane
+                    # street ends up in lane 0). Improved: take the lane the
+                    # room check above targeted, so a feeder can use ALL of a
+                    # wider downstream road's lanes at the junction itself.
                     n_new = lane_counts.get(veh["route"][veh["idx"]][:3], 1)
-                    veh["lane"] = min(veh.get("lane", 0), n_new - 1)
+                    if entry_lane is not None:
+                        veh["lane"] = entry_lane
+                    else:
+                        veh["lane"] = min(veh.get("lane", 0), n_new - 1)
+                if config.MERGE_ENTRY_IMPROVED:
+                    # register this crossing so later same-step entries into the
+                    # same lane serialize behind it (the claims read above)
+                    nk = veh["route"][veh["idx"]][:3]
+                    ln = veh.get("lane", 0) if explicit else 0
+                    prev = entered_rear.get((nk, ln))
+                    if prev is None or veh["pos"] < prev["pos"]:
+                        entered_rear[(nk, ln)] = veh
             else:
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady

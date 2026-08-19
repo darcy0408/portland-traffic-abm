@@ -321,6 +321,31 @@ MOBIL_A_THRESHOLD = 0.2     # m/s^2: minimum net acceleration gain to bother cha
 MOBIL_B_SAFE = 4.0          # m/s^2: the hardest deceleration a change may impose on the
                             # new follower. A change forcing harder braking is unsafe.
 
+# --- Merge entry (capacity branch, freeway-blackspot fix) ---
+# The blackspot trace (src/blackspot_trace.py) localized 4 of the 5 too-hard
+# freeway jams to junctions where the ENTRY RULE, not road capacity, throttles
+# flow: feeders discharge ~1,000 veh/hr per contested lane into a downstream
+# edge running free. Two kernel behaviors cause that. (1) A car may only cross
+# into the next segment once the rearmost car there has cleared a full jam
+# spacing (L + s0) past the entrance, and until then it is held at the line
+# with its speed ZEROED, so the discharge serializes into stop-restart cycles
+# instead of propagating like a queue wave on a continuous road. (2) With
+# explicit MOBIL lanes a crossing car keeps its lane index (clamped), so a
+# 2-lane feeder can never enter a 3-lane road's third lane at the junction;
+# the extra lane only fills later by lane changes, wasting it exactly at the
+# bottleneck. With this flag on: a car crosses as soon as there is physical
+# room for its body past the line (rear pos - overhang >= L + eps), keeping
+# whatever approach speed the IDM left it, and an entering car targets the
+# lane with the MOST ROOM at the entrance (the code's own long-standing
+# "a fuller model would pick the emptiest" note) with the spillback-leader
+# lookup using that same target lane, so the accel pass and the crossing
+# agree. Both changes reuse the existing IDM/spillback machinery; no second
+# physics. Off by default: the committed spec and every published number are
+# the legacy rule. A-priori design from the trace mechanism, not tuned to
+# PORTAL speeds; the 91-station harness stays a held-out grader.
+MERGE_ENTRY_IMPROVED = False
+MERGE_ENTRY_EPS_M = 0.25    # m: clearance beyond the car body required to cross
+
 # --- Driver heterogeneity (traffic-realism Phase 2) ---
 # The base model gives every vehicle the single IDM parameter set above, so a
 # segment's cars are dynamically identical and its speed VARIANCE is zero. With
