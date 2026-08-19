@@ -94,10 +94,12 @@ def osm_ref(hwy_name):
     return None
 
 
-def build():
+def build(arm=ARM):
     """Everything main() needs, importable: run the station-to-edge comparison
-    and return its pieces so other read-only diagnostics (blackspot_trace) can
-    start from the same matched stations instead of re-deriving the join.
+    and return its pieces so other read-only diagnostics (blackspot_trace,
+    mergefix_runs --readout) can start from the same matched stations instead
+    of re-deriving the join. `arm` is the parquet stem prefix, so the same
+    frozen station set and real-data days grade any arm's saved runs.
 
     Returns (res, seg, G, n_seeds): res is one row per matched station with the
     snapped edge key kept in "edge"; seg is the seed-summed per-edge stats keyed
@@ -212,7 +214,7 @@ def build():
     # model speeds per edge, averaged over seeds
     frames = []
     for s in SEEDS:
-        p = os.path.join(config.PROCESSED_DIR, f"{ARM}_s{s}_segments.parquet")
+        p = os.path.join(config.PROCESSED_DIR, f"{arm}_s{s}_segments.parquet")
         if os.path.exists(p):
             frames.append(pd.read_parquet(p))
     seg = pd.concat(frames).groupby(["u", "v", "key"]).sum()
