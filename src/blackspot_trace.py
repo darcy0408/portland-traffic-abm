@@ -119,7 +119,11 @@ def walk(G, stats, start, downstream=True):
 
 
 def main():
-    res, seg, G, n_seeds = psc.build()
+    # optional arm stem (default: the baseline arm), so a re-run's saved
+    # parquets can be traced with the same machinery: the blackspot set is
+    # recomputed FOR THAT ARM, so healed stations drop out and new ones show
+    arm = sys.argv[1] if len(sys.argv) > 1 else psc.ARM
+    res, seg, G, n_seeds = psc.build(arm)
     stats = Stats(seg, n_seeds)
 
     spots = res[res["ratio"] < 0.5].sort_values("ratio")
