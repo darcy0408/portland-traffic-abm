@@ -736,3 +736,63 @@ validated model head to head.
 - The primary registered predictions remain Appendix A's and do not
   change. This arm's numeric results will be appended, dated, before
   Sept 11.
+
+## Appendix L (2026-08-20): results of the improved-model arm (fwrqi)
+
+Nothing above changes. The Appendix K campaign ran overnight: SLURM array
+129864, 16 of 16 tasks COMPLETED (submitted Aug 19 after commit 3236d00
+pushed, last task finished 00:46 Aug 20), readout by the committed script
+(`--readout --improved`). The frozen-span guard passed in all 8 closed
+tasks: exactly 5 edges removed in every run. Registration provably
+preceded every run.
+
+### L.1 Corridor route totals (paired per-seed, closed minus open)
+
+Same frozen verdict bar as Appendix A: unanimous sign across the 8 paired
+seeds and |t| > 3 on the paired relative differences.
+
+| route | mean % | sd | signs | verdict |
+|-------|--------|----|-------|---------|
+| I-405 | +37.7 | 9.7 | 8/8 | SUPPORTED, t = 11.1 |
+| I-205 | +0.2 | 2.6 | 4/8 | not supported, t = 0.2 |
+| I-5 (route total) | +2.3 | 5.8 | 5/8 | not supported, t = 1.1 |
+| OR-213 | +0.1 | 6.7 | 2/8 | not supported, t = 0.0 |
+| US-26 | -1.7 | 7.0 | 4/8 | not supported, t = 0.7 |
+
+Absolute companions, per the standing rule that these percentages are
+never cited alone: I-405 gains +644 +/- 163 g NOx per simulated hour on
+an open-arm base of 1,708 g; I-205 gains +33 +/- 486 g on a base of
+18,451 g. The I-405 base differs from Appendix A's 959 g because this arm
+runs the realism stack with corrected real lanes on the lane-tagged
+graph; bases are only comparable within an arm. The closed span's own
+volume goes to zero by construction (the edges are removed).
+
+The registered predictions hold: I-405 up, rank of relative gains I-405
+above I-205. Corridor-level I-205 stays unresolvable, as in every other
+arm, which is why the trip-level D1-D3 metrics carry that part of the
+prediction. The I-5 route-total mean flips positive here (+2.3%, 5/8)
+where other arms leaned negative; it is inside seed noise, reaches no
+bar, and claims nothing. US-26, which cleared the numeric bar as an
+unregistered exploratory finding in the realism arm (F.1), does not
+clear it here (4/8, t = 0.7).
+
+### L.2 The registered open question, answered
+
+Appendix K registered one open question: whether the validated stack
+changes the MAGNITUDE of the I-405 gain relative to the realism arm's
++35.6%. It does not: +37.7% vs +35.6%, a 2.1-point difference against
+per-arm seed sds of about 10 points. The corrected real-lane model, the
+piece the PORTAL validation added on top of the realism stack, leaves
+the diversion magnitude essentially unchanged. The magnitude split in
+this campaign is between the base model (+84.9%) and everything running
+the realism dynamics (+35.6% and +37.7%); the lane correction moves
+model-to-real speed agreement, not the closure response.
+
+### L.3 Standing
+
+The headline registered prediction, I-405 absorbs the diversion and its
+relative gain outranks I-205, is now SUPPORTED in six of six registered
+tests: base, realism, non-work, peak, quiet, and the PORTAL-validated
+improved model. October grades the base arm (Appendix A, the primary
+registration) and this arm head to head against the real closure, under
+the Appendix J null-floor wording rules.
