@@ -892,3 +892,84 @@ engine's live estimate, not a probe-vehicle measurement, and its
 internals can change without notice. That is exactly why the control
 pairs and the measured null floor exist, and why direction and rank are
 graded rather than minutes.
+
+## Appendix N (2026-08-20): arterial travel-time results, both arms
+
+Nothing above changes. The Appendix M instrument ran on Orca the same
+day M was registered, base arm and improved arm, on the campaigns' saved
+parquets (no simulation; base graph md5 re-verified against the Appendix
+A fingerprint before the run). Outputs banked: rqtt_fwrq.json and
+rqtt_fwrqi.json; the tables below were recomputed locally from those
+banked files and match the run logs. ctrl_west was excluded by the snap
+rule on both arms, exactly as M predicted. All 11 remaining pairs
+resolved on all 8 seeds in both arms, no disconnections.
+
+Columns: mean one-way minutes (open, closed), then the paired per-seed
+percent change; bar = unanimous sign + |t| > 3; switch = seeds where the
+closed-arm path length moved more than 10% (the logger's length_m
+signal). Minutes are reported for honesty and are never graded (M.3).
+
+### N.1 Base arm (fwrq, the primary registration)
+
+| pair | open min | closed | mean % | sd | signs | switch | verdict |
+|------|---------|--------|--------|----|-------|--------|---------|
+| i5sb_span | 17.7 | 18.9 | +6.9 | 2.5 | 8/8 | 0/8 | SUPPORTED, t=7.8 |
+| vanc_pdx | 21.0 | 22.1 | +5.4 | 1.4 | 8/8 | 0/8 | SUPPORTED, t=10.7 |
+| i5sb_detour | 12.4 | 15.6 | +25.7 | 4.3 | 8/8 | 1/8 | SUPPORTED, t=16.7 |
+| interstate_sb | 10.1 | 10.2 | +1.0 | 2.0 | 6/8 | 1/8 | not supported, t=1.5 |
+| williams_nb | 7.7 | 7.5 | -2.7 | 3.2 | 2/8 | 0/8 | not supported, t=2.4 |
+| mlk_sb | 13.9 | 14.3 | +3.3 | 2.0 | 8/8 | 2/8 | SUPPORTED, t=4.7 |
+| grand_nb | 9.7 | 9.8 | +0.5 | 1.0 | 6/8 | 0/8 | not supported, t=1.5 |
+| i205_sb | 16.3 | 16.4 | +0.3 | 1.4 | 4/8 | 0/8 | not supported, t=0.7 |
+| i84wb_feeder | 15.6 | 15.8 | +1.3 | 1.4 | 7/8 | 2/8 | not supported, t=2.5 |
+| powell_wb | 13.6 | 13.6 | +0.4 | 0.8 | 4/8 | 0/8 | not supported, t=1.4 |
+| ctrl_se | 20.6 | 20.6 | -0.1 | 0.3 | 5/8 | 0/8 | not supported, t=0.5 |
+
+### N.2 Improved arm (fwrqi, the PORTAL-validated stack)
+
+| pair | open min | closed | mean % | sd | signs | switch | verdict |
+|------|---------|--------|--------|----|-------|--------|---------|
+| i5sb_span | 12.3 | 16.3 | +32.9 | 4.3 | 8/8 | 0/8 | SUPPORTED, t=21.6 |
+| vanc_pdx | 14.0 | 17.3 | +23.5 | 2.3 | 8/8 | 0/8 | SUPPORTED, t=29.0 |
+| i5sb_detour | 10.5 | 14.4 | +37.0 | 3.1 | 8/8 | 7/8 | SUPPORTED, t=34.2 |
+| interstate_sb | 7.7 | 8.8 | +14.6 | 3.4 | 8/8 | 0/8 | SUPPORTED, t=12.1 |
+| williams_nb | 8.5 | 8.5 | -0.1 | 1.3 | 3/8 | 1/8 | not supported, t=0.3 |
+| mlk_sb | 11.5 | 12.7 | +10.7 | 6.8 | 7/8 | 7/8 | not supported, t=4.5 |
+| grand_nb | 12.2 | 12.4 | +1.5 | 3.3 | 5/8 | 3/8 | not supported, t=1.3 |
+| i205_sb | 11.2 | 11.1 | -1.0 | 2.0 | 3/8 | 0/8 | not supported, t=1.4 |
+| i84wb_feeder | 14.5 | 14.5 | -0.6 | 2.0 | 2/8 | 0/8 | not supported, t=0.8 |
+| powell_wb | 11.5 | 11.6 | +0.6 | 1.6 | 6/8 | 0/8 | not supported, t=1.0 |
+| ctrl_se | 18.9 | 18.8 | -0.7 | 0.6 | 2/8 | 0/8 | not supported, t=3.0 |
+
+### N.3 Grading against M.2, honest
+
+- The three closed-span pairs (i5sb_span, vanc_pdx, i5sb_detour) go UP
+  at the bar in BOTH arms: 6 of 6. The signed-detour reroute M expected
+  shows as route switching on i5sb_detour in the improved arm (7/8
+  seeds), the length-jump signature the logger can verify directly.
+- interstate_sb: supported in the improved arm (+14.6), MISSED in the
+  base arm (+1.0, 6/8). mlk_sb: supported in the base arm (+3.3, 8/8),
+  missed the unanimity half in the improved arm (+10.7, 7/8).
+- i84wb_feeder: the registered UP direction FAILED in both arms (flat).
+  Reported as a failed prediction wherever this instrument is discussed.
+- i205_sb stayed under the bar in both arms, as registered (weak).
+- powell_wb, the registered open question, answers NO CHANGE both arms.
+- Every control held: williams_nb and grand_nb (direction controls) and
+  ctrl_se (far-field) reached the bar nowhere, so the network-boundary
+  artifact M warned about did not appear.
+
+### N.4 The registered rank for October (M.3 rule 4)
+
+Both arms agree on the top of the rank: i5sb_detour first, i5sb_span
+second, vanc_pdx third. The arms swap the next two (improved:
+interstate_sb then mlk_sb; base: mlk_sb then interstate_sb); both
+orderings are registered, arm-labeled, and October reports which arm's
+rank the logger matched. All remaining pairs are declared
+indistinguishable from seed noise and take no rank.
+
+A magnitude contrast, reported not graded: the improved arm prices the
+closure two to five times higher on the closed-span pairs (+32.9 vs
++6.9 on i5sb_span) and is the arm that actually reroutes the signed
+detour trip. The head-to-head October grading (Appendix L) therefore
+has real discriminating power on the surface pairs, not only on the
+freeway corridors.
