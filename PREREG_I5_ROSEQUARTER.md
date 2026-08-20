@@ -796,3 +796,99 @@ tests: base, realism, non-work, peak, quiet, and the PORTAL-validated
 improved model. October grades the base arm (Appendix A, the primary
 registration) and this arm head to head against the real closure, under
 the Appendix J null-floor wording rules.
+
+## Appendix M (2026-08-20): arterial travel-time predictions against the public logger, registered before the instrument runs
+
+Nothing above changes. PORTAL grades the freeway predictions (section 5),
+but the model's most distinctive closure predictions are about SURFACE
+streets, and nobody archives surface travel times. Since Aug 18 a public
+companion repository, github.com/darcy0408/portland-traveltime-log, has
+logged live TomTom travel times hourly for 12 frozen OD pairs (its commit
+history is the timestamp; its pairs.json is frozen; two far-field control
+pairs included). This appendix registers the model-side instrument, its
+rules, the directional expectations, and the October grading protocol,
+all BEFORE the instrument first runs on campaign data.
+
+### M.1 The instrument
+
+`src/rosequarter_traveltime.py`, branch commit b6c215a, committed and
+pushed before this appendix. Read-only on the finished campaigns' saved
+per-segment results (base arm fwrq, job 126285; improved arm fwrqi, job
+129864), no simulation. Its mechanics were verified on a synthetic toy
+graph only; as of this registration it has never been run on campaign
+data. Rules pinned in that commit:
+
+- Realized edge travel time = value / throughput (vehicle-seconds per
+  traversing vehicle), floored at free-flow time. An edge that carried
+  vehicles but discharged none inside the simulated hour gets the 3,600 s
+  horizon as its time; untraveled edges get free-flow.
+- The model quantity per pair, seed, and arm is the FASTEST-PATH travel
+  time under those realized times, open network vs closed network. This
+  is the model analog of the logger's live router (fastest route under
+  current conditions), deliberately not the sim's own spawn router.
+- A pair is model-gradeable only if both endpoints snap within 500 m of
+  a graph node. Known at registration: ctrl_west's Hillsboro endpoint
+  sits about 7 km outside the 20 km graph, so ctrl_west is expected to
+  be excluded on both arms; it remains a logger-side control.
+- Verdict bar: the standing campaign bar, unanimous sign across the 8
+  paired seeds and |t| > 3 on the paired relative differences.
+- A route SWITCH is flagged when the closed-arm path length differs from
+  open by more than 10%, the model analog of the logger's length_m jump.
+
+### M.2 Directional expectations, banked now
+
+The instrument's numeric output, appended in a dated results appendix,
+becomes the graded prediction (the same relationship section 4 has to
+Appendix A). Directions expected now, before any run:
+
+- UP: i5sb_span, vanc_pdx, i5sb_detour (these three normally use or feed
+  the closed span; route switches expected), interstate_sb (the surface
+  parallel), mlk_sb (the eastside surface alternative), i84wb_feeder
+  (the severed WB-to-SB movement's approach).
+- UP weakly, may not clear the bar: i205_sb (the corridor-level I-205
+  signal cleared the bar in no arm).
+- ABOUT NO CHANGE (direction controls; northbound is untouched):
+  williams_nb, grand_nb.
+- NO CHANGE (far-field model control): ctrl_se. A unanimous move here
+  would flag a network-boundary artifact, stated now.
+- OPEN QUESTION, either answer reported: powell_wb (Powell may absorb
+  eastside diversion; the corridor-level US-26/Powell signal stayed
+  inside noise in every arm).
+
+### M.3 October grading protocol against the logger, frozen now
+
+Extends section 5 without changing it; the section 5 discipline carries
+over (direction and rank, never absolute magnitudes; each pair against
+itself; prefer early-closure days before adaptation accumulates).
+
+1. Logger rows with status ok only; the graded quantity is travel_s per
+   pair. Rows are assigned to hours in Pacific time.
+2. Daytime rows only, 06:00 to 20:00: the model is a steady-state
+   average daytime hour, and overnight free-flow rows would dilute every
+   change toward zero by construction.
+3. Before = Tue-Thu days from the pre-closure logging period, avoiding
+   Labor Day week (Sept 7-11). During = Tue-Thu days inside the closure,
+   preferring the first two closure weeks.
+4. Per pair: percent change in mean daytime travel_s, before vs during.
+   Direction verdicts per pair, plus the RANK of gains across the
+   model-gradeable surface pairs, graded against the model's registered
+   rank. Model magnitudes are reported for honesty, never graded: the
+   model's demand is fixed and cannot evaporate, shift in time, or
+   change mode the way five weeks of real drivers will.
+5. Null floor: the Appendix J procedure, applied to the logger's own
+   pre-closure data (disjoint before-period week pairs scored exactly as
+   October will be, no closure anywhere in the data), with the same
+   a-priori 2x safety margin and the same tiered wording rule. The floor
+   will be measured and appended in a dated addendum before Sept 11,
+   after enough pre-closure weeks exist and before any closure data is
+   seen. The two real-side control pairs must sit inside the floor for
+   the comparison to be clean; if they do not, region-wide drift is
+   reported, per-pair changes are additionally reported net of the mean
+   control change, and direction verdicts use the raw values with the
+   floor wording regardless.
+
+One honest limitation, stated now: TomTom travel_s is a routing
+engine's live estimate, not a probe-vehicle measurement, and its
+internals can change without notice. That is exactly why the control
+pairs and the measured null floor exist, and why direction and rank are
+graded rather than minutes.
