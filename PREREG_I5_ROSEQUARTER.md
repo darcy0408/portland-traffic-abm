@@ -695,3 +695,44 @@ variability, so the floor is a measured minimum, not a distribution
 quantile, which is why the 2x margin is applied; and the null pairs are
 adjacent or near-adjacent weeks, matching section 5's same-weekday
 pre-closure baseline rule.
+
+## Appendix K (2026-08-19): the improved-model arm (fwrqi), registered before it runs
+
+This is the arm section 6's variant clause anticipated, in its validated
+form. Since Appendix A was registered, the model's freeway layer has been
+validated directly against reality: 91 active PORTAL mainline stations on
+I-5, I-205, I-405, US-26 and OR-217, three pre-closure weekdays (Aug 11-13
+2026), median model-to-real daytime speed ratio 0.97, nothing fitted to any
+speed or count data. The configuration that earned that number is the
+realism stack (explicit MOBIL lanes, driver heterogeneity, Webster signal
+timing with green-wave coordination) plus a corrected per-direction real
+lane model on a re-downloaded 20 km graph that keeps the OSM lane tags the
+original cache dropped. This appendix registers that exact configuration as
+a separately labeled arm, so October can grade the base model and the
+validated model head to head.
+
+- Arm: prefix fwrqi, `python src/freeway_rosequarter.py --improved`
+  (branch commit 0f4ed3a, committed and pushed before this appendix).
+  Identical to the Appendix A campaign in design: same frozen span
+  specification, same guard, same 8 paired seeds, same open/closed arms,
+  same tracked routes, same verdict rules, mixed fleet. Differences, all
+  stated: the realism stack is on, the corrected real-lane model is on,
+  and the campaign runs on the lane-tagged graph. Two experimental
+  mechanisms that exist on the same branch (an improved merge-entry rule
+  and en-route rerouting) are explicitly OFF: both failed parts of their
+  own registered re-validations this week and neither is accepted into the
+  citable model.
+- The frozen span was re-verified on the lane-tagged graph before this
+  registration: the scenario selects exactly 5 edges, the same 3 SB
+  mainline edges registered in section 1 plus the 2 stranded ramps.
+- Predictions, banked now: same directions as Appendix A (the closed span
+  down to zero in the model, I-405 up, I-205 up weakly, rank I-405 above
+  I-205), graded by the standing bar (unanimous sign across 8 paired seeds
+  and |t| > 3 on the paired relative differences). The registered open
+  question: whether the validated stack changes the MAGNITUDE of the
+  I-405 gain relative to the realism arm's +35.6% (the corrected lanes
+  raise freeway capacity, which could carry more diverted traffic at
+  speed); whatever it shows is reported.
+- The primary registered predictions remain Appendix A's and do not
+  change. This arm's numeric results will be appended, dated, before
+  Sept 11.
