@@ -35,7 +35,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config          # noqa: E402
 import generate        # noqa: E402
-from freeway_rosequarter import (SEEDS, _verify_span)  # noqa: E402
+from freeway_rosequarter import (SEEDS, _verify_span,  # noqa: E402
+                                 _apply_access_closure)
 
 # The 12 OD pairs, copied VERBATIM from the logger repo's frozen pairs.json
 # (portland-traveltime-log commit history is the public timestamp). (lat, lon).
@@ -78,6 +79,10 @@ LEN_SWITCH_FRAC = 0.10
 ARM_SPECS = {
     "base":     {"prefix": "fwrq",  "graph": "graph.graphml",               "stack": "base"},
     "improved": {"prefix": "fwrqi", "graph": "graph_metro20k_lanes.graphml", "stack": "improved"},
+    # the Appendix O closure-geometry arm: the fwrqi stack verbatim, but the
+    # closed arm keeps ODOT's one local-access lane to Broadway/Weidler. Same
+    # graph file; the arm's own summaries carry the partial-closure record.
+    "access":   {"prefix": "fwrqa", "graph": "graph_metro20k_lanes.graphml", "stack": "access"},
 }
 
 
@@ -146,7 +151,13 @@ def main():
     G = _load_graph(spec)
     removed = _verify_span(G)           # the frozen-span guard, every run
     Gc = G.copy()
-    Gc.remove_edges_from(removed)
+    if spec["stack"] == "access":
+        # the Appendix O arm's closed network is the PARTIAL closure: the
+        # access-lane mainline and the 302A off-ramp stay routable, so the
+        # router sees exactly the graph the campaign's closed arm ran on
+        _apply_access_closure(Gc)
+    else:
+        Gc.remove_edges_from(removed)
 
     # snap the frozen endpoints once per graph, apply the exclusion rule
     lons = [p[e][1] for p in PAIRS for e in ("from", "to")]
