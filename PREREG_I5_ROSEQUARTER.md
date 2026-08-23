@@ -973,3 +973,81 @@ closure two to five times higher on the closed-span pairs (+32.9 vs
 detour trip. The head-to-head October grading (Appendix L) therefore
 has real discriminating power on the surface pairs, not only on the
 freeway corridors.
+
+## Appendix O (2026-08-23): the access-lane closure-geometry arm (fwrqa), registered before it runs
+
+Every arm so far models the span as fully closed, a simplification section 1
+states outright. ODOT's announced plan is not a full closure: one southbound
+lane stays open from the I-405 junction to the Broadway/Weidler exit (302A)
+for local access, and everything south of 302A closes. This appendix
+registers an arm that models that geometry, so October can grade a second
+fidelity axis alongside Appendix K's. The base-vs-improved contrast asks how
+much the driving behavior matters; full-closure-vs-access-lane asks how much
+correctly reading the closure notice matters. The second axis is the one a
+practitioner controls directly.
+
+- Arm: prefix fwrqa, `python src/freeway_rosequarter.py --accesslane`
+  (branch commit 77e9468, committed and pushed before this appendix).
+  The fwrqi stack VERBATIM: realism stack on, corrected real lanes on, the
+  lane-tagged graph, mixed fleet, merge-entry and rerouting explicitly OFF.
+  Same 8 paired seeds, same tracked routes, same verdict rules. The ONLY
+  difference from fwrqi is the closed-arm graph surgery.
+- The partial closure, frozen edge for edge on the lane-tagged graph:
+  - KEPT: mainline edge (40382443, 40397036, 0), I-405 junction to exit
+    302A, 537 m, clamped from its tagged 4 lanes to 1 (the task refuses to
+    run if the graph tags anything but 4, the same fail-loudly rule as the
+    span guard). KEPT: the 302A off-ramp (40397036, 1343610044, 0).
+  - REMOVED: the 2 southern mainline edges (40397036, 40413533, 0) and
+    (40413533, 3427976322, 0), plus the stranded on-ramp
+    (40413546, 40413533, 0). Exactly 3 of the full closure's 5 edges.
+  - After removal, node 40397036 has the off-ramp as its only outgoing
+    edge, so through traffic is structurally forced off at Broadway/
+    Weidler, which is what ODOT's signage does. Verified end to end before
+    this registration: the full-closure spec still selects its 5 edges on
+    this graph, the partial closure removes exactly 3, the forced exit
+    holds, and prepare_network resolves the kept edge to n_lanes = 1
+    through the same real-lanes path the simulation uses.
+- Stated modeling choices, registered now: the kept edge's tagged maxspeed
+  is unchanged (the arm models the capacity cut only, not a work-zone speed
+  limit), and there is no "local access only" destination filter (routing
+  under realized times decides who uses the lane, as a live router does;
+  real compliance sits somewhere between full filtering and none).
+- Open-arm identity check, registered now: the fwrqa open arm is configured
+  identically to the fwrqi open arm, so per-seed equality of their summary
+  files is an integrity check of the whole pipeline. Any difference voids
+  the arm and is reported.
+- The graded contrast, registered now: per pair and per seed, the paired
+  difference of closed-arm realized fastest-path travel times, fwrqa minus
+  fwrqi (open arms shared), under the Appendix M instrument extended with
+  an `access` arm entry (same commit). Verdict bar: the standing unanimous
+  sign across 8 paired seeds and |t| > 3.
+- Directional expectations for that contrast, banked now, before any run.
+  All from the closure geometry, nothing from data:
+  - vanc_pdx DOWN (closed-arm time smaller than fwrqi's): the pair ends at
+    Pioneer Courthouse Square, and a downtown destination is exactly what
+    the access lane plus the Broadway exit serves. The flagship geometry
+    prediction.
+  - interstate_sb DOWN: the pair ends at Broadway Bridge east, inside the
+    area the access lane serves, and the surface parallel should shed the
+    Broadway-bound diversion it carried under full closure.
+  - i84wb_feeder ABOUT NO CHANGE: the severed WB-to-SB movement stays
+    severed in this arm, and an I-84 WB approach cannot reach the access
+    lane. This pair is the geometry arm's own control.
+  - williams_nb, grand_nb, ctrl_se ABOUT NO CHANGE: northbound and
+    far-field, untouched in both arms.
+  - i5sb_span, i5sb_detour, i205_sb: reported, weak prior DOWN or no
+    change (an added option cannot lengthen a fastest path at equal
+    congestion, but the single clamped lane may congest enough that the
+    router avoids it); the route-switch signature is expected to persist
+    in both, since everything south of 302A is still gone.
+  - mlk_sb, powell_wb OPEN QUESTION, either answer reported: Broadway
+    egress feeds the MLK/Grand couplet southward, which could raise
+    eastside surface load even as through diversion falls.
+- October grading: the M.3 protocol applies to fwrqa verbatim, as a third
+  graded arm wherever M.3 graded two. The three-way base / improved /
+  access comparison is the registered instrument for the fidelity
+  question: which axis, behavior or geometry, moves the predictions
+  closer to what the logger records.
+- The primary registered predictions remain Appendix A's and do not
+  change. This arm's numeric results will be appended, dated, before
+  Sept 11.
