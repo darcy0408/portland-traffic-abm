@@ -1051,3 +1051,109 @@ practitioner controls directly.
 - The primary registered predictions remain Appendix A's and do not
   change. This arm's numeric results will be appended, dated, before
   Sept 11.
+
+## Appendix P (2026-08-24): access-lane arm (fwrqa) results
+
+Nothing above changes. The fwrqa campaign registered in Appendix O ran on
+Orca as job 131478 (16/16 tasks completed, exit 0) on branch commit
+77e9468, the same commit the appendix registered. The readout and the
+graded contrast below were run on the campaign's saved outputs, no
+simulation.
+
+### P.1 The registered integrity check
+
+The open-arm identity check PASSES 8/8: every fwrqa open summary is
+identical to its fwrqi counterpart on every physics field (network NOx,
+network throughput, all per-route values, vehicle and step counts). The
+only differing fields are the arm's own stack label and an empty
+access-lane bookkeeping key, both written by the fwrqa code path itself.
+Verified twice: on Orca at harvest and again locally on the pulled
+summaries. The arm is valid per its registration.
+
+### P.2 Corridor route totals (paired per-seed, closed minus open), reported
+
+Same frozen verdict bar as the other arms: unanimous sign across the 8
+paired seeds and |t| > 3.
+
+| route | mean % | sd | signs | verdict |
+|-------|--------|----|-------|---------|
+| I-405 | +34.8 | 10.2 | 8/8 | SUPPORTED, t = 9.7 |
+| I-5 (route total) | +1.5 | 7.8 | 4/8 | not supported, t = 0.5 |
+| I-205 | -0.9 | 3.1 | 4/8 | not supported, t = 0.8 |
+| OR-213 | -1.2 | 8.3 | 4/8 | not supported, t = 0.4 |
+| US-26 | +0.8 | 7.2 | 4/8 | not supported, t = 0.3 |
+
+Read against Appendix L's full-closure table (I-405 +37.7, everything
+else flat), the partial closure reproduces the same single-route
+diversion signature at slightly smaller magnitude, which is the
+direction a milder closure should move. Absolute companions, per the
+standing rule that these percentages are never cited alone: I-405 gains
++591 +/- 170 g NOx per simulated hour on an open-arm base of 1,708 g
+(fwrqi full closure: +644 +/- 163 g on the same 1,708 g base; the bases
+are identical because the open arms are identical).
+
+### P.3 The graded contrast: fwrqa minus fwrqi, closed arms
+
+The Appendix M instrument ran on the fwrqa campaign as Orca job 131982
+(banked output rqtt_fwrqa.json); the registered cross-arm contrast was
+computed from the banked rqtt_fwrqa.json and rqtt_fwrqi.json exactly as
+Appendix N recomputed its tables. ctrl_west was excluded by the snap
+rule, as in both prior arms. Integrity: the shared open arms reconstruct
+IDENTICAL open-arm times, max difference 0.0 s across all pairs and
+seeds. Columns: mean closed-arm minutes under each arm, then the paired
+per-seed percent difference (fwrqa minus fwrqi over fwrqi); bar =
+unanimous sign + |t| > 3.
+
+| pair | fwrqi min | fwrqa min | mean % | sd | signs | verdict |
+|------|-----------|-----------|--------|----|-------|---------|
+| i5sb_span | 16.3 | 16.7 | +2.5 | 2.2 | 7/8+ | under bar, t=3.2 |
+| vanc_pdx | 17.3 | 17.1 | -1.1 | 1.3 | 6/8- | under bar, t=2.4 |
+| i5sb_detour | 14.4 | 14.2 | -1.4 | 4.3 | 4/8 | under bar, t=0.9 |
+| interstate_sb | 8.8 | 9.0 | +1.2 | 1.7 | 6/8+ | under bar, t=2.1 |
+| williams_nb | 8.5 | 8.5 | -0.1 | 0.9 | 5/8- | under bar, t=0.3 |
+| mlk_sb | 12.7 | 12.8 | +0.9 | 1.3 | 6/8+ | under bar, t=2.1 |
+| grand_nb | 12.4 | 12.3 | -0.5 | 2.1 | 5/8+ | under bar, t=0.7 |
+| i205_sb | 11.1 | 11.1 | +0.6 | 2.5 | 5/8+ | under bar, t=0.7 |
+| i84wb_feeder | 14.5 | 14.5 | +0.0 | 2.1 | 5/8+ | under bar, t=0.1 |
+| powell_wb | 11.6 | 11.5 | -0.6 | 1.0 | 5/8- | under bar, t=1.5 |
+| ctrl_se | 18.8 | 18.7 | -0.0 | 0.9 | 5/8- | under bar, t=0.1 |
+
+The banked directions, graded, honest:
+
+- vanc_pdx DOWN, the flagship geometry prediction: NOT SUPPORTED at the
+  bar. The sign leans the predicted way (-1.1%, 6/8 seeds negative) but
+  the effect is a percent, inside seed noise, t = 2.4.
+- interstate_sb DOWN: NOT SUPPORTED, and the lean is the WRONG WAY
+  (+1.2%, 6/8 positive). A failed direction, reported as such.
+- i84wb_feeder ABOUT NO CHANGE (the arm's own control): HOLDS
+  (+0.04%, t = 0.1).
+- williams_nb, grand_nb, ctrl_se ABOUT NO CHANGE: all HOLD.
+- i5sb_span, i5sb_detour, i205_sb (reported, weak prior DOWN or no
+  change): i5sb_span NOT SUPPORTED at the registered bar (7/8 seeds,
+  misses unanimity). Separately, as exploratory evidence only, outside
+  the preregistered grading: the lean is UP (+2.5%, 7/8 seeds, t = 3.2),
+  opposite the weak DOWN/flat prior; the registered caveat anticipated
+  the mechanism (the single clamped lane congests enough to price paths
+  higher than a clean detour). i5sb_detour and i205_sb flat.
+- mlk_sb, powell_wb OPEN QUESTION: both answer NO CHANGE at the bar
+  (+0.9%, t = 2.1 and -0.6%, t = 1.5).
+
+For honesty beside the contrast: the fwrqa arm's own closed-minus-open
+table (banked in rqtt_fwrqa.json, same bar) reads nearly identically to
+fwrqi's Appendix N.2: i5sb_span +36.2, vanc_pdx +22.1, i5sb_detour
++35.1, interstate_sb +16.0, all four SUPPORTED 8/8; mlk_sb +11.7 at 7/8
+with the same 7/8 route-switch signature; every control under the bar.
+
+### P.4 What this adds to the October instrument
+
+The second fidelity axis has an answer, and it is small. Holding the
+behavioral stack fixed, changing the closure geometry from full shutdown
+to ODOT's actual access-lane plan moves closed-arm travel times by about
+one to two percent, under the bar on every pair, while Appendix N showed
+the behavioral axis (base vs improved stack) moves the same predictions
+by factors of two to five on the closed-span pairs. Within this model,
+misreading the closure notice costs far less prediction accuracy than
+mis-modeling driver behavior. October grades all three arms against the
+logger under M.3 unchanged; if the logger's measured changes land nearer
+the arms' shared predictions than to their differences, that is itself
+the fidelity result this instrument was registered to produce.
