@@ -1157,3 +1157,89 @@ mis-modeling driver behavior. October grades all three arms against the
 logger under M.3 unchanged; if the logger's measured changes land nearer
 the arms' shared predictions than to their differences, that is itself
 the fidelity result this instrument was registered to produce.
+
+## Appendix Q (2026-08-24): the logger null-floor unit, registered before the floor is measured
+
+Nothing above changes except one word of M.3 rule 5, amended here in the
+honest window: before the floor is measured, before any closure data
+exists, and before the instrument has ever run on logger data.
+
+The gap, found Aug 23: M.3 rule 5 says the logger's null floor uses
+"disjoint before-period week pairs", the Appendix J structure. Appendix J
+had six pre-closure weeks to draw from; the logger began Aug 18 and the
+closure starts Sept 11, so with Labor Day week excluded (M.3 rule 3) the
+pre-closure window holds exactly three clean Tue-Thu weeks: Aug 18-20,
+Aug 25-27, Sept 1-3. Three weeks admit only ONE disjoint week pair, and a
+floor from a single draw is not a floor. The unit choice has to be made,
+and it is made now, while the second of those weeks is still in the
+future.
+
+- The registered unit: the WEEK stays the unit, because a clean Tue-Thu
+  week pool is exactly the shape October's before-vs-during comparison
+  uses (M.3 rules 3-4), and a floor must be measured in the unit it
+  polices. The floor uses ALL pairwise combinations of the clean
+  pre-closure weeks: three draws from three weeks. The draws share weeks
+  and are NOT independent; the instrument prints that wherever it prints
+  the floor. This amendment can only RAISE the measured floor relative to
+  any single disjoint pair (a maximum over three draws is at least the
+  maximum over one), so it is conservative in the direction that makes
+  October claims harder, not easier.
+- The rejected unit, and why: day pairs would give more draws but
+  measure a different quantity than the one October uses, with a bias
+  whose direction depends on the variant. Day pairs within a week miss
+  slow week-scale drift (a school-year start, a rainy week, a routing
+  engine change), so their floor would sit too LOW, and ordinary drift
+  could be called a closure effect. Single days paired across weeks
+  average less than October's three-day pools, so their floor would sit
+  too HIGH, and October would go too timid. Converting either to the
+  week scale would need assumptions invented after the fact; matching
+  the unit removes the question. Day-level draws are not part of the
+  floor; if the instrument ever prints them they are labeled diagnostic
+  and never govern wording.
+- Weekend rows, stated now: the logger records weekends, but weekend
+  rows are never part of the graded instrument or the floor. Weekend
+  traffic differs systematically (that is pattern, not noise), and the
+  model simulates an average weekday hour, so it has no weekend
+  prediction to grade. Any weekend analysis in October is exploratory,
+  labeled as such, and governs nothing.
+- The instrument: src/rosequarter_logger_floor.py, committed before this
+  appendix (main fe2c893). ONE shared code path scores a per-pair percent change in mean
+  daytime travel_s between two day pools, and both the floor draws and
+  the October before-vs-during run go through it, so floor and graded
+  number cannot diverge in method. Implementation choices pinned in that
+  commit: status ok rows only; hours assigned in Pacific time as a fixed
+  UTC-7 (the whole logging window sits inside Pacific daylight time; the
+  script refuses rows on or after the Nov 1 DST change rather than
+  mislabel them); daytime = 06:00 <= local hour < 20:00, 14 slots; a
+  pair-day with fewer than 12 of 14 daytime hours ok is dropped and said
+  so (Appendix J's 20-of-24 rule scaled to the daytime window); a pool's
+  mean is over all ok daytime rows on usable pair-days.
+- The floor statistic: the largest per-pair magnitude across all pairs
+  and all draws, one global floor, Appendix J style. Appendix J's
+  a-priori 2x safety margin and tier wording apply verbatim: at or under
+  the floor, "within the measured null floor, no evidence either way";
+  over it up to 2x, "direction consistent, weak evidence"; over 2x,
+  "clear of the null floor".
+- One October qualifier, registered now in the spirit of Appendix J rule
+  3 and matching Appendix N.4's practice: a pair whose October change
+  sits within the floor takes NO RANK in the M.3 rule 4 rank grading,
+  exactly as N.4 declared seed-noise pairs rankless on the model side.
+  Floors govern wording and ranking eligibility, never the frozen
+  metrics; every number is still computed and reported.
+- Mechanics verification: the instrument's --selftest builds synthetic
+  rows with hand-computed answers and checks the filters (status,
+  daytime boundary hours at both ends, Tue-Thu), the Pacific conversion,
+  the drop rule, clean-week enumeration, an exact +10.0% change, and the
+  DST refusal. It passes at the pinned commit. As of this registration
+  the instrument has NEVER been run on logger data, the same discipline
+  Appendix M used for the travel-time instrument.
+- Honest caveat, stated now: three overlapping draws from three weeks
+  sample less weekly variability than Appendix J's three independent
+  pairs from six weeks. The logger cannot be extended backward in time,
+  so this is the maximum the data admits; the 2x margin exists for
+  exactly this small-sample reason, per Appendix J's own caveat.
+- Schedule, unchanged from M.3 rule 5: the floor is measured with
+  --floor after the Sept 1-3 week's rows land and appended in a dated
+  addendum before Sept 11, before any closure data is seen. The
+  requirement that the two control pairs sit inside the floor, and the
+  drift fallback if they do not, carry over verbatim.
