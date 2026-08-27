@@ -26,6 +26,7 @@ detour) and the fwms summaries never recorded it.
 import argparse
 import json
 import os
+import random
 import sys
 
 import numpy as np
@@ -65,6 +66,21 @@ STACK_ACCESS = False     # set by --accesslane in main(): the closure-geometry
                          # as fwrqi; only the closed-arm graph surgery differs
                          # (ODOT keeps one local-access lane to Broadway/
                          # Weidler, which the other arms model as fully shut).
+STACK_COMPLIANCE = False  # set by --compliance in main(): the signed-detour
+                          # compliance arm (prefix fwrqc). The fwrqi stack and
+                          # the FULL closure verbatim; the only change is that
+                          # each through trip follows ODOT's official I-405
+                          # detour with a registered probability instead of
+                          # picking its own fastest route (config.DETOUR_*,
+                          # generate.build_detour_context). Every other arm
+                          # models drivers who all ignore the signage; this
+                          # one models the plan.
+
+# The registered compliance levels. The share has no data behind it, so three
+# a-priori levels bracket it rather than one guess carrying the arm; the open
+# arm is share-independent (compliance touches only closed-arm routing), so
+# ONE shared set of open tasks serves all three levels. 8 + 3 x 8 = 32 tasks.
+COMPLIANCE_SHARES = (0.25, 0.50, 0.75)
 
 # The access-lane partial closure, frozen (Appendix O). ODOT's announced plan
 # keeps ONE southbound lane open from the I-405 junction to the Broadway/
@@ -92,15 +108,29 @@ TRACK_ROUTES = ("I 5", "I 405", "I 205", "OR 213", "OR 99E", "US 26")
 
 
 def tasks():
-    return [(arm, seed) for arm in ARMS for seed in SEEDS]
+    # every entry is (arm, seed, share); share is None outside the compliance
+    # stack and for its shared open arm. The compliance table is one flat
+    # 32-task array (8 open + 8 per level) so the three levels never race to
+    # write the same open summary from concurrent SLURM arrays.
+    if STACK_COMPLIANCE:
+        t = [("open", seed, None) for seed in SEEDS]
+        for share in COMPLIANCE_SHARES:
+            t += [("rosequarter", seed, share) for seed in SEEDS]
+        return t
+    return [(arm, seed, None) for arm in ARMS for seed in SEEDS]
 
 
-def run_name(arm, seed):
+def run_name(arm, seed, share=None):
+    if share is not None:
+        # closed compliance task: the level is part of the run identity
+        # (fwrqc25 / fwrqc50 / fwrqc75); the shared open arm stays fwrqc_open
+        return f"{PREFIX}{int(round(share * 100)):02d}_{arm}_s{seed}"
     return f"{PREFIX}_{arm}_s{seed}"
 
 
-def summary_path(arm, seed):
-    return os.path.join(config.PROCESSED_DIR, f"{run_name(arm, seed)}_summary.json")
+def summary_path(arm, seed, share=None):
+    return os.path.join(config.PROCESSED_DIR,
+                        f"{run_name(arm, seed, share)}_summary.json")
 
 
 def _load_metro_graph():
@@ -109,7 +139,8 @@ def _load_metro_graph():
     # (its lane clamp needs the real lane tags); every other arm keeps the
     # original cache so the earlier registered arms stay exactly reproducible
     name = ("graph_metro20k_lanes.graphml"
-            if (STACK_IMPROVED or STACK_ACCESS) else "graph.graphml")
+            if (STACK_IMPROVED or STACK_ACCESS or STACK_COMPLIANCE)
+            else "graph.graphml")
     graph_file = os.path.join(config.NETWORK_DIR, name)
     if not os.path.exists(graph_file):
         raise SystemExit(f"no cached graph at {graph_file}; refusing to "
@@ -175,6 +206,22 @@ def check():
     print(f"frozen span OK: {len(removed)} edges "
           f"({len(EXPECTED_SB)} SB mainline + "
           f"{len(removed) - len(EXPECTED_SB)} stranded ramps)")
+    if STACK_COMPLIANCE:
+        # Compliance variant: apply the FULL closure to this loaded graph, set
+        # the flags exactly as run_task sets them for a closed task, and run
+        # every detour guard end to end (fresh open-graph load, marker edge
+        # present there and absent here, via node on the I-405 mainline).
+        generate.apply_freeway_closure(G, SCENARIOS["rosequarter"])
+        for k in REALISM_FLAGS:
+            setattr(config, k, True)
+        config.LANES_REAL = True
+        config.LANES_ENABLED = False
+        config.DETOUR_COMPLIANCE_ENABLED = True
+        ctx = generate.build_detour_context(G)
+        print(f"detour guards OK: via {ctx['via']} on the I-405 mainline, "
+              f"marker edge {ctx['marker']}, registered shares "
+              f"{COMPLIANCE_SHARES}")
+        return
     if not STACK_ACCESS:
         return
     # Access-lane variant: apply the partial closure to this loaded graph and
@@ -207,18 +254,113 @@ def check():
           f"n_lanes={n}")
 
 
+def selftest():
+    """Spawn-level verification of the compliance machinery, no simulation.
+
+    Three properties, registered with the arm: (1) share 0 is the IDENTITY,
+    routes and the trip RNG stream byte-identical to spawning with the
+    machinery off, so fwrqc reduces to fwrqi when nobody complies; (2)
+    eligibility is share-independent, the same trips are eligible at every
+    level; (3) at share 1 every compliant trip's route runs via the I-405
+    mainline and the accounting closes (eligible = compliant + fallback).
+    Uses uniform random ODs, so it needs no land-use data, on the real
+    lane-tagged graph with the real closure applied."""
+    for k in REALISM_FLAGS:
+        setattr(config, k, True)
+    config.LANES_REAL = True
+    config.LANES_ENABLED = False
+    config.MERGE_ENTRY_IMPROVED = False
+    config.REROUTE_ENABLED = False
+    config.RANDOM_SEED = SEEDS[0]
+
+    G = _load_metro_graph()
+    _verify_span(G)
+    generate.apply_freeway_closure(G, SCENARIOS["rosequarter"])
+    generate.prepare_network(G)
+    i405 = {(u, v) for u, v, _k
+            in generate.freeway_mainline_edges(G, "I 405")}
+    nodes = list(G.nodes)
+    K = 2000
+
+    def spawn(ctx):
+        rng = random.Random(config.RANDOM_SEED)
+        vehs = []
+        for vid in range(K):
+            veh = generate.make_vehicle(G, nodes, rng, vid, detour_ctx=ctx)
+            if veh is not None:
+                vehs.append(veh)
+        # the tail probe: where the trip stream ended up. Any compliance leak
+        # into this stream shifts every draw after it, so one value suffices.
+        return vehs, rng.random()
+
+    print(f"spawning {K} uniform-OD vehicles x3 (off / share 0 / share 1)...")
+    off_vehs, off_tail = spawn(None)
+
+    config.DETOUR_COMPLIANCE_ENABLED = True
+    config.DETOUR_COMPLIANCE_SHARE = 0.0
+    ctx0 = generate.build_detour_context(G)
+    z_vehs, z_tail = spawn(ctx0)
+    if len(z_vehs) != len(off_vehs) or z_tail != off_tail:
+        raise SystemExit("selftest FAILED: share 0 changed the spawn count "
+                         "or the trip RNG stream")
+    for a, b in zip(off_vehs, z_vehs):
+        if a["route"] != b["route"]:
+            raise SystemExit(f"selftest FAILED: share 0 changed vehicle "
+                             f"{a['id']}'s route; not an identity")
+    print(f"share 0 identity OK: {len(z_vehs)} spawns, every route and the "
+          f"trip RNG stream byte-identical to the machinery off "
+          f"({ctx0['n_eligible']} trips eligible, none complied)")
+
+    # share 1: reuse the already-loaded open graph with a fresh stream and
+    # counters; apart from skipping the reload this is exactly what
+    # build_detour_context would return
+    ctx1 = dict(ctx0, share=1.0,
+                rng=random.Random(config.RANDOM_SEED + 4),
+                n_eligible=0, n_compliant=0, n_fallback=0)
+    one_vehs, one_tail = spawn(ctx1)
+    if one_tail != off_tail:
+        raise SystemExit("selftest FAILED: share 1 perturbed the trip RNG "
+                         "stream")
+    if ctx1["n_eligible"] != ctx0["n_eligible"]:
+        raise SystemExit(f"selftest FAILED: eligibility depends on the share "
+                         f"({ctx0['n_eligible']} at 0 vs "
+                         f"{ctx1['n_eligible']} at 1)")
+    if ctx1["n_eligible"] < 5:
+        raise SystemExit(f"selftest FAILED: only {ctx1['n_eligible']} "
+                         f"eligible trips in {K}; too few to exercise the "
+                         f"machinery")
+    if ctx1["n_compliant"] + ctx1["n_fallback"] != ctx1["n_eligible"]:
+        raise SystemExit("selftest FAILED: eligible != compliant + fallback "
+                         "at share 1")
+    detoured = [v for v in one_vehs if v.get("detour")]
+    if len(detoured) != ctx1["n_compliant"]:
+        raise SystemExit("selftest FAILED: detour flags disagree with the "
+                         "compliant count")
+    for veh in detoured:
+        if not any((u, v) in i405 for u, v, *_rest in veh["route"]):
+            raise SystemExit(f"selftest FAILED: compliant vehicle "
+                             f"{veh['id']}'s route never touches the I-405 "
+                             f"mainline")
+    print(f"share 1 OK: {ctx1['n_eligible']} eligible, "
+          f"{ctx1['n_compliant']} complied, {ctx1['n_fallback']} fell back; "
+          f"every compliant route runs via the I-405 mainline; trip stream "
+          f"untouched")
+    print("SELFTEST PASSED")
+
+
 def run_task(idx):
-    arm, seed = tasks()[idx]
-    out = summary_path(arm, seed)
+    arm, seed, share = tasks()[idx]
+    out = summary_path(arm, seed, share)
     if os.path.exists(out):
-        print(f"task {idx} ({arm}, seed {seed}) already done -> {out}")
+        print(f"task {idx} ({arm}, seed {seed}, share {share}) already done "
+              f"-> {out}")
         return
 
     G = _load_metro_graph()
 
     # the seed is what this experiment varies, so set it before anything draws
     config.RANDOM_SEED = seed
-    config.RUN_NAME = run_name(arm, seed)
+    config.RUN_NAME = run_name(arm, seed, share)
 
     # every stack flag EXPLICITLY True or False (the F6 rule): a task must
     # never inherit these from a config default or a reused interpreter.
@@ -226,7 +368,8 @@ def run_task(idx):
     # (Appendix O) runs the improved stack verbatim, so the two arms differ
     # ONLY in the closed-arm graph surgery.
     for k in REALISM_FLAGS:
-        setattr(config, k, STACK_REALISM or STACK_IMPROVED or STACK_ACCESS)
+        setattr(config, k, STACK_REALISM or STACK_IMPROVED or STACK_ACCESS
+                or STACK_COMPLIANCE)
     # absolute grams are cited under the mixed fleet (the live setting, gate
     # G2); explicit for the same reason as the stack flags
     config.FLEET_MIXED = True
@@ -238,10 +381,19 @@ def run_task(idx):
     # config defaults it True, so the OTHER arms must pin it False to
     # reproduce their registrations); the frictionless virtual-lane model
     # and the two mentor-ungated mechanisms are explicitly OFF everywhere
-    config.LANES_REAL = STACK_IMPROVED or STACK_ACCESS
+    config.LANES_REAL = STACK_IMPROVED or STACK_ACCESS or STACK_COMPLIANCE
     config.LANES_ENABLED = False
     config.MERGE_ENTRY_IMPROVED = False
     config.REROUTE_ENABLED = False
+    # signed-detour compliance: ON only for the fwrqc CLOSED tasks, and pinned
+    # explicitly False for every other task (the F6 rule), so no arm can
+    # inherit it. The open arm runs with it off, which is what makes the
+    # fwrqc open summaries a registered per-seed identity check against
+    # fwrqi's open summaries.
+    config.DETOUR_COMPLIANCE_ENABLED = bool(STACK_COMPLIANCE
+                                            and arm != "open")
+    if config.DETOUR_COMPLIANCE_ENABLED:
+        config.DETOUR_COMPLIANCE_SHARE = share
 
     removed = []
     if arm != "open":
@@ -256,7 +408,12 @@ def run_task(idx):
             print(f"[{config.RUN_NAME}] removed {len(removed)} freeway edges")
 
     generate.set_seeds(seed)
-    totals, nox, thru = generate.run_simulation(G, use_checkpoint=False)
+    # opt-in compliance counts (generate.run_simulation contract): filled for
+    # fwrqc closed tasks so the saved summary, not just the task log, records
+    # the realized share (single-source-of-truth rule)
+    dstats = {} if config.DETOUR_COMPLIANCE_ENABLED else None
+    totals, nox, thru = generate.run_simulation(G, use_checkpoint=False,
+                                                detour_stats=dstats)
     generate.save_results(totals, nox, thru)
 
     # Compact summary so the readout needs only these files, not the parquets.
@@ -272,10 +429,15 @@ def run_task(idx):
                        for u, v, k in keys}
     rec = {
         "arm": arm, "seed": seed,
-        "stack": ("access" if STACK_ACCESS else
+        "stack": ("compliance" if STACK_COMPLIANCE else
+                  "access" if STACK_ACCESS else
                   "improved" if STACK_IMPROVED else
                   "realism" if STACK_REALISM else "base"),
         "nonwork": STACK_NONWORK,
+        # compliance arm only: the registered level this closed task ran at
+        # (None on the shared open arm) and the realized whole-run counts
+        "share": share,
+        "detour_stats": dstats or {},
         "fleet": "mixed",
         "n_vehicles": config.N_VEHICLES, "n_steps": config.N_STEPS,
         "removed": [[u, v, k] for u, v, k in removed],
@@ -312,10 +474,103 @@ def _paired(summaries, ref, field):
     return np.array(diffs), np.array(rel)
 
 
+def _print_route_table(summaries):
+    """The campaign's standard verdict table: paired per-seed differences on
+    every tracked route, unanimous sign AND |t|>3 as the registered bar."""
+    print(f"{'route':>8s} {'n':>3s} {'mean %':>8s} {'sd %':>7s} "
+          f"{'min %':>7s} {'max %':>7s} {'signs':>7s}  verdict")
+    for ref in TRACK_ROUTES:
+        d, rel = _paired(summaries, ref, 0)
+        if len(d) < 2:
+            continue
+        pos = int((d > 0).sum())
+        # the standing campaign bar: unanimous sign AND |t|>3 (with 8 seeds a
+        # unanimous sign is p = 2^-8 = 0.004 under a fair-coin null)
+        unanimous = pos == len(d) or pos == 0
+        t = abs(rel.mean()) / (rel.std(ddof=1) / np.sqrt(len(rel))) \
+            if rel.std(ddof=1) > 0 else float("inf")
+        verdict = ("SUPPORTED" if unanimous and t > 3
+                   else "weak" if unanimous else "NOT SUPPORTED")
+        print(f"{ref:>8s} {len(d):3d} {rel.mean():+8.2f} {rel.std(ddof=1):7.2f} "
+              f"{rel.min():+7.2f} {rel.max():+7.2f} {pos:3d}/{len(d):<3d} "
+              f" {verdict} (t={t:.1f})")
+
+
+def _readout_compliance():
+    """Per-level paired readout for the fwrqc campaign, preceded by the
+    registered per-seed identity check of its shared open arm against
+    fwrqi's open arm (same stack, same flags, so the summaries must match
+    exactly; a mismatch means environment drift and voids the contrast)."""
+    opens = {}
+    for seed in SEEDS:
+        p = summary_path("open", seed)
+        if os.path.exists(p):
+            with open(p) as f:
+                opens[seed] = json.load(f)
+    print(f"stack: compliance\nopen summaries: {len(opens)}/{len(SEEDS)}")
+
+    compared, mismatches = 0, 0
+    for seed, rec in sorted(opens.items()):
+        q = os.path.join(config.PROCESSED_DIR,
+                         f"fwrqi_open_s{seed}_summary.json")
+        if not os.path.exists(q):
+            continue
+        with open(q) as f:
+            ref = json.load(f)
+        compared += 1
+        same = (rec["network_nox_g"] == ref["network_nox_g"]
+                and rec["network_throughput"] == ref["network_throughput"]
+                and rec["routes"] == ref["routes"])
+        if not same:
+            mismatches += 1
+            print(f"  INTEGRITY FAIL seed {seed}: fwrqc_open differs from "
+                  f"fwrqi_open")
+    if compared:
+        print(f"open-arm identity vs fwrqi: {compared - mismatches}/"
+              f"{compared} seeds match exactly")
+        if mismatches:
+            raise SystemExit("registered integrity check FAILED; do not "
+                             "cite this campaign until resolved")
+    else:
+        print("open-arm identity vs fwrqi: no fwrqi_open summaries in this "
+              "PROCESSED_DIR, not checked here")
+
+    for share in COMPLIANCE_SHARES:
+        summaries = {("open", seed): rec for seed, rec in opens.items()}
+        n_closed, realized = 0, []
+        for seed in SEEDS:
+            p = summary_path("rosequarter", seed, share)
+            if not os.path.exists(p):
+                continue
+            with open(p) as f:
+                rec = json.load(f)
+            if rec.get("stack") != "compliance" or rec.get("share") != share:
+                raise SystemExit(f"{p} records stack={rec.get('stack')!r} "
+                                 f"share={rec.get('share')!r}; wrong file "
+                                 f"for level {share}")
+            summaries[("rosequarter", seed)] = rec
+            n_closed += 1
+            ds = rec.get("detour_stats") or {}
+            if ds.get("n_eligible"):
+                realized.append(100.0 * ds["n_compliant"] / ds["n_eligible"])
+        head = (f"COMPLIANCE {share:.0%}: paired per-seed differences "
+                f"(closed - open, same seed); {n_closed}/{len(SEEDS)} "
+                f"closed summaries")
+        if realized:
+            head += f", realized compliance {np.mean(realized):.1f}%"
+        print(f"\n{'=' * 72}\n{head}\n{'=' * 72}")
+        if min(len(opens), n_closed) < 2:
+            print("  fewer than 2 paired seeds at this level; skipping")
+            continue
+        _print_route_table(summaries)
+
+
 def readout():
+    if STACK_COMPLIANCE:
+        return _readout_compliance()
     summaries = {}
-    for arm, seed in tasks():
-        p = summary_path(arm, seed)
+    for arm, seed, share in tasks():
+        p = summary_path(arm, seed, share)
         if os.path.exists(p):
             with open(p) as f:
                 summaries[(arm, seed)] = json.load(f)
@@ -340,27 +595,12 @@ def readout():
 
     print(f"\n{'=' * 72}\nROSE QUARTER I-5 SB: paired per-seed differences "
           f"(closed - open, same seed)\n{'=' * 72}")
-    print(f"{'route':>8s} {'n':>3s} {'mean %':>8s} {'sd %':>7s} "
-          f"{'min %':>7s} {'max %':>7s} {'signs':>7s}  verdict")
-    for ref in TRACK_ROUTES:
-        d, rel = _paired(summaries, ref, 0)
-        if len(d) < 2:
-            continue
-        pos = int((d > 0).sum())
-        # the standing campaign bar: unanimous sign AND |t|>3 (with 8 seeds a
-        # unanimous sign is p = 2^-8 = 0.004 under a fair-coin null)
-        unanimous = pos == len(d) or pos == 0
-        t = abs(rel.mean()) / (rel.std(ddof=1) / np.sqrt(len(rel))) \
-            if rel.std(ddof=1) > 0 else float("inf")
-        verdict = ("SUPPORTED" if unanimous and t > 3
-                   else "weak" if unanimous else "NOT SUPPORTED")
-        print(f"{ref:>8s} {len(d):3d} {rel.mean():+8.2f} {rel.std(ddof=1):7.2f} "
-              f"{rel.min():+7.2f} {rel.max():+7.2f} {pos:3d}/{len(d):<3d} "
-              f" {verdict} (t={t:.1f})")
+    _print_route_table(summaries)
 
 
 def main():
-    global STACK_REALISM, STACK_NONWORK, STACK_IMPROVED, STACK_ACCESS, PREFIX
+    global STACK_REALISM, STACK_NONWORK, STACK_IMPROVED, STACK_ACCESS, \
+        STACK_COMPLIANCE, PREFIX
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--check", action="store_true")
@@ -368,6 +608,9 @@ def main():
     g.add_argument("--count", action="store_true")
     g.add_argument("--task", type=int)
     g.add_argument("--readout", action="store_true")
+    g.add_argument("--selftest", action="store_true",
+                   help="spawn-level verification of the compliance "
+                        "machinery (requires --compliance); no simulation")
     ap.add_argument("--realism", action="store_true",
                     help="run/readout the realism-stack secondary arm (fwrqr)")
     ap.add_argument("--nonwork", action="store_true",
@@ -382,11 +625,22 @@ def main():
                          "Appendix O: the fwrqi stack verbatim, but the closed "
                          "arm keeps ODOT's one local-access lane to the "
                          "Broadway/Weidler exit instead of a full shutdown)")
+    ap.add_argument("--compliance", action="store_true",
+                    help="run/readout the signed-detour compliance arm "
+                         "(fwrqc: the fwrqi stack and full closure verbatim, "
+                         "but each through trip follows ODOT's official "
+                         "I-405 detour with a registered probability, three "
+                         "levels 25/50/75%%, shared open arm)")
     args = ap.parse_args()
 
-    if sum([args.realism, args.nonwork, args.improved, args.accesslane]) > 1:
+    if sum([args.realism, args.nonwork, args.improved, args.accesslane,
+            args.compliance]) > 1:
         raise SystemExit("--realism / --nonwork / --improved / --accesslane "
-                         "are distinct registered arms; pick one")
+                         "/ --compliance are distinct registered arms; "
+                         "pick one")
+    if args.selftest and not args.compliance:
+        raise SystemExit("--selftest verifies the compliance machinery; "
+                         "add --compliance")
     if args.realism:
         STACK_REALISM = True
         PREFIX = "fwrqr"
@@ -399,12 +653,18 @@ def main():
     if args.accesslane:
         STACK_ACCESS = True
         PREFIX = "fwrqa"
+    if args.compliance:
+        STACK_COMPLIANCE = True
+        PREFIX = "fwrqc"
 
     if args.check:
         check()
+    elif args.selftest:
+        selftest()
     elif args.list:
-        for i, (arm, seed) in enumerate(tasks()):
-            print(f"{i:3d}  {arm:>12s}  seed {seed}")
+        for i, (arm, seed, share) in enumerate(tasks()):
+            lvl = f"  share {share:.2f}" if share is not None else ""
+            print(f"{i:3d}  {arm:>12s}  seed {seed}{lvl}")
     elif args.count:
         print(len(tasks()))
     elif args.task is not None:

@@ -1252,6 +1252,71 @@ def build_reroute_context(G):
     return {"t0": t0, "headway": headway, "n_reroutes": 0, "n_failed": 0}
 
 
+def build_detour_context(G):
+    """Precompute the signed-detour compliance pieces (config.
+    DETOUR_COMPLIANCE_ENABLED, the fwrqc arm). Returns None when the flag is
+    off, which leaves every existing arm bit-identical.
+
+    The context carries the OPEN network (loaded fresh from
+    config.DETOUR_GRAPH_FILE and prepared under the live flags), because
+    eligibility is a counterfactual question: would this trip have crossed the
+    closed span's south exit had the road stayed open? Only those trips are
+    the through traffic the official detour signage addresses. Compliance
+    draws come from a DEDICATED RNG stream (RANDOM_SEED + 4), so the trip
+    stream is untouched and the same-seed open arm spawns the same trips.
+
+    Counters (n_eligible / n_compliant / n_fallback) are per-process, like the
+    reroute counters: campaign tasks run checkpoint-free, so they cover the
+    whole run there.
+
+    Every guard fails loudly instead of adapting (the frozen-span discipline):
+    a silently different via node, marker edge, or graph would invalidate the
+    pre-registration."""
+    if not config.DETOUR_COMPLIANCE_ENABLED:
+        return None
+    share = float(config.DETOUR_COMPLIANCE_SHARE)
+    if not 0.0 <= share <= 1.0:
+        raise SystemExit(f"DETOUR_COMPLIANCE_SHARE={share} is not a "
+                         f"probability")
+    mu, mv = config.DETOUR_MARKER_EDGE
+    if G.has_edge(mu, mv):
+        raise SystemExit(
+            "detour compliance: the marker edge is still present in the "
+            "simulation graph, so no closure was applied; the compliance arm "
+            "is meaningless on an open network. Refusing to run.")
+    if config.DETOUR_VIA_NODE not in G:
+        raise SystemExit(f"detour compliance: via node "
+                         f"{config.DETOUR_VIA_NODE} is not in the simulation "
+                         f"graph; wrong graph or wrong node. Refusing to run.")
+    graph_file = os.path.join(config.NETWORK_DIR, config.DETOUR_GRAPH_FILE)
+    if not os.path.exists(graph_file):
+        raise SystemExit(f"detour compliance: no open graph at {graph_file}; "
+                         f"refusing to download mid-experiment")
+    G_open = ox.load_graphml(graph_file)
+    if not G_open.has_edge(mu, mv):
+        raise SystemExit(f"detour compliance: marker edge ({mu}, {mv}) is not "
+                         f"in the OPEN graph {config.DETOUR_GRAPH_FILE}; the "
+                         f"eligibility test would find no through trips.")
+    # the via node must sit on the I-405 mainline itself, not merely near it:
+    # a node off the detour route would quietly model a different plan
+    on_405 = any(config.DETOUR_VIA_NODE in (u, v)
+                 for u, v, _k in freeway_mainline_edges(G_open, "I 405"))
+    if not on_405:
+        raise SystemExit(f"detour compliance: via node "
+                         f"{config.DETOUR_VIA_NODE} is not an endpoint of any "
+                         f"I 405 mainline edge; wrong node for this plan.")
+    # routing weights for the eligibility test, computed exactly as the sim's
+    # own (prepare_network under whatever flags the caller has already set)
+    prepare_network(G_open)
+    print(f"  signed-detour compliance ON: share {share:.2f}, via node "
+          f"{config.DETOUR_VIA_NODE} (I 405), eligibility = open-network "
+          f"route crosses ({mu}, {mv})")
+    return {"share": share, "via": config.DETOUR_VIA_NODE,
+            "marker": (mu, mv), "G_open": G_open,
+            "rng": random.Random(config.RANDOM_SEED + 4),
+            "n_eligible": 0, "n_compliant": 0, "n_fallback": 0}
+
+
 def _reroute_pass(vehicles, by_edge, reroute_ctx, G, t):
     """Re-plan the worst-stuck vehicles onto congestion-aware shortest paths.
 
@@ -1397,7 +1462,7 @@ def _mobil_lane_pass(by_edge, mobil_ctx, L):
 
 
 def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
-                 driver_ctx=None):
+                 driver_ctx=None, detour_ctx=None):
     """Create one vehicle with an origin, destination, and shortest-time route.
     With a `demand` context, the origin is drawn in proportion to population and the
     destination in proportion to jobs, with a distance-decay pull toward nearer jobs;
@@ -1416,7 +1481,15 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
     from retail/service attraction with the shorter non-work decay, modeling
     shopping/errand travel; the rest keep the commute pattern. When the layer is
     absent this branch draws nothing from the RNG, so runs without the flag are
-    bit-identical to the pre-layer model."""
+    bit-identical to the pre-layer model.
+
+    With a `detour_ctx` (config.DETOUR_COMPLIANCE_ENABLED, the fwrqc arm), a
+    trip whose OPEN-network route crosses the closed span's south exit is
+    detour-eligible, and with probability detour_ctx["share"] it follows the
+    official signage: its route becomes origin -> via -> destination on the
+    closed graph, decided once here at spawn (route-once, no replanning). The
+    draw comes from the context's own RNG stream, so the trip stream is
+    untouched and the same-seed open arm spawns identical trips."""
     nonwork = demand.get("nonwork") if demand is not None else None
     for _ in range(25):
         if through is not None and rng.random() < through["fraction"]:
@@ -1479,7 +1552,51 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
         if len(path) < 2:
             continue
         route = [_edge_between(G, path[i], path[i + 1]) for i in range(len(path) - 1)]
+        # Signed-detour compliance: decided AFTER the free route succeeds, so
+        # route retries consume no compliance draws and the trip RNG stream is
+        # untouched (the same discipline as the fleet and driver draws below).
+        # Eligibility asks the OPEN network a counterfactual question: would
+        # this trip have crossed the closed span's south exit had the road
+        # stayed open? Those are the through drivers the signage addresses;
+        # local trips never comply.
+        detoured = False
+        if detour_ctx is not None:
+            mu, mv = detour_ctx["marker"]
+            try:
+                open_path = nx.shortest_path(detour_ctx["G_open"], o, d,
+                                             weight="travel_time_s")
+            except nx.NetworkXNoPath:
+                open_path = []
+            eligible = any(open_path[i] == mu and open_path[i + 1] == mv
+                           for i in range(len(open_path) - 1))
+            if eligible:
+                detour_ctx["n_eligible"] += 1
+                # one draw per eligible trip, share-independent, so the same
+                # seed sees the same draw sequence at every compliance level
+                if detour_ctx["rng"].random() < detour_ctx["share"]:
+                    via = detour_ctx["via"]
+                    try:
+                        p1 = nx.shortest_path(G, o, via,
+                                              weight="travel_time_s")
+                        p2 = nx.shortest_path(G, via, d,
+                                              weight="travel_time_s")
+                        cpath = p1 + p2[1:]
+                        if len(cpath) >= 2:
+                            path = cpath
+                            route = [_edge_between(G, path[i], path[i + 1])
+                                     for i in range(len(path) - 1)]
+                            detour_ctx["n_compliant"] += 1
+                            detoured = True
+                        else:
+                            detour_ctx["n_fallback"] += 1
+                    except nx.NetworkXNoPath:
+                        # via unreachable for this OD: keep the free route and
+                        # COUNT it; a silent fallback would overstate realized
+                        # compliance in the run report
+                        detour_ctx["n_fallback"] += 1
         veh = {"id": vid, "route": route, "idx": 0, "pos": 0.0, "v": 0.0}
+        if detoured:
+            veh["detour"] = True    # analysis flag only; the kernel ignores it
         if fleet_ctx is not None:
             # class drawn AFTER the route succeeds, from the fleet's own RNG stream,
             # so the draw sequence lines up with spawned vehicles (route retries do
@@ -1500,7 +1617,8 @@ def make_vehicle(G, nodes, rng, vid, demand=None, through=None, fleet_ctx=None,
 def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughput,
                   nox_coeffs, G, nodes, rng, signals, demand=None, through=None,
                   fleet_ctx=None, driver_ctx=None, lanes=None, mobil_ctx=None,
-                  speed_stats=None, stuck_stats=None, reroute_ctx=None):
+                  speed_stats=None, stuck_stats=None, reroute_ctx=None,
+                  detour_ctx=None):
     """Advance every vehicle by one time step.
 
     Order matters: we read all positions first, compute each car's acceleration
@@ -1796,7 +1914,8 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                 # reached the destination: respawn with a fresh trip so the
                 # number of vehicles on the network stays steady
                 fresh = make_vehicle(G, nodes, rng, veh["id"], demand, through,
-                                     fleet_ctx, driver_ctx)
+                                     fleet_ctx, driver_ctx,
+                                     detour_ctx=detour_ctx)
                 if fresh is not None:
                     veh.update(fresh)
                     # a fresh trip starts with fresh patience: `fresh` carries no
@@ -1873,7 +1992,7 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
 
 
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
-                   speed_stats=None, stuck_stats=None):
+                   speed_stats=None, stuck_stats=None, detour_stats=None):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
     per-segment vehicle-seconds of activity, and per-segment NOx grams.
 
@@ -1885,7 +2004,12 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     stuck_stats (opt-in, calibrated-demand Phase 3): pass an empty dict and it
     is filled in place with per-segment stuck vehicle-seconds under key
     "stuck_sum" -- time spent below config.STUCK_SPEED_KMH (see step_vehicles).
-    Same contract as speed_stats: pure measurement, off by default."""
+    Same contract as speed_stats: pure measurement, off by default.
+
+    detour_stats (opt-in, the fwrqc compliance arm): pass an empty dict and it
+    is filled with the whole-run compliance counts (n_eligible / n_compliant /
+    n_fallback / share), so the campaign summary can record them in the saved
+    file rather than only in the task log. Same contract: pure measurement."""
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -1909,6 +2033,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     if mobil_ctx is not None:
         lanes = None       # mutually exclusive: MOBIL owns the lane counts instead
     reroute_ctx = build_reroute_context(G)     # en-route re-planning (or None)
+    detour_ctx = build_detour_context(G)       # signed-detour compliance (or None)
     if verbose:
         src = "OSM-tagged" if signals["tagged"] else "degree>=4 fallback"
         print(f"{len(signals['nodes'])} signalized intersections ({src})")
@@ -1936,7 +2061,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         vehicles = []
         for vid in range(n_vehicles):
             veh = make_vehicle(G, nodes, rng, vid, demand, through, fleet_ctx,
-                               driver_ctx)
+                               driver_ctx, detour_ctx=detour_ctx)
             if veh is not None:
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
@@ -1999,7 +2124,7 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                       signals, demand, through, fleet_ctx=fleet_ctx,
                       driver_ctx=driver_ctx, lanes=lanes, mobil_ctx=mobil_ctx,
                       speed_stats=speed_stats, stuck_stats=stuck_stats,
-                      reroute_ctx=reroute_ctx)
+                      reroute_ctx=reroute_ctx, detour_ctx=detour_ctx)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
@@ -2019,6 +2144,20 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         # one where they all succeeded.
         print(f"  re-plans: {reroute_ctx['n_reroutes']:,} succeeded, "
               f"{reroute_ctx['n_failed']:,} found no path")
+    if detour_ctx is not None:
+        # same RR35 lesson: the compliance counts are part of the registered
+        # readout (realized share vs the configured share), so they print
+        # unconditionally, never behind verbose
+        ne = detour_ctx["n_eligible"]
+        nc = detour_ctx["n_compliant"]
+        nf = detour_ctx["n_fallback"]
+        realized = (100.0 * nc / ne) if ne else 0.0
+        print(f"  detour compliance: {ne:,} eligible trips, {nc:,} complied "
+              f"({realized:.1f}% realized vs {detour_ctx['share']:.0%} "
+              f"configured), {nf:,} fell back to the free route")
+        if detour_stats is not None:
+            detour_stats.update(n_eligible=ne, n_compliant=nc, n_fallback=nf,
+                                share=detour_ctx["share"])
     return segment_totals, segment_nox, segment_throughput
 
 

@@ -253,6 +253,39 @@ REROUTE_MAX_PER_STEP = 20     # COMPUTE BUDGET, NOT PHYSICS -- label it as such 
                               # stuck and would qualify, so an uncapped pass would
                               # re-plan ~13,000 routes per step. Longest-stuck first,
                               # ties by vehicle id, so the choice stays deterministic.
+
+# --- Signed-detour compliance (the fwrqc arm) ---
+# A real closure ships with an OFFICIAL detour: ODOT signs I-405 SB for I-5
+# through traffic during the Rose Quarter closure. Every other closed arm lets
+# each displaced vehicle pick its own fastest route, which models drivers who
+# all ignore the signage. This arm models the plan instead: a trip is
+# DETOUR-ELIGIBLE when its route on the OPEN network crosses the closed span's
+# south exit (those are the through drivers the "THRU TRAFFIC" signs address),
+# and each eligible trip follows the signage with probability
+# DETOUR_COMPLIANCE_SHARE. A compliant trip routes origin -> via -> destination
+# on the closed network, with the via node pinned partway down the signed
+# detour so that passing it commits the trip to the loop; the rest of its
+# route stays free. Non-compliant and ineligible trips route exactly as
+# before. Compliance is decided once at spawn (route-once discipline, same as
+# every arm: no replanning) using a DEDICATED RNG stream (RANDOM_SEED + 4,
+# alongside +1 signals, +2 fleet, +3 drivers), so the trip stream, and with it
+# every registered arm, stays bit-identical while the flag is off.
+DETOUR_COMPLIANCE_ENABLED = False
+DETOUR_COMPLIANCE_SHARE = 0.5   # P(an eligible trip follows the signage). A
+                                # priori with no data behind it, which is why
+                                # the campaign registers three levels
+                                # (0.25 / 0.50 / 0.75) rather than one guess.
+DETOUR_VIA_NODE = 40379068      # I-405 SB near W Burnside: past the I-5
+                                # diverge and the first exits, upstream of the
+                                # US-26 junction, so routing through it commits
+                                # a trip to the signed loop (probed Aug 27; the
+                                # arm's --check re-verifies it on the live graph)
+DETOUR_MARKER_EDGE = (40413533, 3427976322)   # the closed span's final SB
+                                # mainline edge; an OPEN-network route crossing
+                                # it is through traffic by definition
+DETOUR_GRAPH_FILE = "graph_metro20k_lanes.graphml"   # the OPEN network the
+                                # eligibility test routes on, loaded fresh and
+                                # prepared under the live flags
 # Congested link cost = free-flow time + deterministic queueing delay,
 #   t = travel_time_s + (cars on the link) * IDM_T / lanes,
 # i.e. how long the queue ahead takes to discharge at saturation headway. This is

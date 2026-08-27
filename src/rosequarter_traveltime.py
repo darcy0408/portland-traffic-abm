@@ -83,6 +83,20 @@ ARM_SPECS = {
     # closed arm keeps ODOT's one local-access lane to Broadway/Weidler. Same
     # graph file; the arm's own summaries carry the partial-closure record.
     "access":   {"prefix": "fwrqa", "graph": "graph_metro20k_lanes.graphml", "stack": "access"},
+    # the signed-detour compliance arm (fwrqc): the fwrqi stack and the FULL
+    # closure verbatim, but each through trip follows ODOT's official I-405
+    # detour with the registered probability. One shared open arm
+    # (fwrqc_open) serves all three registered levels; the level lives in
+    # the closed-run prefix, so each level grades as its own arm here.
+    "compliance25": {"prefix": "fwrqc25", "open_prefix": "fwrqc",
+                     "graph": "graph_metro20k_lanes.graphml",
+                     "stack": "compliance", "share": 0.25},
+    "compliance50": {"prefix": "fwrqc50", "open_prefix": "fwrqc",
+                     "graph": "graph_metro20k_lanes.graphml",
+                     "stack": "compliance", "share": 0.50},
+    "compliance75": {"prefix": "fwrqc75", "open_prefix": "fwrqc",
+                     "graph": "graph_metro20k_lanes.graphml",
+                     "stack": "compliance", "share": 0.75},
 }
 
 
@@ -179,11 +193,19 @@ def main():
     for seed in SEEDS:
         frames = {}
         for arm in ("open", "rosequarter"):
-            stem = os.path.join(processed, f"{spec['prefix']}_{arm}_s{seed}")
+            # the compliance levels share one open arm under its own prefix
+            pfx = (spec.get("open_prefix", spec["prefix"])
+                   if arm == "open" else spec["prefix"])
+            stem = os.path.join(processed, f"{pfx}_{arm}_s{seed}")
             summ = json.load(open(stem + "_summary.json"))
             if summ.get("stack", "base") != spec["stack"] or summ.get("nonwork"):
                 raise SystemExit(f"{stem}_summary.json is not a "
                                  f"{spec['stack']} campaign file")
+            if (arm != "open" and spec.get("share") is not None
+                    and summ.get("share") != spec["share"]):
+                raise SystemExit(f"{stem}_summary.json records share="
+                                 f"{summ.get('share')!r}, expected "
+                                 f"{spec['share']}; wrong file for this level")
             frames[arm] = pd.read_parquet(stem + "_segments.parquet")
         _edge_times(G, frames["open"])
         _edge_times(Gc, frames["rosequarter"])
