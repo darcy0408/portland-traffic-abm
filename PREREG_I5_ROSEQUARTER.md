@@ -1243,3 +1243,99 @@ future.
   addendum before Sept 11, before any closure data is seen. The
   requirement that the two control pairs sit inside the floor, and the
   drift fallback if they do not, carry over verbatim.
+
+## Appendix R (2026-08-27): the signed-detour compliance arm (fwrqc), registered before it runs
+
+Every closed arm so far routes each displaced vehicle onto its own fastest
+path, a population in which every driver ignores ODOT's detour signage. The
+real closure ships with an official plan: through traffic is signed onto
+I-405 SB. Between "everyone ignores the signs" and "everyone follows them"
+lies the real population, and no registered arm spans that axis. This
+appendix registers it: guidance response, a third fidelity axis beside
+driving behavior (Appendix K) and closure geometry (Appendix O). Registered
+before Sept 11 the arm is falsifiable; built afterward it would be fitting
+to data already seen. A detour plan is a designated route plus a compliance
+level, so this arm is also the machinery that scores a detour plan on
+congestion and exposure together, the practical capability behind the
+broader-impact framing.
+
+- Arm: prefix fwrqc, `python src/freeway_rosequarter.py --compliance`
+  (branch experiment/detour-compliance, commit b3df21b, pushed before this
+  appendix). The fwrqi stack and the FULL five-edge closure VERBATIM; the
+  only change is closed-arm route assignment. fwrqc-vs-fwrqi therefore
+  isolates guidance response.
+- Eligibility, frozen: a trip is detour-eligible iff its route on the OPEN
+  network crosses the closed span's south exit, the final SB mainline edge
+  (40413533, 3427976322). Those trips continue past the closure and are
+  through traffic by definition; local trips never comply.
+- Mechanism, frozen: a compliant trip routes origin -> via -> destination
+  on the closed network, decided ONCE at spawn (route-once, no replanning,
+  same as every arm). The via node is 40379068, on the I-405 SB mainline
+  near W Burnside: past the I-5 diverge and the first exits, upstream of
+  the US-26 junction, so passing it commits the trip to the signed loop
+  while the rest of the route stays free. A probe showed the network's
+  fastest detour leaves I-405 early for surface streets, which is exactly
+  the difference between free rerouting and following the signs.
+- Compliance levels, frozen: 0.25 / 0.50 / 0.75, all a priori. No data on
+  signage compliance exists to pick one number, so three levels bracket it
+  and no level is ever tuned after results are seen. Draws come from a
+  dedicated RNG stream (RANDOM_SEED + 4), one draw per eligible trip
+  regardless of level, so the trip stream is untouched and the same seed
+  sees the same draw sequence at every share.
+- Stated modeling choices, registered now: compliance is binary and
+  per-trip (no partial or abandoned detours); the Webster warmup population
+  spawns without compliance (its own isolated stream), so signal timing
+  reflects free rerouting, a second-order effect on surface signals; the
+  arm uses the full closure, not Appendix O's access lane, so the two axes
+  stay separated; a compliant trip whose via route fails falls back to the
+  free route and is counted (n_fallback in the saved summary), never
+  silent, and realized compliance is recorded per run.
+- Campaign: one flat 32-task array (8 shared open tasks + 8 closed per
+  level), single submission, one-writer rule. The open arm is
+  share-independent, so one open set serves all three levels.
+- Integrity checks, registered now: (1) fwrqc_open must equal fwrqi_open
+  per seed exactly (network totals and every tracked route; --readout
+  runs the check, any mismatch voids the campaign); (2) share 0 is the
+  identity, verified by a spawn-level selftest (routes and trip RNG
+  stream byte-identical to the machinery off), PASSED at b3df21b before
+  this registration: 2,000 uniform-OD spawns, 94 eligible, share 1 routed
+  all 94 via the I-405 mainline with zero fallbacks, eligibility count
+  identical across shares; (3) the standing frozen-span guard, plus: the
+  marker edge must be absent from the closed graph and present in the
+  open graph, and the via node must be an endpoint of an I 405 mainline
+  edge. All fail loudly.
+- Banked predictions, before any run. Verdict bar unchanged: unanimous
+  sign across the 8 paired seeds and |t| > 3.
+  - R1 (primary): dose-response on the signed detour. The I-405 NOx gain
+    (closed minus open) increases monotonically with the compliance
+    level, gain(0.25) < gain(0.50) < gain(0.75), per seed. No other arm
+    can produce this prediction.
+  - R2: at every level the I-405 gain is at least fwrqi's (+37.7%), since
+    compliance only adds traffic to the loop, and I-405 outranks I-205 at
+    every level.
+  - R3: surface alternates (US 26, OR 99E, OR 213 route totals; the
+    interstate_sb, mlk_sb, vanc_pdx instrument pairs) move DOWN relative
+    to fwrqi as compliance rises, since compliant trips leave the surface
+    streets. Registered with the explicit caveat that Appendix P's two
+    banked DOWN calls landed under the bar, so these may too; an
+    under-the-bar result is reported as such, never re-argued.
+  - R4: travel-time instrument (arms compliance25/50/75, shared open,
+    same Appendix M commit rules): the i5sb_detour pair rises with the
+    compliance level, and Appendix N's October rank is re-registered per
+    level.
+  - R5: network NOx total rises slightly with compliance (the signed loop
+    is longer than the surface shortcuts), staying within a few percent;
+    the conservation check applies at every level.
+- October grading: the three levels enter the M.3 head-to-head under the
+  frozen rules (Appendix J floors). Whichever level's predictions land
+  nearest the real logger and PORTAL data gives an observational estimate
+  of signage compliance during a real five-week closure, a quantity absent
+  from the literature.
+- Citation rules: never cite an fwrqc diversion percentage without naming
+  the level; R1 is about within-model ordering, and October says which
+  level the real data lands nearest, not which is "right"; realized
+  compliance (detour_stats) is cited alongside the configured share
+  whenever a level is named.
+- The primary registered predictions remain Appendix A's and do not
+  change. This arm's numeric results will be appended, dated, before
+  Sept 11.
