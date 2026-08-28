@@ -1,0 +1,84 @@
+/home/darcy-csuglobal/portland-traffic-abm/.venv/lib64/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends("networkx.backends"))
+EXCLUDED ctrl_west: endpoint snaps 7,399 m from the graph (rule: 500 m)
+seed 42 done
+seed 7 done
+seed 13 done
+seed 99 done
+seed 314 done
+seed 777 done
+seed 2024 done
+seed 8 done
+saved -> /home/darcy-csuglobal/pta-capacity/data/processed/rqtt_fwrqc25.json
+
+==============================================================================
+ARTERIAL TRAVEL TIMES (compliance25 arm): paired per-seed, closed - open
+==============================================================================
+          pair  open min  closed   mean %   sd %  signs switch  verdict
+     i5sb_span      12.3    16.1   +30.86   4.13   8/8     0/8   SUPPORTED (t=21.2)
+      vanc_pdx      14.0    17.2   +22.98   2.60   8/8     0/8   SUPPORTED (t=25.0)
+   i5sb_detour      10.5    14.6   +38.92   3.09   8/8     3/8   SUPPORTED (t=35.7)
+ interstate_sb       7.7     8.8   +14.52   3.33   8/8     0/8   SUPPORTED (t=12.3)
+   williams_nb       8.5     8.5    +0.07   1.63   2/8     1/8   not supported (t=0.1)
+        mlk_sb      11.5    12.6   +10.15   6.75   7/8     7/8   not supported (t=4.3)
+      grand_nb      12.2    12.3    +0.76   1.81   5/8     2/8   not supported (t=1.2)
+       i205_sb      11.2    11.1    -0.91   2.39   4/8     0/8   not supported (t=1.1)
+  i84wb_feeder      14.5    14.4    -0.74   1.91   3/8     0/8   not supported (t=1.1)
+     powell_wb      11.5    11.6    +0.34   1.62   4/8     0/8   not supported (t=0.6)
+       ctrl_se      18.9    18.7    -0.76   0.57   0/8     0/8   SUPPORTED (t=3.8)
+/home/darcy-csuglobal/portland-traffic-abm/.venv/lib64/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends("networkx.backends"))
+EXCLUDED ctrl_west: endpoint snaps 7,399 m from the graph (rule: 500 m)
+seed 42 done
+seed 7 done
+seed 13 done
+seed 99 done
+seed 314 done
+seed 777 done
+seed 2024 done
+seed 8 done
+saved -> /home/darcy-csuglobal/pta-capacity/data/processed/rqtt_fwrqc50.json
+
+==============================================================================
+ARTERIAL TRAVEL TIMES (compliance50 arm): paired per-seed, closed - open
+==============================================================================
+          pair  open min  closed   mean %   sd %  signs switch  verdict
+     i5sb_span      12.3    16.0   +30.04   4.18   8/8     0/8   SUPPORTED (t=20.3)
+      vanc_pdx      14.0    17.2   +23.09   2.88   8/8     0/8   SUPPORTED (t=22.7)
+   i5sb_detour      10.5    14.8   +40.46   2.94   8/8     0/8   SUPPORTED (t=38.9)
+ interstate_sb       7.7     8.9   +15.02   3.24   8/8     0/8   SUPPORTED (t=13.1)
+   williams_nb       8.5     8.6    +0.24   1.56   3/8     0/8   not supported (t=0.4)
+        mlk_sb      11.5    12.6   +10.06   6.69   7/8     7/8   not supported (t=4.3)
+      grand_nb      12.2    12.4    +1.21   3.00   4/8     2/8   not supported (t=1.1)
+       i205_sb      11.2    11.1    -0.86   2.09   3/8     0/8   not supported (t=1.2)
+  i84wb_feeder      14.5    14.5    -0.46   1.92   3/8     0/8   not supported (t=0.7)
+     powell_wb      11.5    11.5    +0.03   1.52   4/8     0/8   not supported (t=0.0)
+       ctrl_se      18.9    18.7    -0.69   0.81   2/8     0/8   not supported (t=2.4)
+/home/darcy-csuglobal/portland-traffic-abm/.venv/lib64/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends("networkx.backends"))
+EXCLUDED ctrl_west: endpoint snaps 7,399 m from the graph (rule: 500 m)
+seed 42 done
+seed 7 done
+seed 13 done
+seed 99 done
+seed 314 done
+seed 777 done
+seed 2024 done
+seed 8 done
+saved -> /home/darcy-csuglobal/pta-capacity/data/processed/rqtt_fwrqc75.json
+
+==============================================================================
+ARTERIAL TRAVEL TIMES (compliance75 arm): paired per-seed, closed - open
+==============================================================================
+          pair  open min  closed   mean %   sd %  signs switch  verdict
+     i5sb_span      12.3    15.9   +29.45   4.59   8/8     1/8   SUPPORTED (t=18.2)
+      vanc_pdx      14.0    17.2   +22.98   2.88   8/8     0/8   SUPPORTED (t=22.6)
+   i5sb_detour      10.5    14.9   +41.79   2.31   8/8     0/8   SUPPORTED (t=51.1)
+ interstate_sb       7.7     8.9   +15.91   2.96   8/8     1/8   SUPPORTED (t=15.2)
+   williams_nb       8.5     8.6    +0.61   1.48   4/8     0/8   not supported (t=1.2)
+        mlk_sb      11.5    12.5    +9.22   6.70   7/8     7/8   not supported (t=3.9)
+      grand_nb      12.2    12.3    +0.92   2.18   5/8     3/8   not supported (t=1.2)
+       i205_sb      11.2    11.1    -0.96   2.04   2/8     0/8   not supported (t=1.3)
+  i84wb_feeder      14.5    14.5    -0.45   2.06   3/8     0/8   not supported (t=0.6)
+     powell_wb      11.5    11.5    -0.20   1.20   5/8     0/8   not supported (t=0.5)
+       ctrl_se      18.9    18.8    -0.60   0.96   2/8     0/8   not supported (t=1.8)
