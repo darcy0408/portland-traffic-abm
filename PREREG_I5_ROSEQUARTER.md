@@ -1426,3 +1426,166 @@ The floor run stays at ~Sept 4, on the clean weeks available then
 lands as a second dated computation after Sept 10 and before any closure
 data is scored. Both computations publish; neither replaces the other
 silently.
+
+## Appendix S (2026-08-28): signed-detour compliance arm (fwrqc) results
+
+Nothing above changes. The fwrqc campaign registered in Appendix R ran on
+Orca as job 133807 (32/32 tasks completed, exit 0) on branch commit
+b3df21b, the same commit the appendix registered. The registered
+pre-submission order was followed: the guard chain passed on Orca, then
+the spawn-level selftest ran as compute-node job 133799 and PASSED with
+numbers identical to the registered local run (94/2000 eligible, share-0
+byte identity, share-1 all compliant via the I-405 mainline, zero
+fallbacks). The travel-time instrument ran as job 133891 (banked
+rqtt_fwrqc25/50/75.json beside the 32 pulled summaries). Everything below
+was computed from the campaigns' saved outputs, no simulation (grading
+scripts banked in analyses/2026-08-28-fwrqc-grading/ on the arm branch).
+Verdict bar everywhere, unchanged: unanimous sign across the 8 paired
+seeds and |t| > 3.
+
+### S.1 The registered integrity checks
+
+The open-arm identity check PASSES 8/8: every fwrqc open summary is
+identical to its fwrqi counterpart (readout check on Orca, re-verified
+locally on the pulled summaries), and the instrument reconstructs
+IDENTICAL open-arm times across fwrqi and all three levels, max
+difference 0.0 s on every pair and seed. Realized compliance landed on
+the registered shares: 24.9% / 49.8% / 74.9% against configured
+25/50/75, from 11,744 / 11,678 / 11,597 eligible trips per level. The
+fallback path fired ZERO times across all 24 closed runs. The arm is
+valid per its registration.
+
+### S.2 R1, the primary prediction: dose-response, SUPPORTED 8/8 (instrument validation)
+
+Graded honestly for what it is: R1's DIRECTION is partly inherent in
+the manipulation — compliance adds trips to the signed loop by
+construction, and the levels are nested (the same per-trip draw against
+rising thresholds, so the 50% compliant population contains the 25%
+one). What was not guaranteed is that the emissions response stays
+strictly monotone PER SEED through the congestion dynamics: NOx comes
+from simulated driving, not from route assignments, and a sufficiently
+jammed loop can carry fewer vehicle-kilometers in the simulated hour.
+R1 therefore certifies the compliance dial as a monotone, usable
+instrument across the registered dose range; it is not by itself a
+discovery about the world, and it is never cited as one.
+
+The I-405 NOx gain (closed minus open, grams) is strictly monotone in
+the compliance level in EVERY seed:
+
+| seed | gain at 25% | at 50% | at 75% | monotone |
+|------|------------|--------|--------|----------|
+| 7 | +803 | +1,284 | +2,296 | yes |
+| 8 | +647 | +693 | +1,469 | yes |
+| 13 | +1,543 | +2,516 | +2,861 | yes |
+| 42 | +645 | +1,175 | +2,143 | yes |
+| 99 | +680 | +1,449 | +2,429 | yes |
+| 314 | +541 | +909 | +1,717 | yes |
+| 777 | +626 | +1,101 | +2,194 | yes |
+| 2024 | +804 | +1,237 | +2,133 | yes |
+
+8/8 strictly monotone: SUPPORTED. Level means with the standing absolute
+companions (open-arm base 1,708 g, identical to fwrqi's): 25% gains
++786 +/- 318 g (+46.2%), 50% +1,296 +/- 545 g (+76.1%), 75%
++2,155 +/- 424 g (+126.4%).
+
+### S.3 R2: every level at or above fwrqi, I-405 outranks I-205 — SUPPORTED
+
+The threshold clause is graded on level means, the scale the registered
++37.7% is stated in: +46.2 / +76.1 / +126.4%, every level above fwrqi's
++37.7%. Rank is graded on the percent scale, the convention of every
+prior rank statement in this document (the readout tables and Appendix
+J's rank floors are in percentage points): I-405 outranks I-205 in 8/8
+seeds at every level (t = 6.6 / 6.5 / 13.8). Disclosed: on raw grams the
+25% level's rank is 7/8 — seed 314's I-205 gain (+928 g on its 18,864 g
+base) outweighs its I-405 gain (+541 g); grams rank is 8/8 at 50% and
+75%.
+
+Context the registration did not ask for but honesty does: the paired
+closed-arm contrast against fwrqi itself (fwrqc minus fwrqi, I-405
+grams) is +142 g (7/8, t = 2.1) at 25% — UNDER the bar, so the 25% level
+is not separable from free rerouting on this measure — then +652 g (8/8,
+t = 4.2) at 50% and +1,512 g (8/8, t = 11.6) at 75%, both at the bar.
+Guidance response becomes distinguishable from free rerouting somewhere
+between 25% and 50% compliance, in this model.
+
+### S.4 R3: surface alternates down — MIXED, graded per component
+
+The registered caveat anticipated under-the-bar landings (Appendix P's
+two DOWN calls landed there); several components did, and one crossed
+the bar the wrong way. All graded against fwrqi's closed arm, per seed.
+
+Route totals (NOx):
+
+| route | at 25% | at 50% | at 75% |
+|-------|--------|--------|--------|
+| US-26 | -0.78%, 7/8, t=2.8, under bar | -2.67%, 8/8, t=6.9, SUPPORTED | -4.56%, 8/8, t=6.7, SUPPORTED |
+| OR-213 | -0.35%, 6/8, t=1.0, under bar | -0.64%, 5/8, t=1.7, under bar | -1.76%, 7/8, t=3.6, under bar (misses unanimity) |
+
+Wording gap, reported rather than papered over: R3's registered list
+names an OR-99E route total, but the campaign summaries track five
+routes (I-5, I-405, I-205, OR-213, US-26) and no OR-99E; the gradable
+stand-in is the mlk_sb instrument pair below (MLK Blvd is OR-99E).
+
+Instrument pairs (closed travel time, fwrqc minus fwrqi):
+
+- mlk_sb DOWN: SUPPORTED at 75% (-1.35%, 8/8, t = 3.6); under the bar at
+  25% and 50% (-0.51%, t = 1.6; -0.58%, t = 1.8), trend monotone the
+  predicted way.
+- vanc_pdx DOWN: under the bar at every level (-0.38 / -0.29 / -0.39%,
+  best t = 2.4).
+- interstate_sb DOWN: FAILED, and at 75% the data crosses the bar the
+  WRONG WAY: +1.12%, 8/8 seeds UP, t = 3.2. A failed direction, reported
+  as such. Continuity note: Appendix P's fwrqa contrast also leaned
+  interstate_sb UP (+1.2%, under bar there); two independent arms now
+  lean the same unpredicted way.
+
+### S.5 R4: the detour pair rises with compliance — NOT SUPPORTED at the strict reading
+
+R4's registered wording ("rises with the compliance level") names no
+per-seed clause, unlike R1's; the ambiguity is resolved the
+conservative way, by grading the STRICT reading. Strict per-seed
+monotonicity across the three levels holds in 5/8 seeds: NOT SUPPORTED.
+Disclosed beside the grade, as weaker-form evidence only: the
+end-to-end rise (75% minus 25%) is +18.1 s, 8/8 seeds, t = 4.4, which
+meets the bar; the adjacent steps are under it (25->50%: +9.7 s, 7/8,
+t = 3.5, misses unanimity; 50->75%: +8.4 s, 6/8, t = 2.7). The
+mechanism of the miss is resolution, not direction: a ~9 s per-step
+effect against a ~7 s seed sd. Neither the strict grade nor the
+disclosed rise is ever cited without the other.
+
+Appendix N's October rank, re-registered per level as promised: detour >
+span > vanc HOLDS at every level (closed-vs-open rises 25%: +38.9 >
++30.9 > +23.0; 50%: +40.5 > +30.0 > +23.1; 75%: +41.8 > +29.4 > +23.0).
+The detour-minus-span spread WIDENS with compliance (+8.0 -> +10.5 ->
++12.4 points): a discriminating October signature this axis alone
+produces.
+
+### S.6 R5: network NOx rises with compliance — NOT SUPPORTED (null)
+
+Network NOx versus the shared open arm: +0.22% (5/8, t = 0.7) at 25%,
++0.13% (5/8, t = 0.4) at 50%, -0.06% (t = 0.2) at 75%. No level reaches
+the bar and the across-level trend runs opposite the registered
+direction: an honest null. The conservation half of the check HOLDS at
+every level (all within a quarter percent, same order as fwrqi's
++0.27%). Exploratory, ungraded: the longer signed loop apparently costs
+no extra NOx because freeway kilometers displace congested surface
+stop-and-go, but nothing here tests that mechanism.
+
+### S.7 What this adds to the October instrument
+
+The third fidelity axis is the first with a working dose dial. Geometry
+(Appendix P) moved predictions ~1-2%, under the bar everywhere; guidance
+moves the I-405 diversion from +46% to +126% across registered
+compliance levels, monotone per seed, on the same base where free
+rerouting gives +37.7%. October grades all four arms (base, improved,
+access, three compliance levels) against the logger and PORTAL under
+M.3 and the Appendix J floors, unchanged; whichever compliance level the
+real diversion lands nearest gives the observational signage-compliance
+estimate Appendix R registered as the arm's purpose. Citation rules
+restated: never cite an fwrqc percentage without naming the level and
+its realized share; S.3's rank disclosure and S.5's paired grade-plus-
+disclosure travel with any citation of R2 or R4; R1 is cited as
+instrument validation, never as a standalone finding. The instrument's
+measured resolution limit is itself a result: October can distinguish
+50% and 75% compliance from free rerouting, but not 25% from none.
+
