@@ -1339,3 +1339,90 @@ broader-impact framing.
 - The primary registered predictions remain Appendix A's and do not
   change. This arm's numeric results will be appended, dated, before
   Sept 11.
+
+## Appendix Q addendum (2026-08-28): scheduler outage in floor week 2, and the instrumentation fix
+
+Registered pre-measurement: written before any null-floor computation has
+run (the floor run stays scheduled for ~Sept 4, on whatever clean weeks
+exist then) and before any closure-period data exists.
+
+### What happened
+
+On Aug 26 2026 GitHub's job scheduler began starving the logger's single
+hourly cron slot. Every run that fired completed successfully in about 25
+seconds with clean data (zero non-ok rows, all 12 pairs), but most hours
+never fired at all: Aug 26 recorded 5 of 14 daytime Pacific hours, and
+Aug 27 finished at 5 of 14 (one before the fix below landed mid-afternoon,
+four after). The evidence is public (the Actions run list and the CSV
+itself). This is a scheduling failure external to the instrument; the
+data that exists is untouched and unaffected.
+
+### Rule application (no discretion exercised)
+
+Under the pre-registered 12-of-14 daytime rule, Aug 26 and Aug 27 DROP.
+Aug 25 held at exactly 12 of 14. Floor week 2 (Aug 25-27) is therefore
+not a clean week. Appendix Q defined the floor unit as all pairwise
+combinations of clean Tue-Thu weeks; with week 2 unclean, the floor
+reduces to the week 1 x week 3 pair (Aug 18-20 x Sept 1-3), provided
+week 3 is clean. Nothing about this paragraph is a judgment call; it is
+the frozen rule applied to what happened.
+
+### Instrumentation fix (reliability only, data definition unchanged)
+
+Commit fc6a9ae in the public logger repo (its own history is the
+timestamp, Aug 27 2026): the workflow now carries three cron entries per
+hour (minutes 7, 24, 41) as redundancy against scheduler starvation, and
+the script gained an hour guard that exits before touching the API when
+the current UTC hour already has rows. A third, fully external layer
+runs outside GitHub's scheduler: an hourly scheduled task on the
+maintainer's machine triggers the same workflow through the
+manual-dispatch API. The data definition is unchanged under all three
+trigger paths: at most one row set per UTC hour, whichever trigger fires
+first.
+
+The fix was verified in production the same day: a manual dispatch
+logged 12 of 12 pairs, and a second dispatch minutes later exited at the
+guard. The redundancy also proved immediately necessary: in the 15
+completed hours between the fix and this addendum the added cron slots
+never fired (starvation ongoing), and every one of those hours was
+captured exactly once, all through the dispatch path.
+
+This changes sampling RELIABILITY, not sampling DEFINITION, and it
+predates every floor computation and all closure-period data. Weeks
+before and after the fix remain comparable because the per-hour
+semantics are identical; the fix only raises the probability that an
+hour exists.
+
+### Contingency, registered now as a decision tree (frozen rules untouched)
+
+Appendix Q defined the floor as all pairwise combinations of clean weeks
+precisely because one pair is not a floor; losing week 2 recreates that
+single-pair situation. The only pre-closure Tue-Thu days remaining are
+Sept 8-10, and frozen rule M.3.3 deliberately excludes them from
+October's before pool (Labor Day week, Sept 7-11): the days after a
+Monday holiday are not typical weekdays. That exclusion is NOT lifted;
+October's before pool is unchanged. Instead, the fallback order is
+registered now, before any of the relevant data exists:
+
+1. If week 3 (Sept 1-3) is clean under the 12-of-14 rule, the floor is
+   the week 1 x week 3 pair, reported explicitly as a single draw.
+   Pairs involving Sept 8-10 are additionally computed and printed
+   under Appendix Q's existing DIAGNOSTIC label: they never govern
+   wording.
+2. If week 3 is also lost to an outage, the floor falls back to
+   week 1 x Sept 8-10 (provided Sept 8-10 passes the same 12-of-14
+   rule), the only pair that exists, with the Labor-Day-week caveat
+   printed beside every use. A post-holiday week is expected to be
+   noisier than a typical week, which can only push the measured floor
+   UP and October's wording toward the more cautious tier: the fallback
+   fails conservative.
+3. If no pair exists at all, October reports direction and rank with no
+   floor-calibrated wording tier, and says so plainly.
+
+### Consequence for the scoring timeline
+
+The floor run stays at ~Sept 4, on the clean weeks available then
+(week 1 x week 3 at most). Any use of Sept 8-10 (diagnostic or fallback)
+lands as a second dated computation after Sept 10 and before any closure
+data is scored. Both computations publish; neither replaces the other
+silently.
