@@ -1,0 +1,41 @@
+open-arm identity vs fwrqi re-verified locally: 8/8 seeds
+
+level 25%: eligible 11744, complied 2929 (realized 24.9%), fallbacks 0
+level 50%: eligible 11678, complied 5813 (realized 49.8%), fallbacks 0
+level 75%: eligible 11597, complied 8681 (realized 74.9%), fallbacks 0
+total fallbacks across 24 closed runs: 0
+
+R1 (primary): I-405 NOx gain monotone in level, per seed
+  seed    7: +  803.1 < + 1284.2 < + 2295.7 g  OK
+  seed    8: +  647.2 < +  693.4 < + 1468.8 g  OK
+  seed   13: + 1542.6 < + 2515.6 < + 2861.3 g  OK
+  seed   42: +  644.9 < + 1174.6 < + 2143.4 g  OK
+  seed   99: +  680.2 < + 1449.1 < + 2429.2 g  OK
+  seed  314: +  541.2 < +  909.1 < + 1717.2 g  OK
+  seed  777: +  626.0 < + 1101.0 < + 2194.2 g  OK
+  seed 2024: +  803.7 < + 1237.2 < + 2132.5 g  OK
+  R1: 8/8 seeds strictly monotone -> SUPPORTED
+
+R2: I-405 gain at least fwrqi's at every level; I-405 outranks I-205
+  level 25%: mean gain  +46.2% (fwrqi +37.7%), rank pct 8/8 t=6.6 (grams 7/8), vs fwrqi closed  +142.5 g (7/8, t=2.1)  OK
+  level 50%: mean gain  +76.1% (fwrqi +37.7%), rank pct 8/8 t=6.5 (grams 8/8), vs fwrqi closed  +652.0 g (8/8, t=4.2)  OK
+  level 75%: mean gain +126.4% (fwrqi +37.7%), rank pct 8/8 t=13.8 (grams 8/8), vs fwrqi closed +1511.7 g (8/8, t=11.6)  OK
+  R2: SUPPORTED (threshold clause graded on level means, the scale the registered +37.7% is stated in; rank graded on percent, the prereg's rank convention, gram-scale count disclosed)
+
+R3 (route-total part): surface alternates DOWN vs fwrqi as compliance rises
+  (OR 99E is not a tracked route in the summaries; its instrument
+   stand-in mlk_sb is graded with R4. Reported as registered-wording gap.)
+  US 26:
+    level 25%:    -70.2 g (-0.78%), down 7/8, t= -2.8  -> under the bar
+    level 50%:   -239.6 g (-2.67%), down 8/8, t= -6.9  -> SUPPORTED
+    level 75%:   -408.4 g (-4.56%), down 8/8, t= -6.7  -> SUPPORTED
+  OR 213:
+    level 25%:     -5.4 g (-0.35%), down 6/8, t= -1.0  -> under the bar
+    level 50%:    -10.0 g (-0.64%), down 5/8, t= -1.7  -> under the bar
+    level 75%:    -27.4 g (-1.76%), down 7/8, t= -3.6  -> under the bar
+
+R5: network NOx total rises slightly with level, within a few percent
+  level 25%: +0.22% (5/8 up, t=  0.7)
+  level 50%: +0.13% (5/8 up, t=  0.4)
+  level 75%: -0.06% (5/8 up, t= -0.2)
+  fwrqi reference: +0.27%

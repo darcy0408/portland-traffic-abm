@@ -1,0 +1,34 @@
+open_s identical across fwrqi and all three levels, every pair/seed
+
+R4: i5sb_detour closed travel time rises with compliance level
+  seed    7:   873.6 <   880.9 <   880.4 s  VIOLATED
+  seed    8:   872.5 <   890.3 <   887.5 s  VIOLATED
+  seed   13:   888.7 <   897.6 <   901.5 s  OK
+  seed   42:   860.4 <   882.4 <   897.8 s  OK
+  seed   99:   865.2 <   869.6 <   890.1 s  OK
+  seed  314:   858.2 <   863.0 <   880.3 s  OK
+  seed  777:   879.5 <   893.6 <   903.9 s  OK
+  seed 2024:   907.8 <   906.0 <   909.0 s  VIOLATED
+  c50 - c25:    +9.7 s (7/8 up, t=  3.5)
+  c75 - c50:    +8.4 s (6/8 up, t=  2.7)
+  c75 - c25:   +18.1 s (8/8 up, t=  4.4)
+  R4 monotone per seed: 5/8 -> NOT SUPPORTED as a per-seed claim
+
+Appendix N October rank re-registered per level (closed-vs-open % rise):
+  level 25%: i5sb_detour +38.9% > i5sb_span +30.9% > vanc_pdx +23.0%  (detour > span > vanc HOLDS)
+  level 50%: i5sb_detour +40.5% > i5sb_span +30.0% > vanc_pdx +23.1%  (detour > span > vanc HOLDS)
+  level 75%: i5sb_detour +41.8% > i5sb_span +29.4% > vanc_pdx +23.0%  (detour > span > vanc HOLDS)
+
+R3 (instrument pairs): DOWN relative to fwrqi as compliance rises
+  interstate_sb:
+    level 25%:    -0.5 s (-0.10%), down 4/8, t= -0.5 -> under the bar
+    level 50%:    +1.8 s (+0.34%), down 3/8, t=  1.9 -> WRONG DIRECTION
+    level 75%:    +6.0 s (+1.12%), down 0/8, t=  3.2 -> WRONG DIRECTION
+  mlk_sb:
+    level 25%:    -3.9 s (-0.51%), down 6/8, t= -1.6 -> under the bar
+    level 50%:    -4.4 s (-0.58%), down 7/8, t= -1.8 -> under the bar
+    level 75%:   -10.3 s (-1.35%), down 8/8, t= -3.6 -> SUPPORTED
+  vanc_pdx:
+    level 25%:    -3.9 s (-0.38%), down 6/8, t= -2.4 -> under the bar
+    level 50%:    -3.0 s (-0.29%), down 7/8, t= -1.0 -> under the bar
+    level 75%:    -4.0 s (-0.39%), down 5/8, t= -1.7 -> under the bar
