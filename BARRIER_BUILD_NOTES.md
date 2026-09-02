@@ -55,11 +55,38 @@ unshielded neighborhoods. Barrier physics is what makes that visible.
    _v1_anyclass for the diff), verification map
    outputs/figures/barrier_lines_map.png (Rose Quarter walls hug I-5, correct).
    Graph md5 re-verified against the Appendix R pin before snapping.
-2. [ ] Physics (Sept 4-5): Maekawa insertion loss per octave band from path-
-   length difference over the wall top; CNOSSOS source heights, receiver 1.5 m;
-   receivers = population centroids (block groups), not the nominal 10 m point.
-   Then the calibration check: our insertion loss vs ODOT's own atnatn_pre /
-   atnatn_msr per wall. That check is publication-grade and unusual.
+2. [x] Physics + ODOT calibration: DONE Sept 2, two days early.
+   src/barrier_physics.py: Kurze-Anderson per octave band (signed delta, 20 dB
+   TNM cap, finite wall ends respected, single most-effective wall); self-test
+   passes on hand values (N=0 gives 5 dB, N=1 gives 13.1, worked-geometry
+   delta 0.4588 m). src/barrier_calibration.py: the check against ODOT's own
+   attenuation numbers, with the geometry a real measurement sees (traffic as
+   a LINE of point sources +-300 m, all inventory walls may shield, receivers
+   15/30/60 m behind the wall midpoint on the shielded side).
+   CALIBRATED READ of the results (barrier_calibration.parquet, figure):
+   - The line-source treatment moves the textbook perpendicular-ray median
+     16.1 dB(A) down to 10.0 at 30 m, the expected direction and size.
+   - vs ODOT MEASURED (n=24): median bias -0.2 dB at 15 m (ours 8.7 vs 8.0).
+     The magnitude at first-row distance is right. Scatter is wide (54% of
+     walls below, 42% above).
+   - vs ODOT PREDICTED (n=152): +4.2 dB median at 30 m, 80% above range.
+     Partly ODOT design conservatism (on the 13 walls with both, ODOT's own
+     measurements beat its predictions by a paired median +1.0 dB); the rest
+     is real v1 overshoot, expected because pure diffraction ignores the
+     ground-effect change a new wall causes (soft-ground attenuation lost,
+     roughly 2-3 dB). That is a documented v2 item; do NOT tune it away
+     against this same check.
+   - Per-wall RANKING is weak (Spearman 0.10-0.34 vs ODOT midpoints). Honest
+     limits: ODOT's receiver placement per wall is unknown, the strings are
+     coarse integers, and our own 15-vs-60 m spread is 4 dB. Per-wall
+     precision is probably not extractable from this inventory; the
+     defensible claim is magnitude, not ranking.
+   - Meaning for step 3: corridor-level redistribution needs the typical
+     first-row IL to be the right size, which it is; per-wall precision
+     matters less once walls aggregate along corridors.
+   Step-1 parquet gained road_x/road_y (the snap foot, the calibration source
+   point); rerun with unchanged snap stats. Population-centroid receivers move
+   to step 3 where they belong (they need the run surfaces anyway).
 3. [ ] Barrier-aware surface on the saved open/closed Rose Quarter runs
    (Sept 6-9), banked with a dated commit. Locate the fwrq harvested parquets
    first (fwms parquets live via the freeway-closure worktree; fwrq analogous,

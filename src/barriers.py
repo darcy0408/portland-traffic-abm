@@ -224,6 +224,9 @@ def main(graph_path):
         half = w["len_m"] / 2.0
         x0, y0 = pt.x - tx * half, pt.y - ty * half
         x1, y1 = pt.x + tx * half, pt.y + ty * half
+        # the foot of the snap on the road: the calibration check places its
+        # source here, and (road -> wall point) is the shielded-side direction
+        foot = line.interpolate(line.project(pt))
         ed = Gp.edges[u, v, k]
         recs.append({**w.to_dict(),
                      "snap_m": snap["snap_m"],
@@ -232,6 +235,7 @@ def main(graph_path):
                      "snap_ref": _edge_label(ed, "ref"),
                      "snap_class": _edge_label(ed, "highway"),
                      "bearing_deg": float(np.degrees(np.arctan2(ty, tx))),
+                     "road_x": foot.x, "road_y": foot.y,
                      "x0": x0, "y0": y0, "x1": x1, "y1": y1})
     out = pd.DataFrame(recs)
     out["far_snap"] = out["snap_m"] > SNAP_WARN_M
