@@ -88,9 +88,18 @@ unshielded neighborhoods. Barrier physics is what makes that visible.
    point); rerun with unchanged snap stats. Population-centroid receivers move
    to step 3 where they belong (they need the run surfaces anyway).
 3. [ ] Barrier-aware surface on the saved open/closed Rose Quarter runs
-   (Sept 6-9), banked with a dated commit. Locate the fwrq harvested parquets
-   first (fwms parquets live via the freeway-closure worktree; fwrq analogous,
-   check pta-* worktrees / analyses dirs / Orca harvest locations).
+   (Sept 6-9), banked with a dated commit. INPUTS LOCATED (Sept 2): use the
+   fwrqn campaign at C:/dev/pta-realism/data/processed/
+   (fwrqn_{open,rosequarter}_s{seed}_segments.parquet, 8 paired seeds x 2
+   arms, complete, schema u/v/key/value/nox_g/throughput, 159,425 segments).
+   fwrqn is the non-work-demand arm (LODES work + retail/service trips,
+   mixed fleet, 16,500 vehicles) and ran on the EXACT prereg metro20k graph
+   (md5 6707dd..., per the Aug 15 ledger note), so the step-1 wall lines
+   align with it with no reprojection. Chosen over the base fwrq campaign
+   because base per-segment parquets live on Orca only and fwrqn is the
+   richer demand model; paired seeds satisfy the chaos-floor rule for
+   far-field claims. Receivers = block-group population centroids
+   (landuse_bg.parquet, 1,003 block groups).
 
 ## Reuse, do not reinvent
 
