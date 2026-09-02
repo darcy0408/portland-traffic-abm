@@ -40,10 +40,21 @@ unshielded neighborhoods. Barrier physics is what makes that visible.
 
 ## Build plan and status
 
-1. [ ] Wall-line reconstruction (Sept 2-3): snap each ODOT point to the nearest
-   graph edge, take the road bearing there, draw a line of len_meter centered on
-   the point parallel to the road. The point's offset from the centerline puts
-   the wall on the correct side automatically. Main engineering risk.
+1. [x] Wall-line reconstruction: DONE Sept 1 (src/barriers.py), a day early.
+   224 of 229 walls reconstructed (5 dropped for missing length, 1 height
+   imputed to the 3.0 m median). Median snap 17 m, max 72 m, none past the
+   100 m flag. The v1 any-class snap drew 21 walls PERPENDICULAR to their
+   freeway (dead-end cross-streets touch the wall and win nearest-edge), so
+   the bearing now comes from class-filtered snapping: state-highway walls
+   (numeric HWYNUMB) to motorway/trunk/primary, cou/Cit walls to
+   secondary-and-above, any-class only as a >150 m fallback (3 walls, all
+   benign: two on a literal frontage road). Built-in consistency check passed:
+   every fixed wall's snap_ref matches its ODOT HWYNUMB (001=I-5, 026=US 26
+   Powell, 047=US 26 Sunset, 064=I-205, 144=OR 217). Output:
+   data/processed/odot_walls_lines.parquet (gitignored; v1 kept aside as
+   _v1_anyclass for the diff), verification map
+   outputs/figures/barrier_lines_map.png (Rose Quarter walls hug I-5, correct).
+   Graph md5 re-verified against the Appendix R pin before snapping.
 2. [ ] Physics (Sept 4-5): Maekawa insertion loss per octave band from path-
    length difference over the wall top; CNOSSOS source heights, receiver 1.5 m;
    receivers = population centroids (block groups), not the nominal 10 m point.
