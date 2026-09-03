@@ -1,22 +1,33 @@
-"""Model predictions at the Portland metro's two regulatory NO2 monitors for
-the pre-registered Rose Quarter I-5 SB closure (PREREG_I5_ROSEQUARTER.md,
-Appendix C).
+"""Model predictions at the Portland metro's regulatory NO2 monitors for the
+pre-registered Rose Quarter I-5 SB closure (PREREG_I5_ROSEQUARTER.md,
+Appendix C and its Sept 2 2026 addendum).
 
-The metro has exactly two regulatory NO2 monitors (Oregon DEQ 2023 Annual
-Ambient Criteria Pollutant Air Monitoring Network Plan, Table 2 and Appendix
-C):
+Appendix C (Aug 14) registered the two monitors in the Oregon DEQ 2023
+Annual Ambient Criteria Pollutant Air Monitoring Network Plan (Table 2 and
+Appendix C) and committed, in advance, to adding DEQ's planned second
+near-road site under the same rules if it went live before Sept 11. The
+DEQ 2026 network plan (pp. 17, 20, 38) shows it did: NO2 sampling started
+Sept 1 2025. The three sites, coordinates from the EPA AQS site file
+(aqs_sites.csv, WGS84), pulled Sept 2 2026:
 
   SEL  Portland SE Lafayette, AQS 41-051-0080, 45.4966 -122.6029
-       (5824 SE Lafayette St; NCore, urban scale, hourly NO2 since 1984).
-  TBC  Portland Near Roadway, AQS 41-067-0005, Tualatin
-       (6745 SW Bradbury Ct, 27 m from I-5 at milepost 290.14; microscale,
-       hourly NO2 since 2015). The DEQ table prints latitude 45.8992, which
-       is Woodland WA and contradicts the site's own address, county, and
-       milepost; the coordinate used here (45.3840 -122.7470) is derived
-       from the street address and milepost. MP 290.14 places the monitor
-       NORTH of the I-205 rejoin (exit 288) and SOUTH of the I-405 rejoin,
-       so the model expects this stretch to keep I-405-detoured through
-       traffic and lose only the I-205-diverted share.
+       (5824 SE Lafayette St; NCore, neighborhood scale, hourly NO2 since
+       1984). AQS agrees with the Appendix C coordinate to 4 decimals.
+  TBC  Tualatin Bradbury Court, AQS 41-067-0005 (6745 SW Bradbury Ct, 27 m
+       from I-5 at milepost 290.14; middle scale, near-road, since 2014).
+       The DEQ 2023 table printed latitude 45.8992 (Woodland WA), so
+       Appendix C used an address-and-milepost-derived 45.3840 -122.7470.
+       EPA AQS gives 45.3992 -122.7455, 1.7 km north, still between the
+       I-205 rejoin (exit 288) and the I-405 rejoin, so the traffic
+       composition past the monitor is the same either way. The registered
+       coordinate is kept as the registered prediction; the AQS coordinate
+       is computed beside it as a robustness check, labelled "@AQS".
+  PCR  Portland N Commercial Ave & Russell St, AQS 41-051-0088,
+       45.540449 -122.670901 (middle scale, near-road, "2nd Near-roadway
+       site", hourly NO2 since Sept 1 2025). It sits beside I-5 in Lower
+       Albina, INSIDE the closed I-405-to-I-84 stretch, so unlike the other
+       two it is next to the closed carriageway itself. Added Sept 2 2026,
+       nine days before the closure and before any closure-period data.
 
 For each monitor this reads the fwrq campaign's per-segment parquets (all
 159k edges, both arms, 8 paired seeds) and computes closed-minus-open paired
@@ -49,6 +60,11 @@ RADIUS_M = 500.0       # a-priori selection radius around each monitor
 MONITORS = {
     "SEL 41-051-0080": (45.4966, -122.6029),
     "TBC 41-067-0005": (45.3840, -122.7470),
+    # Added Sept 2 2026 (Appendix C addendum), before any closure-period data.
+    "PCR 41-051-0088": (45.540449, -122.670901),
+    # Robustness only, not the registered prediction: TBC at its EPA AQS
+    # coordinate (see the docstring for the 1.7 km discrepancy).
+    "TBC 41-067-0005 @AQS": (45.3992, -122.7455),
 }
 
 
@@ -63,7 +79,11 @@ def _haversine_m(lat1, lon1, lat2, lon2):
 
 def edge_sets(G, lat, lon):
     """Edges within RADIUS_M of the point (by edge-midpoint distance), as
-    three sets: all, I-5 mainline, and SB-only I-5 mainline."""
+    four sets: all, I-5 mainline, SB-only I-5 mainline, and everything that
+    is not I-5 mainline (the surface streets and ramps that pick up detour
+    traffic; added Sept 2 2026 with the PCR monitor, where the freeway
+    losing its SB flow and the local streets gaining it sit within the
+    same 500 m)."""
     near = set()
     for u, v, k in G.edges(keys=True):
         mlat = 0.5 * (float(G.nodes[u]["y"]) + float(G.nodes[v]["y"]))
@@ -74,7 +94,7 @@ def edge_sets(G, lat, lon):
     near_i5 = near & i5
     near_i5_sb = set(generate._directional_subset(G, sorted(near_i5), "S")) \
         if near_i5 else set()
-    return near, near_i5, near_i5_sb
+    return near, near_i5, near_i5_sb, near - i5
 
 
 def paired(data_dir, edge_set, col):
@@ -106,9 +126,9 @@ def main():
 
     results = {}
     for name, (lat, lon) in MONITORS.items():
-        near, near_i5, near_i5_sb = edge_sets(G, lat, lon)
+        near, near_i5, near_i5_sb, near_other = edge_sets(G, lat, lon)
         sets = [("all edges", near), ("I-5 mainline", near_i5),
-                ("I-5 mainline SB", near_i5_sb)]
+                ("I-5 mainline SB", near_i5_sb), ("non-I-5 edges", near_other)]
         print(f"\n{name} ({lat}, {lon}), {RADIUS_M:.0f} m radius: "
               f"{len(near)} edges, {len(near_i5)} I-5 mainline, "
               f"{len(near_i5_sb)} SB")

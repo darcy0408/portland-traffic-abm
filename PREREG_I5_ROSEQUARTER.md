@@ -1589,3 +1589,113 @@ instrument validation, never as a standalone finding. The instrument's
 measured resolution limit is itself a result: October can distinguish
 50% and 75% compliance from free rerouting, but not 25% from none.
 
+
+## Appendix C addendum (2026-09-02): the second near-road monitor is live, added under the registered rules
+
+Nothing above changes. Appendix C committed in advance: "If the second
+near-road site DEQ has planned for the CBSA becomes active before Sept 11,
+it is added under these same rules before any during-closure data is
+seen." It is active. The Oregon DEQ 2026 Annual Ambient Criteria Pollutant
+Air Monitoring Network Plan (pp. 17, 20 and 38) lists "Portland I-5 N.
+Commercial and Russell" (site code PCR, AQS 41-051-0088) as the CBSA's
+"2nd Near-roadway site", middle scale, near-road purpose, NO2 start date
+09/01/2025, with the note "sampling started in the fall of 2025".
+Appendix C's "exactly two regulatory NO2 monitors" was correct for the
+2023 plan it cited and is superseded as of fall 2025; the proceedings
+chapter and the SRC abstract cite the same 2023 plan and are dated
+accordingly. This addendum is registered nine days before the closure and
+before any closure-period monitor data exists.
+
+### Site and geometry
+
+Coordinates are from the EPA AQS site file (aqs_sites.csv, WGS84, pulled
+Sept 2 2026): 45.540449, -122.670901, "N Commercial Ave and N Russell St",
+site established 2025-08-21. The monitor sits beside I-5 in Lower Albina,
+INSIDE the closed I-405-to-I-84 stretch: the first closed southbound
+mainline edge of the frozen span (40382443 -> 40397036, 536 m) has its
+midpoint 71 m from the monitor, and its end nodes lie 225 m and 320 m
+away. N Commercial Ave runs along the east side of the freeway, so the
+nearer carriageway is the northbound one, which the closure leaves
+untouched; the closed southbound carriageway is the far side of the same
+right-of-way. The model has no dispersion, so that geometry is stated, not
+modeled, and it is one reason the prediction below is direction-only.
+
+The same AQS pull gives the Tualatin near-road site (41-067-0005) a
+coordinate of 45.3992, -122.7455, which is 1.7 km north of Appendix C's
+address-and-milepost-derived 45.3840, -122.7470 (the DEQ 2023 table's own
+latitude was a misprint, as Appendix C records). Both points lie between
+the I-205 rejoin (exit 288) and the I-405 rejoin, so the traffic
+composition past the monitor is the same either way. The registered
+coordinate stays the registered prediction; the AQS coordinate is computed
+beside it as a robustness check, labelled "@AQS" in the script and the
+banked JSON.
+
+### Predictions (same script, same rules, same campaign runs)
+
+src/rosequarter_monitors.py was extended with the PCR site and a fourth
+edge set, non-I-5 edges (the surface streets and ramps within the same
+500 m, which is where the closed carriageway's traffic goes), and rerun on
+the Appendix A campaign's saved per-segment results (fwrq, both arms, 8
+paired seeds, no simulation). The two registered sites reproduce Appendix
+C's banked values exactly: every SEL and TBC metric in
+rosequarter_monitors.json is identical before and after the extension,
+and the new rows are additions. The a-priori radius (500 m) and selection
+rule are unchanged.
+
+PCR 41-051-0088, 500 m radius: 195 edges, 4 I-5 mainline (2 SB, 2 NB),
+191 non-I-5. Closed minus open, paired by seed:
+
+| edge set | metric | open mean | change | signs | t |
+|---|---|---|---|---|---|
+| I-5 mainline SB | throughput (veh/h) | 1,581 | -99.96% (sd 0.05) | 8/8 down | >1,000 |
+| I-5 mainline SB | NOx (g/h) | 124.9 | -99.99% (sd 0.01) | 8/8 down | >1,000 |
+| I-5 mainline, both directions | throughput | 2,386 | -66.4% (sd 1.5) | 8/8 down | 122 |
+| I-5 mainline, both directions | NOx | 157.4 | -77.8% (sd 3.8) | 8/8 down | 58 |
+| non-I-5 edges (surface streets, ramps) | throughput | 2,831 | +46.0% (sd 6.0) | 8/8 UP | 21.5 |
+| non-I-5 edges (surface streets, ramps) | NOx | 114.7 | +10.1% (sd 23.5) | 4/8 | 1.2, null |
+| all edges within 500 m | throughput | 5,218 | -5.5% (sd 2.4) | 8/8 down | 6.5 |
+| all edges within 500 m | NOx | 272.2 | -41.7% (sd 7.1) | 8/8 down | 16.7 |
+
+Registered prediction at PCR, direction only, under Appendix C's rules
+(the monitor compared against itself, before vs during, the closure's
+first days preferred, same-weekday baselines outside Labor Day week): a
+DECREASE in traffic-driven NO2. The model's traffic NOx within 500 m
+falls by two fifths in 8 of 8 seeds, because the southbound carriageway
+beside the monitor goes to zero while the surface streets within the
+same radius take on nearly half again their traffic (8 of 8 seeds) with
+no sign-consistent change in their NOx. Unlike Tualatin and SE
+Lafayette, this is not a null or near-null prediction: PCR is the one
+monitor where the model expects a change large enough to show above
+meteorological variance, if the southbound carriageway contributes
+materially to what the monitor reads.
+
+Stated in advance, so it cannot be explained away afterwards, what a
+NON-decrease at PCR would mean: (1) the monitor's near-road increment
+comes mostly from the untouched northbound carriageway and the urban
+background, with the far-side southbound lanes a minor contributor (the
+geometry above); (2) construction equipment working inside the closed
+span, which is the closure's purpose, is an NOx source the model does not
+contain; (3) the single local-access lane that stays open is unmodeled;
+(4) the detour traffic the model puts onto the surface streets within
+500 m (N Interstate Ave, the N Vancouver / N Williams couplet, the
+Broadway-Weidler couplet; +46%, 8 of 8 seeds) runs slow and close to the
+monitor, and the model's null on its NOx may be wrong in the direction
+of more. Any of these is reported as a limitation confirmed, not as
+noise, and the PORTAL traffic scoring of section 5 is unaffected.
+
+TBC @AQS robustness: at the AQS coordinate the registered small-decrease
+prediction holds in direction. All traffic within 500 m: -1.05% (sd 0.31),
+8/8 down, t = 9.6. SB I-5 throughput: -5.16% (sd 1.37), 8/8 down,
+t = 10.6, against the registered -2.55% (sd 1.02) at the registered
+coordinate; the two points select different mainline edges (4 vs 2),
+which is the whole difference. NOx is null at either coordinate. MON1 and
+MON2 stand as registered; the AQS rows are banked beside them.
+
+### Protocol
+
+PCR joins the Appendix C protocol unchanged: hourly NO2 from the public
+DEQ/EPA records, each monitor against itself, direction of change only,
+absolute ppb never compared to the model. The ordering of evidence is
+also unchanged: PORTAL traffic remains the primary scoring; the monitors
+remain a secondary, direction-only check, now with one site where the
+predicted direction is a large decrease rather than a null.
