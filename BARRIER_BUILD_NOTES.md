@@ -87,19 +87,44 @@ unshielded neighborhoods. Barrier physics is what makes that visible.
    Step-1 parquet gained road_x/road_y (the snap foot, the calibration source
    point); rerun with unchanged snap stats. Population-centroid receivers move
    to step 3 where they belong (they need the run surfaces anyway).
-3. [ ] Barrier-aware surface on the saved open/closed Rose Quarter runs
-   (Sept 6-9), banked with a dated commit. INPUTS LOCATED (Sept 2): use the
-   fwrqn campaign at C:/dev/pta-realism/data/processed/
-   (fwrqn_{open,rosequarter}_s{seed}_segments.parquet, 8 paired seeds x 2
-   arms, complete, schema u/v/key/value/nox_g/throughput, 159,425 segments).
-   fwrqn is the non-work-demand arm (LODES work + retail/service trips,
-   mixed fleet, 16,500 vehicles) and ran on the EXACT prereg metro20k graph
-   (md5 6707dd..., per the Aug 15 ledger note), so the step-1 wall lines
-   align with it with no reprojection. Chosen over the base fwrq campaign
-   because base per-segment parquets live on Orca only and fwrqn is the
-   richer demand model; paired seeds satisfy the chaos-floor rule for
-   far-field claims. Receivers = block-group population centroids
-   (landuse_bg.parquet, 1,003 block groups).
+3. [x] Barrier-aware surface on the saved open/closed Rose Quarter runs,
+   DONE Sept 2 (ahead of the Sept 6-9 slot), src/barrier_surface.py. Inputs
+   as located: the fwrqn campaign at C:/dev/pta-realism/data/processed/
+   (8 paired seeds x 2 arms, non-work demand, mixed fleet, 16,500 vehicles,
+   on the exact prereg metro20k graph, md5 verified), receivers = the 1,003
+   block-group population centroids (landuse_bg.parquet). Construction:
+   912,628 point sources (25 m spacing) from 159,425 segments, 7,120,543
+   source-receiver pairs within 1.5 km, 5.2% wall-blocked with median band
+   transmission 0.20 (about -7 dB, consistent with the step-2 calibrated
+   first-row IL once paths run oblique and long). Everything energy-domain,
+   source-side only, absolute dB never citable; the vectorized CNOSSOS and
+   wall physics are verified element-by-element against the scalar
+   references on every run. Geometry cached (barrier_pairs.npz) since it is
+   identical across all 16 runs.
+   THE BANKED PREDICTION (all numbers = median across the 8 paired seeds):
+   - Network-wide the closure is nearly noise-neutral at centroids (median
+     -0.02 dB, IQR -0.06 to -0.00): the freeway loss and the detour gains
+     nearly cancel in log units. The story is redistribution, as with NO2.
+   - Redistribution: 30,689 residents up >= 0.5 dB and 38,385 down >= 0.5 dB
+     (both groups unanimous across all 8 seeds); 21,312 down >= 1 dB, 1,207
+     up >= 1 dB. Largest increase +1.97 dB (BG 410510039022, 8/8 seeds),
+     largest relief -2.40 dB (BG 410510038023). Relief traces I-5; the
+     increases sit on the inner-eastside detour band.
+   - The walls' fingerprint (the testable part): the barrier-aware and
+     barrier-blind models agree wherever wall shielding is zero (wedge 0)
+     and disagree by up to ~1.1 dB where walls shield the receiver.
+     Two named cases: BG 410510039022 (shield 1.1 dB) rises +1.97 dB
+     aware vs +1.54 blind, the wall blocks the freeway but not the new
+     detour traffic, so the increase lands harder than a blind model says;
+     BG 410510038022 (shield 3.3 dB) falls -2.04 aware vs -0.89 blind, the
+     wall had already eaten the freeway, so its baseline is local-street
+     noise and the closure quiets exactly that.
+   - Honesty items: recovered speeds capped at 130 km/h (CNOSSOS validity
+     ceiling; 13-25 short segments per run, the Jul 4 start-segment
+     attribution limitation; uncapped, one 2 m segment at 658 km/h carried
+     84% of open-s2024's source energy). Cars-only source model, no ground
+     effect or air absorption, single diffraction, flat terrain: all
+     inherited v1 limits, listed in the module docstring.
 
 ## Reuse, do not reinvent
 
