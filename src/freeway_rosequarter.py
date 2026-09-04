@@ -75,6 +75,22 @@ STACK_COMPLIANCE = False  # set by --compliance in main(): the signed-detour
                           # generate.build_detour_context). Every other arm
                           # models drivers who all ignore the signage; this
                           # one models the plan.
+STACK_REROUTE = False    # set by --reroute in main(): the en-route rerouting
+                         # arm (prefix fwrqe, prereg Appendix T). The fwrqi
+                         # stack and the FULL closure verbatim; the only
+                         # mechanism change is config.REROUTE_ENABLED on the
+                         # "on" cells. DISCLOSED: the C1 mechanism FAILED its
+                         # registered acceptance gate (ledger RR35.1, Burnside
+                         # 1.88x vs the 2x bar, replicated in the combined
+                         # arm), so this arm is exploratory, never the citable
+                         # model, and every fwrqe citation carries that
+                         # disclosure. Four cells (off/on x open/closed): the
+                         # OFF pair reruns fwrqi with measurement-only stuck
+                         # instrumentation and must reproduce the banked fwrqi
+                         # summaries EXACTLY (registered identity check),
+                         # because the fwrq/fwrqi campaigns never saved the
+                         # stuck_sum column the mechanism's headline metric
+                         # (stuck vehicle-hours) needs.
 
 # The registered compliance levels. The share has no data behind it, so three
 # a-priori levels bracket it rather than one guess carrying the arm; the open
@@ -108,29 +124,46 @@ TRACK_ROUTES = ("I 5", "I 405", "I 205", "OR 213", "OR 99E", "US 26")
 
 
 def tasks():
-    # every entry is (arm, seed, share); share is None outside the compliance
-    # stack and for its shared open arm. The compliance table is one flat
-    # 32-task array (8 open + 8 per level) so the three levels never race to
-    # write the same open summary from concurrent SLURM arrays.
+    # every entry is (arm, seed, extra); extra is a compliance share (float,
+    # fwrqc closed tasks), a rerouting cell ("off"/"on", every fwrqe task),
+    # or None. The compliance table is one flat 32-task array (8 open + 8 per
+    # level) so the three levels never race to write the same open summary
+    # from concurrent SLURM arrays.
     if STACK_COMPLIANCE:
         t = [("open", seed, None) for seed in SEEDS]
         for share in COMPLIANCE_SHARES:
             t += [("rosequarter", seed, share) for seed in SEEDS]
         return t
+    if STACK_REROUTE:
+        # four cells (prereg Appendix T), one flat 32-task array. The OFF
+        # pair runs first (tasks 0-15) so its registered identity check
+        # against the banked fwrqi summaries can run as soon as the first
+        # half of the array lands.
+        t = []
+        for cell in ("off", "on"):
+            t += [(arm, seed, cell) for arm in ARMS for seed in SEEDS]
+        return t
     return [(arm, seed, None) for arm in ARMS for seed in SEEDS]
 
 
-def run_name(arm, seed, share=None):
-    if share is not None:
+def run_name(arm, seed, extra=None):
+    # `extra` is the task tuple's third slot: a compliance share (float), a
+    # rerouting cell ("off"/"on"), or None
+    if STACK_REROUTE:
+        # the ON pair carries the plain prefix (fwrqe_*); the OFF pair, the
+        # instrumented fwrqi reruns, is fwrqeoff_* so the two cells can never
+        # collide on filenames
+        return f"{PREFIX}{'off' if extra == 'off' else ''}_{arm}_s{seed}"
+    if extra is not None:
         # closed compliance task: the level is part of the run identity
         # (fwrqc25 / fwrqc50 / fwrqc75); the shared open arm stays fwrqc_open
-        return f"{PREFIX}{int(round(share * 100)):02d}_{arm}_s{seed}"
+        return f"{PREFIX}{int(round(extra * 100)):02d}_{arm}_s{seed}"
     return f"{PREFIX}_{arm}_s{seed}"
 
 
-def summary_path(arm, seed, share=None):
+def summary_path(arm, seed, extra=None):
     return os.path.join(config.PROCESSED_DIR,
-                        f"{run_name(arm, seed, share)}_summary.json")
+                        f"{run_name(arm, seed, extra)}_summary.json")
 
 
 def _load_metro_graph():
@@ -139,7 +172,8 @@ def _load_metro_graph():
     # (its lane clamp needs the real lane tags); every other arm keeps the
     # original cache so the earlier registered arms stay exactly reproducible
     name = ("graph_metro20k_lanes.graphml"
-            if (STACK_IMPROVED or STACK_ACCESS or STACK_COMPLIANCE)
+            if (STACK_IMPROVED or STACK_ACCESS or STACK_COMPLIANCE
+                or STACK_REROUTE)
             else "graph.graphml")
     graph_file = os.path.join(config.NETWORK_DIR, name)
     if not os.path.exists(graph_file):
@@ -221,6 +255,25 @@ def check():
         print(f"detour guards OK: via {ctx['via']} on the I-405 mainline, "
               f"marker edge {ctx['marker']}, registered shares "
               f"{COMPLIANCE_SHARES}")
+        return
+    if STACK_REROUTE:
+        # Reroute variant: build the reroute context under the exact flags
+        # run_task sets for an "on" cell (prepare_network first: the
+        # context's queue-discharge headway needs the resolved n_lanes), so
+        # a broken graph or constant fails here, before 32 tasks are queued.
+        for k in REALISM_FLAGS:
+            setattr(config, k, True)
+        config.LANES_REAL = True
+        config.LANES_ENABLED = False
+        config.REROUTE_ENABLED = True
+        config.REROUTE_STUCK_S = 120.0
+        config.REROUTE_COOLDOWN_S = 300.0
+        config.REROUTE_MAX_PER_STEP = 20
+        generate.prepare_network(G)
+        ctx = generate.build_reroute_context(G)
+        print(f"reroute context OK: {len(ctx['t0']):,} edges weighted; "
+              f"registered constants stuck 120 s / cooldown 300 s / cap 20 "
+              f"per step")
         return
     if not STACK_ACCESS:
         return
@@ -349,10 +402,10 @@ def selftest():
 
 
 def run_task(idx):
-    arm, seed, share = tasks()[idx]
-    out = summary_path(arm, seed, share)
+    arm, seed, extra = tasks()[idx]
+    out = summary_path(arm, seed, extra)
     if os.path.exists(out):
-        print(f"task {idx} ({arm}, seed {seed}, share {share}) already done "
+        print(f"task {idx} ({arm}, seed {seed}, extra {extra}) already done "
               f"-> {out}")
         return
 
@@ -360,7 +413,7 @@ def run_task(idx):
 
     # the seed is what this experiment varies, so set it before anything draws
     config.RANDOM_SEED = seed
-    config.RUN_NAME = run_name(arm, seed, share)
+    config.RUN_NAME = run_name(arm, seed, extra)
 
     # every stack flag EXPLICITLY True or False (the F6 rule): a task must
     # never inherit these from a config default or a reused interpreter.
@@ -369,7 +422,7 @@ def run_task(idx):
     # ONLY in the closed-arm graph surgery.
     for k in REALISM_FLAGS:
         setattr(config, k, STACK_REALISM or STACK_IMPROVED or STACK_ACCESS
-                or STACK_COMPLIANCE)
+                or STACK_COMPLIANCE or STACK_REROUTE)
     # absolute grams are cited under the mixed fleet (the live setting, gate
     # G2); explicit for the same reason as the stack flags
     config.FLEET_MIXED = True
@@ -381,10 +434,21 @@ def run_task(idx):
     # config defaults it True, so the OTHER arms must pin it False to
     # reproduce their registrations); the frictionless virtual-lane model
     # and the two mentor-ungated mechanisms are explicitly OFF everywhere
-    config.LANES_REAL = STACK_IMPROVED or STACK_ACCESS or STACK_COMPLIANCE
+    config.LANES_REAL = (STACK_IMPROVED or STACK_ACCESS or STACK_COMPLIANCE
+                         or STACK_REROUTE)
     config.LANES_ENABLED = False
     config.MERGE_ENTRY_IMPROVED = False
-    config.REROUTE_ENABLED = False
+    # en-route rerouting: ON only for the fwrqe "on" cells (prereg Appendix
+    # T), pinned explicitly False everywhere else (the F6 rule). Constants
+    # pinned to the registered values whenever the fwrqe stack runs, so a
+    # drifted config default can never change the arm's identity; they are
+    # inert on the "off" cells (flag off skips the pass entirely, the
+    # gate-verified bitwise identity).
+    config.REROUTE_ENABLED = bool(STACK_REROUTE and extra == "on")
+    if STACK_REROUTE:
+        config.REROUTE_STUCK_S = 120.0
+        config.REROUTE_COOLDOWN_S = 300.0
+        config.REROUTE_MAX_PER_STEP = 20
     # signed-detour compliance: ON only for the fwrqc CLOSED tasks, and pinned
     # explicitly False for every other task (the F6 rule), so no arm can
     # inherit it. The open arm runs with it off, which is what makes the
@@ -393,7 +457,7 @@ def run_task(idx):
     config.DETOUR_COMPLIANCE_ENABLED = bool(STACK_COMPLIANCE
                                             and arm != "open")
     if config.DETOUR_COMPLIANCE_ENABLED:
-        config.DETOUR_COMPLIANCE_SHARE = share
+        config.DETOUR_COMPLIANCE_SHARE = extra
 
     removed = []
     if arm != "open":
@@ -412,9 +476,18 @@ def run_task(idx):
     # fwrqc closed tasks so the saved summary, not just the task log, records
     # the realized share (single-source-of-truth rule)
     dstats = {} if config.DETOUR_COMPLIANCE_ENABLED else None
+    # fwrqe instrumentation (all 32 tasks): stuck_stats so the saved parquet
+    # carries the per-segment stuck_sum column (the fwrq/fwrqi campaigns
+    # never opted in, which is why the arm's "off" cells exist at all), and
+    # reroute_stats on the "on" cells so the promised re-plan counts land in
+    # the saved summary (the RR35 lesson), not only in the task log
+    sstats = {} if STACK_REROUTE else None
+    rstats = {} if config.REROUTE_ENABLED else None
     totals, nox, thru = generate.run_simulation(G, use_checkpoint=False,
-                                                detour_stats=dstats)
-    generate.save_results(totals, nox, thru)
+                                                detour_stats=dstats,
+                                                stuck_stats=sstats,
+                                                reroute_stats=rstats)
+    generate.save_results(totals, nox, thru, stuck_stats=sstats)
 
     # Compact summary so the readout needs only these files, not the parquets.
     # Per-edge values for the tracked mainlines let the readout do span-level
@@ -429,14 +502,15 @@ def run_task(idx):
                        for u, v, k in keys}
     rec = {
         "arm": arm, "seed": seed,
-        "stack": ("compliance" if STACK_COMPLIANCE else
+        "stack": ("reroute" if STACK_REROUTE else
+                  "compliance" if STACK_COMPLIANCE else
                   "access" if STACK_ACCESS else
                   "improved" if STACK_IMPROVED else
                   "realism" if STACK_REALISM else "base"),
         "nonwork": STACK_NONWORK,
         # compliance arm only: the registered level this closed task ran at
         # (None on the shared open arm) and the realized whole-run counts
-        "share": share,
+        "share": (extra if STACK_COMPLIANCE else None),
         "detour_stats": dstats or {},
         "fleet": "mixed",
         "n_vehicles": config.N_VEHICLES, "n_steps": config.N_STEPS,
@@ -449,6 +523,13 @@ def run_task(idx):
         "network_throughput": float(sum(thru.values())),
         "routes": routes,
     }
+    if STACK_REROUTE:
+        # cell identity plus the instrumented network stuck total, so the
+        # readout and the Appendix T stuck-time grading need only these
+        # summaries, never the parquets (compact-summary rule above)
+        rec["reroute_on"] = (extra == "on")
+        rec["reroute_stats"] = rstats or {}
+        rec["stuck_veh_h"] = sum(sstats["stuck_sum"].values()) / 3600.0
     with open(out, "w") as f:
         json.dump(rec, f)
     print(f"[{config.RUN_NAME}] summary -> {out}")
@@ -565,9 +646,132 @@ def _readout_compliance():
         _print_route_table(summaries)
 
 
+def _readout_reroute():
+    """Four-cell readout for the fwrqe campaign (prereg Appendix T), led by
+    the registered OFF-pair identity check: rerouting off plus measurement-
+    only stuck instrumentation must reproduce the banked fwrqi summaries
+    EXACTLY, per seed, on BOTH arms (network totals and every tracked
+    route). A mismatch means the environment drifted since Appendix K and
+    voids the campaign; this readout refuses to grade past it."""
+    recs = {}
+    for arm, seed, cell in tasks():
+        p = summary_path(arm, seed, cell)
+        if not os.path.exists(p):
+            continue
+        with open(p) as f:
+            rec = json.load(f)
+        if (rec.get("stack") != "reroute"
+                or rec.get("reroute_on") != (cell == "on")):
+            raise SystemExit(f"{p} records stack={rec.get('stack')!r} "
+                             f"reroute_on={rec.get('reroute_on')!r}; wrong "
+                             f"file for the {cell!r} cell")
+        recs[(cell, arm, seed)] = rec
+    have = {(cell, arm): sum(1 for (c, a, _s) in recs if (c, a) == (cell, arm))
+            for cell in ("off", "on") for arm in ARMS}
+    print("stack: reroute (fwrqe, prereg Appendix T; the C1 mechanism "
+          "failed its registered\nacceptance gate, ledger RR35.1, and runs "
+          "here as a disclosed exploratory arm)")
+    print("summaries found: " +
+          ", ".join(f"{cell}/{arm} {have[(cell, arm)]}/{len(SEEDS)}"
+                    for cell in ("off", "on") for arm in ARMS))
+
+    # Registered integrity check: OFF-pair identity with the banked fwrqi
+    # summaries, both arms, per seed (same fields as the fwrqc open check).
+    compared, mismatches = 0, 0
+    for seed in SEEDS:
+        for arm in ARMS:
+            rec = recs.get(("off", arm, seed))
+            q = os.path.join(config.PROCESSED_DIR,
+                             f"fwrqi_{arm}_s{seed}_summary.json")
+            if rec is None or not os.path.exists(q):
+                continue
+            with open(q) as f:
+                ref = json.load(f)
+            compared += 1
+            same = (rec["network_nox_g"] == ref["network_nox_g"]
+                    and rec["network_throughput"] == ref["network_throughput"]
+                    and rec["routes"] == ref["routes"])
+            if not same:
+                mismatches += 1
+                print(f"  INTEGRITY FAIL {arm} seed {seed}: fwrqeoff "
+                      f"differs from fwrqi")
+    if compared:
+        print(f"off-pair identity vs fwrqi: {compared - mismatches}/"
+              f"{compared} arm-seeds match exactly")
+        if mismatches:
+            raise SystemExit("registered integrity check FAILED; do not "
+                             "cite this campaign until resolved")
+    else:
+        print("off-pair identity vs fwrqi: no fwrqi summaries in this "
+              "PROCESSED_DIR, not checked here")
+
+    # Re-plan accounting (registered reporting duty: the per-step cap is a
+    # compute budget, not physics, so whether it bound is always reported).
+    capped = 0
+    for cell, arm, seed in sorted(recs):
+        rs = recs[(cell, arm, seed)].get("reroute_stats") or {}
+        if not rs:
+            continue
+        capped += 1 if rs.get("n_cap_steps") else 0
+        print(f"  re-plans {arm} s{seed}: {rs['n_reroutes']:,} ok, "
+              f"{rs['n_failed']:,} no-path, cap bound on "
+              f"{rs['n_cap_steps']:,} step(s)")
+    if capped:
+        print(f"NOTE: the per-step compute budget bound in {capped} run(s); "
+              f"this caveat travels with any cited fwrqe number")
+
+    # Paired route tables, closed - open within each cell. The OFF table
+    # should reproduce Appendix L's fwrqi numbers; the ON table is T3/T4.
+    for cell, label in (("off", "OFF pair (instrumented fwrqi rerun)"),
+                        ("on", "ON pair (en-route rerouting)")):
+        summaries = {(arm, seed): recs[(cell, arm, seed)]
+                     for arm in ARMS for seed in SEEDS
+                     if (cell, arm, seed) in recs}
+        n = {a: sum(1 for (arm, _s) in summaries if arm == a) for a in ARMS}
+        print(f"\n{'=' * 72}\nREROUTE {label}: paired per-seed differences "
+              f"(closed - open, same seed)\n{'=' * 72}")
+        if not n or min(n.values()) < 2:
+            print("  fewer than 2 paired seeds; skipping")
+            continue
+        _print_route_table(summaries)
+
+    # Stuck vehicle-hours, rerouting ON minus OFF per seed and arm: the
+    # Appendix T primary (T1, closed) and replication (T2, open), graded by
+    # the standing bar with the registered direction DOWN.
+    print(f"\n{'=' * 72}\nSTUCK VEHICLE-HOURS: paired per-seed differences "
+          f"(rerouting on - off, same seed)\n{'=' * 72}")
+    for arm, tag in (("rosequarter", "T1 closed-arm"),
+                     ("open", "T2 open-arm")):
+        rel = []
+        for seed in SEEDS:
+            a = recs.get(("on", arm, seed))
+            b = recs.get(("off", arm, seed))
+            if (not a or not b or a.get("stuck_veh_h") is None
+                    or not b.get("stuck_veh_h")):
+                continue
+            rel.append(100.0 * (a["stuck_veh_h"] - b["stuck_veh_h"])
+                       / b["stuck_veh_h"])
+        if len(rel) < 2:
+            print(f"{tag}: fewer than 2 paired seeds; skipping")
+            continue
+        r = np.array(rel)
+        neg = int((r < 0).sum())
+        down_unanimous = neg == len(r)
+        t = (abs(r.mean()) / (r.std(ddof=1) / np.sqrt(len(r)))
+             if r.std(ddof=1) > 0 else float("inf"))
+        verdict = ("SUPPORTED" if down_unanimous and t > 3
+                   else "weak" if down_unanimous else "NOT SUPPORTED")
+        print(f"{tag}: mean {r.mean():+.2f}% sd {r.std(ddof=1):.2f} "
+              f"(min {r.min():+.2f} max {r.max():+.2f}), "
+              f"down {neg}/{len(r)}, t={t:.1f} -> {verdict} "
+              f"(registered direction: DOWN)")
+
+
 def readout():
     if STACK_COMPLIANCE:
         return _readout_compliance()
+    if STACK_REROUTE:
+        return _readout_reroute()
     summaries = {}
     for arm, seed, share in tasks():
         p = summary_path(arm, seed, share)
@@ -600,7 +804,7 @@ def readout():
 
 def main():
     global STACK_REALISM, STACK_NONWORK, STACK_IMPROVED, STACK_ACCESS, \
-        STACK_COMPLIANCE, PREFIX
+        STACK_COMPLIANCE, STACK_REROUTE, PREFIX
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--check", action="store_true")
@@ -631,13 +835,19 @@ def main():
                          "but each through trip follows ODOT's official "
                          "I-405 detour with a registered probability, three "
                          "levels 25/50/75%%, shared open arm)")
+    ap.add_argument("--reroute", action="store_true",
+                    help="run/readout the en-route rerouting arm (fwrqe, "
+                         "prereg Appendix T: the fwrqi stack and full "
+                         "closure verbatim, four cells off/on x open/closed; "
+                         "DISCLOSED exploratory arm, the C1 mechanism failed "
+                         "its registered acceptance gate, ledger RR35.1)")
     args = ap.parse_args()
 
     if sum([args.realism, args.nonwork, args.improved, args.accesslane,
-            args.compliance]) > 1:
+            args.compliance, args.reroute]) > 1:
         raise SystemExit("--realism / --nonwork / --improved / --accesslane "
-                         "/ --compliance are distinct registered arms; "
-                         "pick one")
+                         "/ --compliance / --reroute are distinct registered "
+                         "arms; pick one")
     if args.selftest and not args.compliance:
         raise SystemExit("--selftest verifies the compliance machinery; "
                          "add --compliance")
@@ -656,14 +866,19 @@ def main():
     if args.compliance:
         STACK_COMPLIANCE = True
         PREFIX = "fwrqc"
+    if args.reroute:
+        STACK_REROUTE = True
+        PREFIX = "fwrqe"
 
     if args.check:
         check()
     elif args.selftest:
         selftest()
     elif args.list:
-        for i, (arm, seed, share) in enumerate(tasks()):
-            lvl = f"  share {share:.2f}" if share is not None else ""
+        for i, (arm, seed, extra) in enumerate(tasks()):
+            lvl = ("" if extra is None else
+                   f"  reroute {extra}" if isinstance(extra, str) else
+                   f"  share {extra:.2f}")
             print(f"{i:3d}  {arm:>12s}  seed {seed}{lvl}")
     elif args.count:
         print(len(tasks()))

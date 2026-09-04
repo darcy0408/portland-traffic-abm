@@ -1249,7 +1249,11 @@ def build_reroute_context(G):
           f"(compute budget, not physics), cooldown "
           f"{config.REROUTE_COOLDOWN_S:.0f} s, queue delay at "
           f"{config.IDM_T:.1f} s saturation headway")
-    return {"t0": t0, "headway": headway, "n_reroutes": 0, "n_failed": 0}
+    return {"t0": t0, "headway": headway, "n_reroutes": 0, "n_failed": 0,
+            # steps on which more cars qualified than the per-step compute
+            # budget allowed (REROUTE_MAX_PER_STEP is a budget, not physics;
+            # the fwrqe campaign must report whether it ever bound)
+            "n_cap_steps": 0}
 
 
 def build_detour_context(G):
@@ -1348,6 +1352,10 @@ def _reroute_pass(vehicles, by_edge, reroute_ctx, G, t):
         return
     # longest-stuck first; vehicle id breaks ties so the cap is deterministic
     cands.sort(key=lambda v: (-v["stuck_s"], v["id"]))
+    if len(cands) > config.REROUTE_MAX_PER_STEP:
+        # the compute budget bound this step: some qualifying cars wait for a
+        # later step. Counted so campaigns can report it (prereg Appendix T)
+        reroute_ctx["n_cap_steps"] += 1
     del cands[config.REROUTE_MAX_PER_STEP:]
 
     occ = {key: len(group) for key, group in by_edge.items()}
@@ -1992,7 +2000,8 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
 
 
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
-                   speed_stats=None, stuck_stats=None, detour_stats=None):
+                   speed_stats=None, stuck_stats=None, detour_stats=None,
+                   reroute_stats=None):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
     per-segment vehicle-seconds of activity, and per-segment NOx grams.
 
@@ -2009,7 +2018,12 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     detour_stats (opt-in, the fwrqc compliance arm): pass an empty dict and it
     is filled with the whole-run compliance counts (n_eligible / n_compliant /
     n_fallback / share), so the campaign summary can record them in the saved
-    file rather than only in the task log. Same contract: pure measurement."""
+    file rather than only in the task log. Same contract: pure measurement.
+
+    reroute_stats (opt-in, the fwrqe rerouting arm): pass an empty dict and it
+    is filled with the whole-run re-plan counts (n_reroutes / n_failed /
+    n_cap_steps), the RR35 lesson again: promised counts belong in the saved
+    summary, not only in a task log. Same contract: pure measurement."""
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -2143,7 +2157,12 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
         # where most re-plans found no path is a very different story from
         # one where they all succeeded.
         print(f"  re-plans: {reroute_ctx['n_reroutes']:,} succeeded, "
-              f"{reroute_ctx['n_failed']:,} found no path")
+              f"{reroute_ctx['n_failed']:,} found no path, compute budget "
+              f"bound on {reroute_ctx['n_cap_steps']:,} steps")
+        if reroute_stats is not None:
+            reroute_stats.update(n_reroutes=reroute_ctx["n_reroutes"],
+                                 n_failed=reroute_ctx["n_failed"],
+                                 n_cap_steps=reroute_ctx["n_cap_steps"])
     if detour_ctx is not None:
         # same RR35 lesson: the compliance counts are part of the registered
         # readout (realized share vs the configured share), so they print
