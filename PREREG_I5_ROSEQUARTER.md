@@ -1699,3 +1699,139 @@ absolute ppb never compared to the model. The ordering of evidence is
 also unchanged: PORTAL traffic remains the primary scoring; the monitors
 remain a secondary, direction-only check, now with one site where the
 predicted direction is a large decrease rather than a null.
+
+## Appendix Q addendum 2 (2026-09-04): the measured logger null floor, week 1 x week 3
+
+Registered 2026-09-04, seven days before the closure and before any
+closure-period data exists. This is the dated floor addendum that M.3 rule
+5 and Appendix Q scheduled for ~Sept 4, computed under case 1 of the
+Aug 28 decision tree.
+
+### Coverage, and the rule applied (no discretion exercised)
+
+Daytime coverage per pair-day (06:00 <= Pacific hour < 20:00, status ok
+rows, one tick per hour, zero non-ok rows anywhere in the logger):
+
+| week | Tue | Wed | Thu | standing |
+|------|-----|-----|-----|----------|
+| 1: Aug 18-20 | 10 of 14 (DROPS: the logger began 08:59 PT that day) | 12 of 14 | 12 of 14 | usable pool = Aug 19-20, two days |
+| 2: Aug 25-27 | 12 of 14 | 5 of 14 (DROPS) | 6 of 14 (DROPS) | not a clean week (Aug 28 addendum) |
+| 3: Sept 1-3 | 14 of 14 | 14 of 14 | 14 of 14 | clean, three days |
+
+Every count holds on all 12 pairs identically (the logger records all 12
+pairs or none on a tick). Week 3 is clean, so case 1 governs: the floor is
+the single draw week 1 x week 3. Aug 18's drop was known before this run
+(recorded in the working log on Aug 25, with the note that the week-1 pool
+runs on Aug 19-20); the registered usable-day rules handle it out loud and
+the instrument printed the DROPPED line for every pair. Two small
+disclosures: the week-1 pool is two days against week 3's three, so this
+draw averages slightly less than October's before pool will; and the
+instrument counts Aug 27 at 6 of 14 where the Aug 28 addendum reported 5
+(one hour landed after that text was written; the day drops either way).
+
+### The instrument, run read-only
+
+`python src/rosequarter_logger_floor.py --floor --log-dir <logger clone>`,
+scorer at main fe2c893, unchanged since Appendix Q registered it (working
+copy identical to HEAD, --selftest PASS immediately before the run).
+Logger clone at its commit 601b319 (2026-09-04 17:33 UTC), CSV md5s
+recorded beside the log. Verbatim output, the selftest log, and both
+commit records are banked in analyses/2026-09-04-logger-floor/ on main.
+This is the instrument's first run on real logger data, as registered.
+
+One mechanical disclosure. The instrument's clean-week enumeration was
+committed Aug 24, before the week-2 outage, and admits any week whose
+three Tue-Thu dates are present in the data; it does not know the Aug 28
+addendum's ruling. It therefore also printed the two draws that involve
+week 2 (whose usable pool is Aug 25 alone) and a summary "FLOOR 14.43%"
+line taken over all three draws. Under the registered addendum those
+week-2 draws are not part of the floor; they are reported below under
+Appendix Q's DIAGNOSTIC label. The code was not changed: altering a
+registered instrument after seeing its output is exactly what the
+discipline forbids, and nothing needs altering, because October's --score
+takes the floor as an explicit argument (--floor-pct).
+
+### The floor (governing, single draw: Aug 19-20 vs Sept 1-3)
+
+Per-pair percent change in mean daytime travel_s, sorted by magnitude:
+
+| pair | change | pair | change |
+|------|-------:|------|-------:|
+| mlk_sb | -6.86% | i205_sb | -3.12% |
+| vanc_pdx | -6.28% | interstate_sb | -2.88% |
+| i84wb_feeder | -4.26% | ctrl_west | +1.58% |
+| i5sb_span | -3.65% | powell_wb | -1.38% |
+| ctrl_se | +3.26% | williams_nb | +0.61% |
+| i5sb_detour | -3.15% | grand_nb | +0.15% |
+
+- FLOOR T = 6.86% (mlk_sb). With Appendix J's a-priori 2x margin, the
+  October wording tiers are: at or under 6.86%, "within the measured null
+  floor, no evidence either way"; over 6.86% up to 13.72%, "direction
+  consistent, weak evidence"; over 13.72%, "clear of the null floor".
+- A pair whose October change sits at or under 6.86% takes no rank in the
+  M.3 rule 4 grading (Appendix Q's qualifier).
+- Both control pairs sit inside the floor in this draw (ctrl_se +3.26%,
+  ctrl_west +1.58%). M.3 rule 5's control requirement is applied to
+  October's own before-vs-during change; this draw shows the controls'
+  null spread is about half the floor.
+- Reported, not interpreted: 8 of the 10 graded pairs moved down (faster)
+  from mid-August to the first week of September while both far-field
+  controls moved up. A shared direction across the graded pairs inside a
+  null draw is a property of the null period, and it is exactly what the
+  control pairs and the floor exist to absorb in October.
+
+### Diagnostic draws (never govern wording)
+
+Both involve week 2, whose usable pool is the single day Aug 25:
+
+- Aug 19-20 vs Aug 25: i205_sb -14.43%, vanc_pdx -12.83%, mlk_sb -11.47%,
+  i5sb_span -9.36%, i5sb_detour -8.76%, i84wb_feeder -8.70%,
+  interstate_sb -6.39%, powell_wb -4.88%, williams_nb -3.11%,
+  grand_nb -2.35%, ctrl_se -0.87%, ctrl_west -0.66%.
+- Aug 25 vs Sept 1-3: i205_sb +13.22%, vanc_pdx +7.52%, i5sb_span +6.29%,
+  i5sb_detour +6.16%, mlk_sb +5.21%, i84wb_feeder +4.87%, ctrl_se +4.17%,
+  williams_nb +3.84%, interstate_sb +3.75%, powell_wb +3.68%,
+  grand_nb +2.56%, ctrl_west +2.25%.
+
+Aug 25 was a fast day on every pair (everything down against week 1, then
+everything up against week 3, i205_sb by 13 to 14% each way). That is the
+single-day behavior Appendix Q anticipated when it rejected day-scale
+draws as sitting too HIGH, and it is why week 2's loss does not simply
+"cost a draw": a one-day pool measures a noisier quantity than October
+will. Disclosed plainly: had week 2 been clean, the registered
+three-draw floor could have been as high as 14.43% (2x = 28.87%), about
+twice the governing value. The governing floor is the smaller one, and it
+is governing because the Aug 28 addendum fixed the rule before any of
+these numbers existed, not because it is smaller.
+
+A pre-stated sensitivity line, registered now: October reports each
+pair's tier under the registered floor (6.86%, which alone governs
+wording and rank eligibility) and, beside it, the tier the pair would
+take under the diagnostic 14.43%, labeled "diagnostic sensitivity". This
+adds reporting and changes no rule.
+
+### Sept 8-10, and the second computation
+
+Per the Aug 28 addendum, pairs involving Sept 8-10 are computed and
+printed after Sept 10, before any closure data is scored, as a second
+dated computation under the DIAGNOSTIC label. They never govern. Both
+computations publish; neither replaces the other.
+
+### October's before pool, pinned now
+
+M.3 rule 3 fixes October's before pool as pre-closure Tue-Thu days
+outside Labor Day week but does not list the days. Pinned now, before
+closure data exists: before = every usable pre-closure Tue-Thu pair-day
+outside Labor Day week under the same 12-of-14 rule (as of today Aug 19,
+20, 25 and Sept 1, 2, 3; a day that drops, drops); during = the Tue-Thu
+days of the first two closure weeks (Sept 15-17 and Sept 22-24), the
+same drop rule, per M.3 rule 3's stated preference for early-closure
+days. Command, for the record:
+`python src/rosequarter_logger_floor.py --score --before <those days> --during <those days> --floor-pct 6.86`.
+
+### What does not change
+
+The floor governs wording and rank eligibility only; every October number
+is still computed and reported. The registered predictions (Appendix A,
+M.2, N.4, and the per-arm October ranks) are untouched. Model magnitudes
+remain reported for honesty and never graded (M.3 rule 4).

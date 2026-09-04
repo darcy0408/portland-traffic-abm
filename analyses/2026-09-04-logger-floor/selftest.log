@@ -1,0 +1,2 @@
+  DROPPED synth_drop 2026-08-18: 5 of 14 daytime hours ok (< 12)
+selftest PASS: filters, boundary hours, drop rule, week enumeration, the +10.0% change, and the DST refusal all check out

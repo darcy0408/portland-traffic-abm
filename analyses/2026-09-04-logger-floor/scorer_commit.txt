@@ -1,0 +1,2 @@
+fe2c893e90b6aa247c52f5404640fb1c1a6c314a 2026-08-24 21:54:13 -0600 Logger null-floor scorer: one code path for floor and October scoring, selftest-verified, never run on logger data
+scorer working copy identical to HEAD

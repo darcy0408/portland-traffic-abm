@@ -1,0 +1,135 @@
+clean pre-closure Tue-Thu weeks: ['2026-08-18..2026-08-20', '2026-08-25..2026-08-27', '2026-09-01..2026-09-03']
+NOTE: draws share weeks and are NOT independent (three weeks give three overlapping pairings).
+
+draw: 2026-08-18..2026-08-20 vs 2026-08-25..2026-08-27
+  DROPPED ctrl_se 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_se 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_se 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+         i205_sb  -14.43%
+        vanc_pdx  -12.83%
+          mlk_sb  -11.47%
+       i5sb_span   -9.36%
+     i5sb_detour   -8.76%
+    i84wb_feeder   -8.70%
+   interstate_sb   -6.39%
+       powell_wb   -4.88%
+     williams_nb   -3.11%
+        grand_nb   -2.35%
+         ctrl_se   -0.87%
+       ctrl_west   -0.66%
+
+draw: 2026-08-18..2026-08-20 vs 2026-09-01..2026-09-03
+  DROPPED ctrl_se 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+          mlk_sb   -6.86%
+        vanc_pdx   -6.28%
+    i84wb_feeder   -4.26%
+       i5sb_span   -3.65%
+         ctrl_se   +3.26%
+     i5sb_detour   -3.15%
+         i205_sb   -3.12%
+   interstate_sb   -2.88%
+       ctrl_west   +1.58%
+       powell_wb   -1.38%
+     williams_nb   +0.61%
+        grand_nb   +0.15%
+
+draw: 2026-08-25..2026-08-27 vs 2026-09-01..2026-09-03
+  DROPPED ctrl_se 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_se 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+         i205_sb  +13.22%
+        vanc_pdx   +7.52%
+       i5sb_span   +6.29%
+     i5sb_detour   +6.16%
+          mlk_sb   +5.21%
+    i84wb_feeder   +4.87%
+         ctrl_se   +4.17%
+     williams_nb   +3.84%
+   interstate_sb   +3.75%
+       powell_wb   +3.68%
+        grand_nb   +2.56%
+       ctrl_west   +2.25%
+
+============================================================
+largest null magnitude per pair (across draws):
+         i205_sb  14.43%
+        vanc_pdx  12.83%
+          mlk_sb  11.47%
+       i5sb_span   9.36%
+     i5sb_detour   8.76%
+    i84wb_feeder   8.70%
+   interstate_sb   6.39%
+       powell_wb   4.88%
+         ctrl_se   4.17%
+     williams_nb   3.84%
+        grand_nb   2.56%
+       ctrl_west   2.25%
+
+FLOOR (largest per-pair magnitude, any pair, any draw): 14.43%
+control pairs' largest magnitude: 4.17%
+tier thresholds with the a-priori 2x margin: within floor <= 14.43% < weak <= 28.87% < clear
