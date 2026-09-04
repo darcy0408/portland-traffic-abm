@@ -1835,3 +1835,70 @@ The floor governs wording and rank eligibility only; every October number
 is still computed and reported. The registered predictions (Appendix A,
 M.2, N.4, and the per-arm October ranks) are untouched. Model magnitudes
 remain reported for honesty and never graded (M.3 rule 4).
+
+## Appendix Q addendum 3 (2026-09-04): duplicate-hour disclosure and exact thresholds
+
+Registered 2026-09-04, before any closure-period data exists. Addendum 2's
+floor, its governing draw, every per-pair value, the week-2 exclusion, the
+diagnostic draws, the pinned October pools, and the rank-eligibility rule
+all stand unchanged. This addendum corrects one factual sentence, adds one
+disclosure with its measured sensitivity, and replaces display-rounded
+thresholds with the exact computed values.
+
+### 1. Correction and disclosure: Aug 19's duplicated hour
+
+Addendum 2's coverage preamble says "one tick per hour". That is false for
+exactly one hour: Aug 19's 06:00 Pacific hour logged twice (rows at
+13:05Z and 13:56Z, a pre-hardening double fire; the hour guard landed
+Aug 27). Consequences, stated precisely:
+
+- The coverage table's hour counts stand (Aug 19 has 12 of 14 daytime
+  HOURS), and no drop-rule verdict changes (Aug 19 pair-days carry 13 ok
+  rows, above the 12-row bar either way).
+- The week-1 usable pool is 25 rows per pair (13 from Aug 19, 12 from
+  Aug 20), so the duplicated hour carries 2 of 25 rows, twice the weight
+  of any other hour, in every week-1 mean.
+- Both rows are retained under the frozen row-count rule (scorer committed
+  Aug 24, before the instrument had ever been run on or checked against
+  logger data, per Appendix Q's registration) and disclosed rather than
+  corrected.
+- Sensitivity, quantified as a diagnostic that governs nothing:
+  recomputing the governing draw keeping only the first row of the
+  duplicated hour (the hardened guard's own keep-first semantics) moves
+  the per-pair changes by 0.29 to 1.14 percentage points and the floor
+  from 6.86% to 7.24% (exact values banked). The frozen handling yields
+  the LOWER floor of the two; it is used because the rule was committed
+  before the instrument ever ran on logger data, not because it is lower,
+  the same standing addendum 2 already applies to the week-2 diagnostics.
+
+### 2. Exact computational thresholds (display rounding never grades)
+
+Addendum 2 printed the floor as T = 6.86% and the weak tier boundary as
+13.72%. Those are a display rounding chain (13.72 is 2 x the rounded
+6.86), and both sit slightly below the exact computed values, so an
+October change landing between a rounded and an exact boundary would
+grade differently under the two. Registered now, before any closure data:
+
+- The computational floor is the exact stored value 6.864666476624853%,
+  and the weak-tier boundary is 2x of that same value,
+  13.729332953249706%. All October tier comparisons and the M.3 rule 4
+  rank-eligibility test use these exact values; 6.86% and 13.73% are
+  display only.
+- October's command passes the full-precision value, and the scorer
+  derives the 2x boundary internally from the same number:
+  `python src/rosequarter_logger_floor.py --score --before <days>
+  --during <days> --floor-pct 6.864666476624853`.
+- The same exact-value rule applies to addendum 2's diagnostic-sensitivity
+  tier: exact 14.433738120380148% (display 14.43%), 2x derived from that
+  value.
+- Direction, for honesty: the exact boundaries sit marginally above the
+  rounded chain (by 0.005 and 0.009 points), so this correction makes
+  October wording infinitesimally harder to escalate, not easier.
+
+### What does not change
+
+Everything else in addendum 2: the single governing draw and its 12
+per-pair values, the week-2 exclusion and both diagnostic draws, the
+Sept 8-10 second computation, the pinned October before and during pools,
+the control-pair results, and the rule that the floor governs wording and
+rank eligibility only.

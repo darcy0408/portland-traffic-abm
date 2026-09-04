@@ -16,3 +16,8 @@ decision tree case 1): the governing floor is the SINGLE draw
 drops at 10 of 14), T = 6.86% (mlk_sb). The two draws involving
 2026-08-25..27 (Aug 25 the only usable day) and the summary "FLOOR 14.43%"
 line are DIAGNOSTIC under the registered rule and never govern wording.
+
+Amended by Appendix Q addendum 3 (same day): Aug 19's 06:00 hour is
+duplicated in the CSV (two ticks, pre-hardening), disclosed with a
+keep-first sensitivity, and the computational thresholds are the exact
+values (--floor-pct 6.864666476624853); the T = 6.86% above is display.
