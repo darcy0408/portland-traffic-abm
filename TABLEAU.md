@@ -1,0 +1,100 @@
+# Tableau dashboard
+
+The public-facing interactive layer of the closure results. Tableau displays; the
+ABM computes. Nothing on the dashboard is computed in Tableau beyond hover, filter,
+and color.
+
+## What exists
+
+A four-panel Tableau Public workbook: metro overview (159,410 segments), Powell
+corridor detail (2,838), validation scatter (356 held-out PBOT counts, Spearman
+0.59, ledger V1), top gainers.
+
+The workbook is unlisted on purpose, so its title, account, and URL are deliberately
+NOT recorded in this public repo; they live in the private session notes. Share the
+dashboard URL, not a single-sheet URL (a sheet URL shows only the Powell map). Making
+it listed is a separate decision, not a build step.
+
+## Source of truth
+
+Every table the workbook binds to is produced by `src/tableau_export.py` from saved
+parquet files. It runs no simulation. If a number on the dashboard is questioned,
+rerun the export and diff; if the export disagrees with the workbook, the workbook
+is stale and gets re-uploaded (Tableau Public extracts are snapshots, not links).
+
+Exports land in `outputs/tableau/` (gitignored, like every generated file). From a
+worktree, pass `--data-dir` and `--graph` explicitly: `data/` is gitignored and lives
+in the main checkout (corridor runs) or the metro5k-scaleup worktree (metro runs).
+
+### Sept 5 audit of the ad hoc tables
+
+The three tables the workbook was first built from (Aug 26 to Sept 4, made inline,
+no script) were checked against this script's output:
+
+- Metro closure: numbers identical (network +0.35%, M20.14). Names differed only in
+  convention; the script now uses the workbook's (first OSM name, "(unnamed motorway
+  link)", spaces in road types), 0 mismatches on 129,950 matched segments.
+- Validation scatter: identical ranks, rho 0.590 (V1).
+- **Powell corridor: built from the wrong pair.** The table came from `powell_no2`
+  (the June gravity-only run, superseded Jul 4 and never cited since), not
+  `powell_through` (seed 42, through-traffic on), the pair every cited closure number
+  and the SRC abstract are unified on. The Powell Detail and Top Gainers panels must be
+  rebound to the `powell_through` export before the link goes to anyone.
+
+### Sept 5 rebind (done, published, verified)
+
+- The `powell_closure_v2` data source's file connection was replaced in web authoring
+  (Edit Connection, same file name, "Replace and Update"), so every field and the saved
+  Segment Line calculation rebound with no sheet edits. Extract rebuilt 4:30 PM MDT.
+  Data source renamed `powell_closure_through` so the workbook says what it holds.
+- The unused Aug 26 source `powell_closure_no2_tableau` (also the June run) was closed
+  out of the workbook; three sources remain (metro, powell_closure_through,
+  powell_validation_scatter).
+- Top Gainers had a hand-picked 9-street filter from the June data (it dropped SE 17th
+  Avenue, 27.9 g and rank 8 under the correct pair, and kept Woodward at 1.8 g). Now a
+  Top 9 by SUM(NO2 Change (g)) filter, so it follows the data. Nine bars: Division 594.8,
+  Holgate 163.4, Gladstone 109.8, Tibbetts 48.2, 29th 40.0, 32nd 33.3, 22nd 30.6,
+  17th 27.9, 25th 16.3 (sum 1,064.2 g).
+- Published; the hosted dashboard was reloaded as a viewer and the Powell legend
+  reads -42.3 / 89.1 (the powell_through per-segment range; the June pair read
+  -155.1 / 120.9). Metro legend -442.5 / 381.3 unchanged (M20.14).
+- Every visible number was checked against the exports: 356 counts and rho 0.59 (V1),
+  159,410 segments, 5,576 segments at |change| >= 0.1 g (counted on the rounded table
+  the workbook holds; 5,357 on unrounded NOx, so keep citing the table's own count).
+
+## Scenario batch (Sept 5)
+
+Three closed legs run on the metro5k-scaleup worktree at 330d034 against the shared
+`metro20k_open` baseline, THROUGH 0.15, seed 42, all-diesel, 16,500 vehicles:
+`scn_division_closed`, `scn_chavez_closed`, `scn_clinton_closed` (40.7 / 45.6 / 47.4
+min). Gate: network NOx +0.006% / +0.006% / -0.008% vs the 645,737.8 g baseline, all
+inside 2% (the Powell reference pair reproduces M20.14's +0.354%). Export:
+`scenarios ... --changed-only` gives 76,582 rows across four scenarios (Powell 23,716,
+Division 17,842, Chavez 18,175, Clinton 16,849), net NO2 +685.9 / +11.9 / +12.3 /
+-15.8 g. Single seed, exploratory, labeled as such wherever shown.
+
+| Table | Command | Reads |
+|---|---|---|
+| Powell corridor closure | `closure --open powell_through_open --closed powell_through_closed` | main's `data/processed` |
+| Metro closure | `closure --data-dir <metro>/data/processed --graph <metro>/data/network/graph.graphml --open metro20k_open --closed metro20k_closed` | the metro5k-scaleup worktree (ledger sec. 2 operational note) |
+| Scenario menu | `scenarios ... --open metro20k_open "SE Powell=metro20k_closed" "SE Division=scn_division_closed" ...` | same |
+| Validation scatter | `validation --run powell_through` | main's `data/processed` |
+
+## Provenance and caveats that travel with the numbers
+
+- NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
+  applies it.
+- The metro tables are the M20.14 pair: seed 42, THROUGH_TRAFFIC_FRACTION 0.15 (the
+  metro a-priori value; 0.30 is the corridor's and fails the ODOT band at metro scale,
+  ledger sec. 20), ALL-DIESEL fleet. Absolute grams run about 4.26x the approved mixed
+  fleet at metro scale (M20.16); the per-segment shape agrees at Spearman 0.913, so
+  redistribution maps are sound and absolutes carry the caveat.
+- The scenario menu (Division, Cesar Chavez, Clinton) is SINGLE SEED, exploratory, and
+  labeled that way. Each closed leg pairs with the shared `metro20k_open` baseline on
+  the same kernel commit (metro5k-scaleup at 330d034); that reuse is the M20.14
+  `run_closed_half.py` pattern and is valid because `run_simulation` seeds its own RNG
+  per call. Post-run gate: network NO2 total within 2% of the baseline.
+- No bridge scenario. The one bridge already tested (Ross Island, M20.18) flips sign
+  across seeds and fleet; a bridge needs a paired multi-seed run before it is shown.
+- Rose Quarter predicted-vs-observed panel (after Sept 11): grades come from the
+  registered instrument's output only, never a Tableau calculation.
