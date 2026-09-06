@@ -6,9 +6,10 @@ and color.
 
 ## What exists
 
-A four-panel Tableau Public workbook: metro overview (159,410 segments), Powell
-corridor detail (2,838), validation scatter (356 held-out PBOT counts, Spearman
-0.59, ledger V1), top gainers.
+A four-panel Tableau Public workbook: metro closure map with a Closure dropdown
+(four closures, changed segments only, 76,582 rows; the network itself is 159,410
+segments), Powell corridor detail (2,838), validation scatter (356 held-out PBOT
+counts, Spearman 0.59, ledger V1), top gainers.
 
 The workbook is unlisted on purpose, so its title, account, and URL are deliberately
 NOT recorded in this public repo; they live in the private session notes. Share the
@@ -62,6 +63,52 @@ no script) were checked against this script's output:
   159,410 segments, 5,576 segments at |change| >= 0.1 g (counted on the rounded table
   the workbook holds; 5,357 on unrounded NOx, so keep citing the table's own count).
 
+### Sept 6 scenario dropdown (published, workbook revision 1.7)
+
+The metro panel now carries a **Closure** dropdown: SE Powell (the published M20.14
+pair), SE Division, SE Cesar Chavez, SE Clinton. What was done and why, so the next
+change does not have to rediscover it:
+
+- **Rebind, not a new source.** The `metro` data source is an Excel connection
+  (`metro_closure_v1`, sheet `metro`). Edit Connection with `metro_scenarios.xlsx`
+  rebinds every field and the Segment Line calculation as long as the Excel SHEET is
+  named `metro`; the file name is cosmetic. That is why `tableau_export.py` grew a
+  `--sheet` option. The `.xlsx` is 7.5 MB (the CSV is 13.2 MB, over the 10 MB
+  browser-upload cap); values are identical to the CSV to float precision.
+- **Parameter, not a filter card.** Tableau Public web authoring's dashboard filter
+  cards always show an "(All)" entry and their menu has no way to remove it; "(All)"
+  would stack four closures on one map. So the dropdown is a parameter `Closure`
+  (string, list built from the Scenario field, default SE Powell) and the Scenario
+  filter is General = Use all, Condition by formula `[Scenario] = [Closure]`. A
+  parameter control is single-choice by construction. Adding a closure means
+  re-uploading the file AND adding the value to the parameter list (or switching the
+  list to refresh from the field when the workbook opens).
+- **Numbers on the panel, all matching the export:** SE Powell 23,716 marks, sum
+  +685.9 g, legend -442.5 / 381.3; SE Division 17,842, +11.9 g, -92.4 / 27.3;
+  SE Clinton 16,849, -15.8 g, -66.5 / 142.8. The old ad hoc metro table summed to
+  686.7 g because its per-row rounding differed; 685.9 is the script's number.
+  `|change| >= 0.1 g` counts per scenario: Powell 5,576 (the number the old title
+  quoted), Division 3,388, Chavez 3,513, Clinton 3,117.
+- **Panel title** (no em dashes): "The whole city, one closure: choose the street in
+  the Closure menu. Metro-wide NO2 change, 159,410-segment network / Only changed
+  segments are drawn. SE Powell is the published case; Division, Cesar Chavez and
+  Clinton are single-seed, all-diesel exploratory runs, not results. Zoom in to
+  explore." The color legend rescales per closure, so magnitudes are not comparable
+  by color across closures; the legend labels say so.
+- **What a closure is:** a 150 m radius zone (config.CLOSURE), every segment inside
+  removed. "SE Division" is a ~300 m stretch near SE 35th, not the whole street. The
+  four current closures all sit in inner SE within about 1.5 km of each other; the
+  map is metro-wide, the menu is not yet.
+- **Publishing lesson (cost a full rebuild):** web authoring has no draft save and the
+  session expired after about two hours, in the middle of the first Publish click.
+  Publish early and in stages; verify each publish through the site's own workbook
+  metadata (`lastPublishDate`, `revision`), not a screenshot. The viewer-side render
+  was not captured from the automation sandbox (the site's feature modal and the
+  embed both defeat it); eyeball the hosted page by hand after any publish.
+- Not done: the data source is still named `metro (metro_closure_v1)` although it
+  now holds the four-scenario table (rename is cosmetic, do it on a quiet day); the
+  four-line title squeezes the map on a laptop viewport.
+
 ## Scenario batch (Sept 5)
 
 Three closed legs run on the metro5k-scaleup worktree at 330d034 against the shared
@@ -77,7 +124,7 @@ Division 17,842, Chavez 18,175, Clinton 16,849), net NO2 +685.9 / +11.9 / +12.3 
 |---|---|---|
 | Powell corridor closure | `closure --open powell_through_open --closed powell_through_closed` | main's `data/processed` |
 | Metro closure | `closure --data-dir <metro>/data/processed --graph <metro>/data/network/graph.graphml --open metro20k_open --closed metro20k_closed` | the metro5k-scaleup worktree (ledger sec. 2 operational note) |
-| Scenario menu | `scenarios ... --open metro20k_open "SE Powell=metro20k_closed" "SE Division=scn_division_closed" ...` | same |
+| Scenario menu | `scenarios ... --open metro20k_open "SE Powell=metro20k_closed" "SE Division=scn_division_closed" ... --changed-only --sheet metro --out outputs/tableau/metro_scenarios.xlsx` | same |
 | Validation scatter | `validation --run powell_through` | main's `data/processed` |
 
 ## Provenance and caveats that travel with the numbers

@@ -118,10 +118,14 @@ def diff_table(edges, open_df, closed_df, f_no2):
     return df[COLS]
 
 
-def write(df, out):
+def write(df, out, sheet="data"):
+    """Write CSV or .xlsx. For .xlsx the sheet name matters: Tableau binds a source to
+    the Excel SHEET, not the file, so an Edit Connection upload rebinds every field
+    only if the new file carries the same sheet name (the published metro source
+    binds to a sheet called "metro")."""
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     if out.lower().endswith(".xlsx"):
-        df.to_excel(out, index=False)
+        df.to_excel(out, index=False, sheet_name=sheet)
     else:
         df.to_csv(out, index=False)
     print(f"wrote {len(df):,} rows -> {out} ({os.path.getsize(out) / 1e6:.1f} MB)")
@@ -134,7 +138,7 @@ def cmd_closure(a):
                     load_run(a.data_dir, a.closed), config.F_NO2)
     if a.scenario:
         df.insert(0, "Scenario", a.scenario)
-    write(df, a.out)
+    write(df, a.out, a.sheet)
 
 
 def cmd_scenarios(a):
@@ -153,7 +157,7 @@ def cmd_scenarios(a):
         print(f"  {name:<24} {run:<24} {len(df):>8,} rows, "
               f"net NO2 {df['NO2 Change (g)'].sum():+.1f} g")
         parts.append(df)
-    write(pd.concat(parts, ignore_index=True), a.out)
+    write(pd.concat(parts, ignore_index=True), a.out, a.sheet)
 
 
 def cmd_validation(a):
@@ -172,7 +176,7 @@ def cmd_validation(a):
     })
     rho = d["adt"].corr(d["throughput"], method="spearman")
     print(f"{a.run}: {len(d)} segments, Spearman rho = {rho:.3f}")
-    write(out, a.out)
+    write(out, a.out, a.sheet)
 
 
 def main():
@@ -183,6 +187,8 @@ def main():
     common.add_argument("--data-dir", default=config.PROCESSED_DIR)
     common.add_argument("--graph", default=os.path.join(config.NETWORK_DIR, "graph.graphml"))
     common.add_argument("--out", required=True)
+    common.add_argument("--sheet", default="data",
+                        help=".xlsx only: Excel sheet name; the published metro source binds to 'metro'")
 
     p = sub.add_parser("closure", parents=[common])
     p.add_argument("--open", required=True)
