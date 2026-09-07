@@ -7,9 +7,9 @@ and color.
 ## What exists
 
 A four-panel Tableau Public workbook: metro closure map with a Closure dropdown
-(four closures, changed segments only, 76,582 rows; the network itself is 159,410
+(ten closures, changed segments only, 184,335 rows; the network itself is 159,410
 segments), Powell corridor detail (2,838), validation scatter (356 held-out PBOT
-counts, Spearman 0.59, ledger V1), top gainers.
+counts, Spearman 0.59, ledger V1), top gainers. Workbook revision 1.9 (Sept 7).
 
 The workbook is unlisted on purpose, so its title, account, and URL are deliberately
 NOT recorded in this public repo; they live in the private session notes. Share the
@@ -165,8 +165,23 @@ numbers exactly in the new file; the old four-scenario file is kept beside it as
 ranges (min / max g): Hawthorne -21.9 / 92.3, Foster -68.4 / 62.4, Sandy -58.0 / 49.5,
 Lombard -80.0 / 51.5, Barbur -67.8 / 67.6, 82nd -95.2 / 111.4.
 
-Status: runs done and gated, file exported and staged. The published dashboard still
-shows four closures until the upload, the six new parameter values, and a republish.
+Published Sept 7 (workbook revision 1.8 at 21:57 UTC after the rebind and the
+parameter list, 1.9 at 21:58 UTC after the title; workbook size 23.3 MB; still hidden).
+Upload: Darcy dropped the 18 MB file into Edit Connection by hand (the automation tab
+was renamed through `document.title` and found with Ctrl+Shift+A); switching to the
+dashboard triggered "Creating Extract" automatically. Parameter: Edit Parameter, Add
+values from, metro, Scenario adds all ten (duplicates of the four existing values are
+dropped on OK); the current value was set back to SE Powell before publishing because
+"Value when workbook opens" is "Current value". Verified in authoring: NE Sandy 17,515
+marks, SUM +116.8 g; SE Powell 23,716 marks, +685.9 g; both equal the export. New panel
+title (no em dashes): "The whole city, one closure: pick a street in the Closure menu.
+Metro-wide NO2 change on the 159,410-segment network. / Only changed segments are drawn.
+SE Powell is the published case; the other nine closures are single-seed, all-diesel
+exploratory runs, not results. Zoom in to explore." Screenshots of the authoring page
+timed out almost every time this session; state was read through the DOM
+(`javascript_tool`) and `find` instead. Menu order of the dropdown is the four original
+values then the six new ones alphabetically (cosmetic; reorder on a quiet day). The
+viewer-side render was again not captured from the automation sandbox.
 
 ## Provenance and caveats that travel with the numbers
 
