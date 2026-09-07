@@ -183,6 +183,8 @@ timed out almost every time this session; state was read through the DOM
 values then the six new ones alphabetically (cosmetic; reorder on a quiet day). The
 viewer-side render was again not captured from the automation sandbox.
 
+Why the metro panel reads as nearly blank at its default view (Darcy's Sept 7 screenshot, measured from the M20.14 pair, scratchpad `metro_spread.py`): the changed-only export keeps every segment with ANY nonzero change, and for SE Powell those 23,716 segments span the entire 20 km disk (same lat/lon extent as the full network; median 10 km from the zone), so the map auto-fits to the whole metro. On the -442.5 / 381.3 color scale only 806 segments carry >= 1 g of change (176 >= 10 g, 40 >= 50 g), everything else draws near-white, and 83% of the total |change| sits within 10 km of the zone, 54% within 5 km. Add the long title (seven lines at a laptop width, which leaves the map about 180 px tall) and the panel is a pale smear. Fix, not yet applied: shorten the title to two lines and PIN the map to a fixed inner-city view (about 14 km wide, N Lombard to SE Foster, SW Barbur to SE 82nd, so all ten zones stay in frame) instead of auto-fit. Raising the changed-only cutoff to >= 0.1 g would cut the export to about 37,000 rows (about 4 MB, back under the 10 MB upload bridge) but does not by itself fix the extent: even the >= 1 g set reaches 19 km from the zone (single-seed far-field jitter, see the chaos-floor note).
+
 ## Provenance and caveats that travel with the numbers
 
 - NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
