@@ -98,7 +98,8 @@ change does not have to rediscover it:
 - **What a closure is:** a 150 m radius zone (config.CLOSURE), every segment inside
   removed. "SE Division" is a ~300 m stretch near SE 35th, not the whole street. The
   four current closures all sit in inner SE within about 1.5 km of each other; the
-  map is metro-wide, the menu is not yet.
+  map is metro-wide, the menu is not yet. Round 2 (Sept 6-7, below) spreads it across
+  N, NE, SW and outer SE.
 - **Publishing lesson (cost a full rebuild):** web authoring has no draft save and the
   session expired after about two hours, in the middle of the first Publish click.
   Publish early and in stages; verify each publish through the site's own workbook
@@ -127,6 +128,46 @@ Division 17,842, Chavez 18,175, Clinton 16,849), net NO2 +685.9 / +11.9 / +12.3 
 | Scenario menu | `scenarios ... --open metro20k_open "SE Powell=metro20k_closed" "SE Division=scn_division_closed" ... --changed-only --sheet metro --out outputs/tableau/metro_scenarios.xlsx` | same |
 | Validation scatter | `validation --run powell_through` | main's `data/processed` |
 
+## Scenario batch, round 2 (Sept 6-7)
+
+Six more closed legs, same provenance as round 1: metro5k-scaleup at 330d034, the
+shared `metro20k_open` baseline, THROUGH 0.15, seed 42, all-diesel, 16,500 vehicles,
+single seed, exploratory. Driver: the Sept 6 scratchpad `run_closure_batch2.py` (the
+Sept 5 driver plus a printed pairing gate). Each zone center is a real intersection
+node from the metro graph, previewed (`find_zones.py`, `find_zones2.py`) so the 150 m
+circle removes the named arterial plus local cross streets only: no motorway,
+motorway_link or bridge segment in any zone. Sandy sits at 57th because the 42nd
+junction also takes out NE Broadway; Barbur sits on the Lair Hill stretch at Gibbs
+because every candidate near Terwilliger, Capitol Highway or Burlingame removed an
+I-5 ramp, and one removed I-5 mainline.
+
+| Menu label | Zone center (lat, lon; 150 m) | Cross street | Segs closed (arterial / all) | Run | Gate vs open | Rows | Net NO2 |
+|---|---|---|---|---|---|---|---|
+| SE Hawthorne | 45.51206, -122.62959 | SE 34th | 12 / 34 | `scn_hawthorne_closed` | +0.03% | 17,402 | +48.0 g |
+| SE Foster | 45.48864, -122.59434 | SE 67th | 8 / 28 | `scn_foster_closed` | +0.02% | 17,829 | +32.3 g |
+| NE Sandy | 45.54223, -122.60459 | NE 57th | 8 / 29 | `scn_sandy_closed` | +0.06% | 17,515 | +116.8 g |
+| N Lombard | 45.58248, -122.72405 | N Portsmouth | 10 / 28 | `scn_lombard_closed` | -0.01% | 17,493 | -10.4 g |
+| SW Barbur | 45.49943, -122.68040 | SW Gibbs | 10 / 32 | `scn_barbur_closed` | +0.04% | 18,813 | +82.1 g |
+| SE 82nd | 45.51223, -122.57870 | SE Hawthorne | 14 / 32 | `scn_82nd_closed` | +0.03% | 18,701 | +67.6 g |
+
+Run times 46.7 to 52.2 min each. Hawthorne's wall clock was 705 min because the
+machine went into Windows modern standby 25 min in and stayed there most of the
+night; the result is unaffected (the sim never reads the clock). Lesson: hold standby
+off for the life of the batch with an in-process SetThreadExecutionState request tied
+to the batch PID (scratchpad `keep_awake.ps1`), never a power-plan change.
+
+Export: the ten-scenario `metro_scenarios.xlsx` (sheet `metro`) is 184,335 rows and
+18.0 MB, over the 10 MB browser-upload bridge, so the Edit Connection upload is a
+manual drag-drop from Downloads. The four round-1 scenarios reproduce their Sept 6
+numbers exactly in the new file; the old four-scenario file is kept beside it as
+`metro_scenarios_4scn_sept6.xlsx` for rollback. `|change| >= 0.1 g` counts: Hawthorne
+3,212, Foster 3,383, Sandy 3,325, Lombard 3,503, Barbur 3,749, 82nd 3,606. Legend
+ranges (min / max g): Hawthorne -21.9 / 92.3, Foster -68.4 / 62.4, Sandy -58.0 / 49.5,
+Lombard -80.0 / 51.5, Barbur -67.8 / 67.6, 82nd -95.2 / 111.4.
+
+Status: runs done and gated, file exported and staged. The published dashboard still
+shows four closures until the upload, the six new parameter values, and a republish.
+
 ## Provenance and caveats that travel with the numbers
 
 - NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
@@ -136,7 +177,7 @@ Division 17,842, Chavez 18,175, Clinton 16,849), net NO2 +685.9 / +11.9 / +12.3 
   ledger sec. 20), ALL-DIESEL fleet. Absolute grams run about 4.26x the approved mixed
   fleet at metro scale (M20.16); the per-segment shape agrees at Spearman 0.913, so
   redistribution maps are sound and absolutes carry the caveat.
-- The scenario menu (Division, Cesar Chavez, Clinton) is SINGLE SEED, exploratory, and
+- The scenario menu (every closure except SE Powell) is SINGLE SEED, exploratory, and
   labeled that way. Each closed leg pairs with the shared `metro20k_open` baseline on
   the same kernel commit (metro5k-scaleup at 330d034); that reuse is the M20.14
   `run_closed_half.py` pattern and is valid because `run_simulation` seeds its own RNG
