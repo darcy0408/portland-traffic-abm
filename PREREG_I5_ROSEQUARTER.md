@@ -2094,3 +2094,205 @@ under closure stress and is reported with equal prominence.
 
 - The primary registered predictions remain Appendix A's and do not change.
   This arm's numeric results will be appended, dated, before Sept 11.
+
+## Appendix U (2026-09-08): en-route rerouting arm (fwrqe) results, the instrument repair disclosed, and the frozen October rank
+
+Results appended 2026-09-08, after the campaign and before any closure
+data exists (the closure begins Sept 11). Nothing above changes.
+
+### U.1 How the campaign ran
+
+The arm registered in Appendix T (main commit 874e52c, Sept 8, pushed
+before any campaign task ran) executed as registered: branch commit
+0ea4e03, Orca array job 155399, 32 of 32 tasks COMPLETED. Pre-submission
+checks in the registered order: the reroute gate 6 of 6 at 0ea4e03 on a
+clean tree, then the span/context check as compute job 155398 (frozen
+span 5 edges, the 3 SB mainline edges plus the 2 stranded ramps;
+registered constants stuck 120 s, cooldown 300 s, cap 20 re-plans per
+step). The standing disclosure travels with every number in this
+appendix: the C1 en-route rerouting mechanism FAILED its registered
+acceptance gate (ledger RR35.1, Burnside 1.88x against the 2x bar,
+replicated RR36), so this is a disclosed exploratory arm, not part of
+the citable model.
+
+### U.2 Integrity checks, all passed
+
+1. OFF-pair identity: fwrqe OFF-open and OFF-closed equal the banked
+   fwrqi summaries EXACTLY, 16 of 16 arm-seeds, verified by the readout.
+   This simultaneously re-verifies the frozen span, the graph, the stack,
+   and that stuck instrumentation changed no dynamics.
+2. Re-plan accounting, from the saved summaries: 13,400 to 16,715
+   successful re-plans per ON task, 0 failed re-plans, and the per-step
+   cap bound on 0 steps in all 16 ON tasks, so the compute-budget cap
+   never constrained the mechanism.
+3. The frozen-span guard ran inside every closed task and inside the
+   instrument run (U.5), 5 edges every time.
+
+### U.3 Registered outcomes T1 to T3, graded
+
+Verdict bar, stated once and applying to every grade in this appendix:
+unanimous sign across the 8 paired seeds and |t| > 3 on the paired
+relative differences. Pairings are per-seed.
+
+T1 (primary): closed-arm network stuck vehicle-hours, rerouting ON minus
+OFF. SUPPORTED: mean -21.61%, sd 1.39, down 8 of 8, t = 43.9.
+
+| seed | OFF veh-h | ON veh-h | change |
+|------|----------:|---------:|-------:|
+| 7 | 4,113.1 | 3,282.1 | -20.20% |
+| 8 | 4,305.1 | 3,364.2 | -21.86% |
+| 13 | 4,276.1 | 3,351.6 | -21.62% |
+| 42 | 4,488.9 | 3,397.6 | -24.31% |
+| 99 | 4,227.6 | 3,387.0 | -19.88% |
+| 314 | 4,186.5 | 3,317.2 | -20.76% |
+| 777 | 4,452.0 | 3,466.1 | -22.15% |
+| 2024 | 4,322.0 | 3,366.0 | -22.12% |
+
+T2 (replication): open-arm stuck vehicle-hours, ON minus OFF. SUPPORTED:
+mean -22.81%, sd 1.52, down 8 of 8, t = 42.4. Replicates the Aug 19
+re-validation (-23.1%) in direction under the campaign demand and graph,
+which is what T2 registered (direction, not the magnitude).
+
+| seed | OFF veh-h | ON veh-h | change |
+|------|----------:|---------:|-------:|
+| 7 | 4,068.3 | 3,166.5 | -22.17% |
+| 8 | 4,248.1 | 3,206.8 | -24.51% |
+| 13 | 4,214.3 | 3,241.3 | -23.09% |
+| 42 | 4,440.7 | 3,348.5 | -24.60% |
+| 99 | 4,145.9 | 3,298.2 | -20.45% |
+| 314 | 4,131.2 | 3,236.9 | -21.65% |
+| 777 | 4,382.7 | 3,323.8 | -24.16% |
+| 2024 | 4,232.4 | 3,305.8 | -21.89% |
+
+T3 (the closure signature survives): within the ON pair, the I-405 route
+NOx total closed minus open. SUPPORTED: mean +31.53%, sd 10.21, up 8 of
+8, t = 8.7, and the I-405 gain outranks the I-205 gain in every seed
+(I-205: mean -0.23%, sd 2.53, 4 of 8, t = 0.3). Replanning redistributes
+queues without erasing the diversion signature.
+
+### U.4 The registered open question T4, answered
+
+T4 banked no direction: it asked whether replanning concentrates the
+diverted traffic onto the freeway loop or spreads it off. This is an
+answer to an open question, not a supported or unsupported hypothesis.
+
+The answer is REPLANNING SPREADS. The ON pair's I-405 gain is smaller
+than the OFF pair's (the fwrqi value) in all 8 paired seeds: mean -6.17
+percentage points, sd 3.01, t = 5.8. Cars bail out of a slowed I-405 and
+spread onto the rest of the network; replanning softens the diversion's
+concentration on the loop rather than sharpening it.
+
+| seed | OFF gain | ON gain | ON minus OFF |
+|------|--------:|--------:|-------------:|
+| 7 | +35.17% | +34.99% | -0.18 pts |
+| 8 | +35.76% | +26.26% | -9.51 pts |
+| 13 | +59.15% | +53.84% | -5.31 pts |
+| 42 | +32.52% | +23.22% | -9.30 pts |
+| 99 | +31.26% | +26.71% | -4.55 pts |
+| 314 | +35.10% | +27.81% | -7.29 pts |
+| 777 | +29.18% | +23.42% | -5.76 pts |
+| 2024 | +43.51% | +36.03% | -7.48 pts |
+
+### U.5 T5: the instrument repair, disclosed, then the result
+
+DISCLOSURE, in full. T5 registered that the Appendix M travel-time
+instrument runs on the ON pair under the same commit discipline, but the
+arm commit 0ea4e03 OMITTED the instrument's ARM_SPECS entry for this
+arm, so `--arm reroute` could not run. The repair, commit c3e3b79 on
+experiment/detour-compliance, adds exactly one dictionary entry (prefix
+fwrqe, the lane-tagged graph, stack label reroute, full closure) plus
+its comment: 9 added lines, no other change. No T5 result had been
+observed before the repair: c3e3b79 was committed and pushed BEFORE the
+instrument's first contact with any fwrqe data, which occurred in Orca
+job 155496 at that commit. No hypothesis, metric, threshold, route pair,
+seed, timing window, or analysis line changed.
+
+ctrl_west was excluded by the registered 500 m snap rule (its endpoint
+snaps 7,399 m from the graph), and the banked rqtt_fwrqi.json was
+re-checked and excludes it identically, exactly as Appendix N recorded
+for both earlier arms. All 11 remaining pairs resolved on all 8 seeds.
+
+T5 (banked direction): the i5sb_detour pair rises closed minus open
+within the ON pair. SUPPORTED: mean +36.41%, sd 3.08, up 8 of 8,
+t = 33.5, with the route-switch signature on 6 of 8 seeds.
+
+| seed | open | closed | change |
+|------|-----:|-------:|-------:|
+| 7 | 627.7 s | 857.3 s | +36.58% |
+| 8 | 646.5 s | 867.6 s | +34.20% |
+| 13 | 620.6 s | 881.8 s | +42.09% |
+| 42 | 627.6 s | 857.0 s | +36.55% |
+| 99 | 627.0 s | 852.1 s | +35.90% |
+| 314 | 629.4 s | 857.3 s | +36.21% |
+| 777 | 650.2 s | 854.4 s | +31.41% |
+| 2024 | 650.2 s | 899.4 s | +38.33% |
+
+Descriptive secondary results, reported not graded (no fwrqe direction
+was banked for these pairs): i5sb_span +32.60% (8/8, t = 20.5), vanc_pdx
++22.89% (8/8, t = 26.4), interstate_sb +14.06% (8/8, t = 12.1), mlk_sb
++10.16% (7/8, t = 4.4). The remaining pairs are flat (all means inside
+-1.49% to 0.00%), including the far-field control ctrl_se at -0.49%
+(2/8, t = 2.2). Minutes and magnitudes are reported for honesty and are
+never graded (M.3 rule 4).
+
+### U.6 The frozen October rank for the fwrqe ON pair, derived and frozen now
+
+Derived from the fwrqe instrument output under M.3 rule 4 and the N.4
+rules, with the Appendix Q addendum qualifier, exactly as T5 registered.
+Frozen before any closure data exists; once frozen it cannot change on
+sight of the observed closure data. Every input:
+
+| pair | mean % | sd | t | signs | bar | above floor |
+|------|-------:|---:|--:|:-----:|:---:|:-----------:|
+| i5sb_detour | +36.4075 | 3.0751 | 33.49 | 8/8 | pass | yes |
+| i5sb_span | +32.5991 | 4.5087 | 20.45 | 8/8 | pass | yes |
+| vanc_pdx | +22.8851 | 2.4502 | 26.42 | 8/8 | pass | yes |
+| interstate_sb | +14.0614 | 3.2990 | 12.06 | 8/8 | pass | yes |
+| mlk_sb | +10.1639 | 6.4952 | 4.43 | 7/8 | fail | yes |
+| i84wb_feeder | -0.0034 | 3.1616 | 0.00 | 3/8 | fail | no |
+| grand_nb | -0.2949 | 0.9516 | 0.88 | 2/8 | fail | no |
+| powell_wb | -0.3337 | 2.4038 | 0.39 | 5/8 | fail | no |
+| ctrl_se | -0.4881 | 0.6231 | 2.22 | 2/8 | fail | no |
+| williams_nb | -1.3508 | 1.9548 | 1.95 | 1/8 | fail | no |
+| i205_sb | -1.4831 | 1.4593 | 2.87 | 2/8 | fail | no |
+
+The derivation, step by step:
+
+1. Input: the 11 usable pairs above, recomputed from the banked
+   rqtt_fwrqe.json at full precision (the printed table's rounded values
+   match). ctrl_west is excluded by the snap rule (U.5).
+2. Seed-noise test (N.4): the six pairs from i84wb_feeder down are
+   declared indistinguishable from seed noise and take no rank. mlk_sb
+   takes rank under N.4's registered practice, which ranked five pairs
+   per arm including fwrqi's mlk_sb at the same 7-of-8 profile; had the
+   strict verdict bar been applied instead, mlk_sb would take no rank
+   and the frozen rank would end at interstate_sb. That is the only pair
+   the two readings separate.
+3. Floor test (the Appendix Q addendum qualifier, exact stored value
+   6.864666476624853%): all five ranked candidates sit above it; the six
+   unranked pairs also all sit inside it (largest magnitude 1.4831%), so
+   both tests exclude the same six pairs.
+4. Order by mean modeled gain, descending.
+
+FROZEN RANK, fwrqe ON pair: i5sb_detour, then i5sb_span, then vanc_pdx,
+then interstate_sb, then mlk_sb. This is identical to the registered
+fwrqi (improved-arm) ordering in N.4, which is coherent: the ON pair is
+the fwrqi stack plus replanning, and replanning shaved the I-405
+concentration (U.4) without reordering the arterial response.
+
+October grading is unchanged from Appendix T: fwrqe enters the M.3
+head-to-head beside base, improved, access, and the three compliance
+levels, under the frozen floors; if it lands nearest, the registered
+conclusion is limited to consistency, stated with the C1 disclosure, and
+is grounds to re-run the acceptance gate as new work, never a
+retroactive pass; if it lands worst, that is a clean registered negative.
+
+### U.7 Provenance
+
+Registration main 874e52c (Sept 8, before any task). Campaign branch
+commit 0ea4e03, array job 155399 (32/32 COMPLETED), span check job
+155398. Readout `--readout --reroute` at 0ea4e03. Instrument repair
+c3e3b79; instrument job 155496; output rqtt_fwrqe.json banked on Orca
+and locally. Summary JSONs for all four cells banked in data/processed.
+All tables in this appendix recomputed locally from those banked files
+and checked against the job logs.
