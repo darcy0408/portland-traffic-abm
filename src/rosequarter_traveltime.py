@@ -97,6 +97,15 @@ ARM_SPECS = {
     "compliance75": {"prefix": "fwrqc75", "open_prefix": "fwrqc",
                      "graph": "graph_metro20k_lanes.graphml",
                      "stack": "compliance", "share": 0.75},
+    # the en-route rerouting arm (fwrqe, prereg Appendix T): the fwrqi stack
+    # and the FULL closure verbatim, only REROUTE_ENABLED differs. T5 grades
+    # the ON pair, which carries the plain fwrqe prefix; the OFF pair
+    # (fwrqeoff) reruns fwrqi and is not graded here. This entry is a
+    # mechanical repair: the arm commit 0ea4e03 omitted it, and it was added
+    # and pushed before the instrument's first run on any fwrqe data, per
+    # the appendix's commit discipline. Nothing else changed.
+    "reroute":  {"prefix": "fwrqe", "graph": "graph_metro20k_lanes.graphml",
+                 "stack": "reroute"},
 }
 
 
