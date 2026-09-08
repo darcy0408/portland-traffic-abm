@@ -9,7 +9,10 @@ and color.
 A four-panel Tableau Public workbook: metro closure map with a Closure dropdown
 (ten closures, changed segments only, 184,335 rows; the network itself is 159,410
 segments), Powell corridor detail (2,838), validation scatter (356 held-out PBOT
-counts, Spearman 0.59, ledger V1), top gainers. Workbook revision 1.9 (Sept 7).
+counts, Spearman 0.59, ledger V1), top gainers. Workbook revision 2.2 (Sept 8 01:11
+UTC): the metro map is filtered to an inner-Portland box, 13 x 16 km, so the closure
+redistribution is visible at the default zoom (see "Why the metro panel reads as nearly
+blank" under round 2).
 
 The workbook is unlisted on purpose, so its title, account, and URL are deliberately
 NOT recorded in this public repo; they live in the private session notes. Share the
