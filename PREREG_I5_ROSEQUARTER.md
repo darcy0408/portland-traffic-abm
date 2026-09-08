@@ -1902,3 +1902,195 @@ per-pair values, the week-2 exclusion and both diagnostic draws, the
 Sept 8-10 second computation, the pinned October before and during pools,
 the control-pair results, and the rule that the floor governs wording and
 rank eligibility only.
+
+## Appendix T: the en-route rerouting arm (fwrqe), registered with disclosure
+
+Registered 2026-09-08, before any fwrqe campaign task ran. Code: commit 0ea4e03
+on experiment/detour-compliance; job orca/job_fwrqe.sh (32 tasks).
+
+### Why this arm, and why now
+
+Every registered arm plans each trip once at spawn and never revises it. Real
+drivers revise: a car sitting in an unexpected queue leaves it when a
+navigation app, or patience, offers a better path. During a five-week freeway
+closure that revision behavior is not a detail, it is the difference between
+queues that persist and queues that drain onto the alternates. No registered
+arm spans that axis.
+
+This arm adds it: information response, a fourth fidelity axis beside driving
+behavior (fwrqi vs fwrq, Appendix K), closure geometry (fwrqa vs fwrqi,
+Appendix O), and guidance response (fwrqc vs fwrqi, Appendix R). It is
+orthogonal to the compliance dial on purpose: compliance moves route CHOICE
+at spawn along the signed detour, rerouting moves route REVISION mid-trip
+under congestion. Compliance stays off in this arm so the axes never mix.
+
+Registered before Sept 11 the arm is falsifiable; built afterward it would be
+fitting to data already seen. It is also the scoped, in-scope response to
+Christof's Aug 30 question 3 ("not all cars re-route the same way"): the arm
+was proposed to him on Aug 20, before that question was asked, and per-driver
+routing preference heterogeneity stays out of scope (occupied literature,
+Donaldson 2026).
+
+### The disclosure (read this before any fwrqe number)
+
+The C1 en-route rerouting mechanism FAILED its own registered acceptance gate,
+twice, and is therefore not part of the citable model (Appendix K pinned it
+off in every arm registered since).
+
+- The gate (registered pre-run in src/reroute_runs.py, ledger section 35,
+  Aug 19): P1 required BOTH diagnosed routing-concentration blackspots to at
+  least double their model/real speed ratio. Division healed (0.08 to 0.82)
+  but Burnside moved 0.03 to 0.06, a 1.88x gain against the 2x bar. The
+  conjunction failed. RR35.1.
+- The replication (combined arm, ledger section 36, same day): Burnside
+  reached only 0.05 with both experimental mechanisms on. Failed again.
+- What held, in the same registered runs: the do-no-harm claim (the 86 good
+  PORTAL stations stayed good, median ratio 0.96, none newly below half,
+  RR35.2), the no-fake-physics control (SB Russell unchanged at 1.69,
+  RR35.3), and the mechanism's core claim (network stuck vehicle-hours down
+  23.1% on the open network, 8/8 seeds, t = -40, RR35.4). The post-run trace
+  isolated the failed half to a ramp-on-ramp zipper capacity ceiling, a
+  junction-physics problem rerouting cannot fix and was never designed to.
+
+So the honest standing is: the registered runs showed a substantial
+reduction in stuck vehicle-hours and passed the do-no-harm and
+no-fake-physics controls, but failed the full C1 gate because Burnside did
+not meet the preregistered threshold. The arm therefore remains exploratory
+and cannot promote C1 into the citable model. It exists only WITH this
+disclosure. The question of registering it despite the failed gate was put
+to Christof by email on Aug 20 with the lean stated (register, failed
+station disclosed, freeze ~Sept 8, flag-me-if-wrong default); no veto
+arrived through the registration date (re-verified in the final thread
+skim, landing checklist item 3). The absence of a veto is recorded as part
+of the consultation record only and is not treated as endorsement or
+approval.
+Registered under that announced default.
+
+Citation rules, frozen now:
+
+- Any citation of any fwrqe number names the failed gate in the same breath:
+  "a mechanism that failed its registered acceptance gate (RR35.1), included
+  as a disclosed exploratory arm".
+- fwrqe results never promote C1 into the citable model. If October grades
+  fwrqe nearest the real data, that is grounds to re-run the acceptance gate
+  on new evidence, not a retroactive pass.
+- The two standing constant caveats travel with every result:
+  REROUTE_STUCK_S = 120 s is a-priori and the softest constant in the
+  mechanism (a sensitivity knob, not a calibrated value), and
+  REROUTE_MAX_PER_STEP = 20 is a compute budget, not physics; whether the
+  cap ever binds is reported with any result.
+
+### Frozen design (approved Sept 4; frozen at commit 0ea4e03)
+
+- Arm: prefix fwrqe, `python src/freeway_rosequarter.py --reroute` (branch
+  experiment/detour-compliance). The fwrqi stack and the FULL five-edge
+  closure VERBATIM (STACK_COMPLIANCE off, access lane off,
+  MERGE_ENTRY_IMPROVED off); the only mechanism change is
+  config.REROUTE_ENABLED = True, constants pinned to the committed defaults
+  (stuck 120 s, cooldown 300 s, cap 20 re-plans/step, longest-stuck-first
+  deterministic order).
+- Four cells, one flat 32-task array, single submission, one-writer rule:
+  rerouting ON and OFF, open and closed, 8 seeds each. The OFF pair is
+  dynamically identical to fwrqi (the reroute pass draws no random numbers
+  and flag-off is bitwise the base model, gate-verified); it is run anyway,
+  for two reasons:
+  1. The existing fwrq/fwrqi campaigns did not instrument stuck time (the
+     stuck_sum column is opt-in and their runs did not opt in), so the
+     mechanism's headline metric has no banked baseline. The OFF pair
+     supplies it, instrumented, under this campaign's exact code.
+  2. The OFF pair doubles as the campaign's strongest integrity check: it
+     must reproduce the banked fwrqi summaries exactly (below).
+- Instrumentation: all 32 tasks pass stuck_stats, so every saved parquet
+  carries the per-segment stuck_sum column. Stuck accounting is
+  measurement-only (the reroute trigger tracks its own per-vehicle
+  continuously-stuck clock, independent of the measurement, by design); the
+  OFF-pair equality check proves measurement-only holds, it is not assumed.
+- Re-plan accounting: each ON task's saved summary records the whole-run
+  re-plan count, the count of failed re-plans, and the number of steps on
+  which the per-step cap bound (single-source-of-truth rule: in the summary,
+  not just the task log).
+- RNG discipline: none needed. The reroute pass draws no random numbers, so
+  the trip stream, the compliance stream (unused here), and every other
+  stream are untouched; the same seed sees the same spawn sequence in all
+  four cells.
+
+### Integrity checks, registered now
+
+All fail loudly; any failure voids the campaign before grading.
+
+1. OFF-pair equality: fwrqe OFF-open and OFF-closed must equal the banked
+   fwrqi open and closed summaries per seed EXACTLY (network NOx, network
+   throughput, and every tracked route). --readout runs the check. This
+   simultaneously re-verifies the frozen span, the graph, and the stack
+   against the Appendix K registration, and proves stuck instrumentation
+   changed no dynamics.
+2. The reroute gate (6 checks including flag-off bitwise identity,
+   src/reroute_scenarios.py) re-run at commit 0ea4e03 on a clean tree:
+   6/6 PASS (Sept 4). Re-run again on the cluster before sbatch, PASS
+   required (the job header lists it in the submit steps).
+3. The standing frozen-span guard: the closed arms select exactly 5 edges,
+   the same 3 SB mainline edges registered in section 1 plus the 2 stranded
+   ramps.
+
+### Banked predictions, before any run (approved Sept 4)
+
+Verdict bar unchanged: unanimous sign across the 8 paired seeds and |t| > 3
+on the paired relative differences. All pairings are per-seed within this
+campaign's four cells.
+
+- T1 (primary, the mechanism's core claim under closure stress): CLOSED-arm
+  network stuck vehicle-hours drop, rerouting ON minus OFF, in all 8 paired
+  seeds, |t| > 3. Cars queueing for a path the closure broke is exactly what
+  replanning removes. If stuck time does not fall here, the mechanism's
+  primary closure-stress claim is unsupported; the secondary outcomes
+  (T2 through T5) are still reported, and are interpreted in that context.
+- T2 (replication): OPEN-arm network stuck vehicle-hours drop, ON minus OFF,
+  8/8, |t| > 3. The Aug 19 re-validation measured -23.1% (8/8, t = -40) on
+  the open network under the registered stack; this replicates it under the
+  campaign demand and graph. The registered expectation is direction, not
+  the -23.1% magnitude.
+- T3 (the closure signature survives): within the ON pair, the I-405 route
+  NOx total rises closed-minus-open (8/8, |t| > 3) and the I-405 gain
+  outranks the I-205 gain, matching every registered arm. Replanning
+  redistributes queues; if it erases the diversion signature itself, the
+  headline is mechanism-fragile and that is reportable.
+- T4 (registered open question, no direction banked): the SIZE of the ON
+  pair's I-405 gain against the OFF pair's (the fwrqi value, +37.7%).
+  Replanning could concentrate diverted traffic onto the freeway loop (cars
+  bailing out of jammed surface detours) or spread it off (cars bailing out
+  of a slowed I-405). No basis exists to pick a direction a priori; whatever
+  it shows is reported, including a null.
+- T5 (travel-time instrument): the instrument (Appendix M rules, same
+  commit discipline) runs on the ON pair. Banked now, before any run: the
+  i5sb_detour pair rises closed minus open within the ON pair, at the
+  standing verdict bar (unanimous sign across the 8 paired seeds and
+  |t| > 3), consistent with M.2's UP group and with 6 of 6 closed-span
+  results across the base and improved arms. The October rank is NOT
+  banked now: it is derived from the fwrqe instrument output under the
+  registered M.3 rule 4 and N.4 rules (pairs indistinguishable from seed
+  noise take no rank; a pair inside the measured logger floor takes no
+  rank, per the Appendix Q addendum) and frozen in a dated results
+  appendix before Sept 11, before any real closure data are examined.
+  Once frozen, that rank cannot be changed on sight of the observed
+  closure data. Model magnitudes are reported for honesty and never
+  graded, per M.3. The fwrqe ON pair then enters the October M.3
+  head-to-head beside base, improved, access, and the three compliance
+  levels, under the frozen Appendix J and Q floors, unchanged.
+- Standing checks apply everywhere: the NOx conservation check on every
+  task; re-plan counts, failures, and cap-binding reported with the results.
+
+### October grading
+
+fwrqe adds one arm to the registered October comparison, nothing else
+changes. If the real logger and PORTAL data land nearest fwrqe, the formal
+registered conclusion is limited to: the observed closure data were more
+consistent with the en-route rerouting arm than with the other registered
+arms. En-route rerouting may then be discussed as a plausible explanation,
+stated with the disclosure, but model proximity is never treated as proof
+of actual driver behavior. Such a result is grounds to re-run the
+acceptance gate as new post-closure work; it is never a retroactive pass.
+If fwrqe lands worst, that is a clean registered negative for the mechanism
+under closure stress and is reported with equal prominence.
+
+- The primary registered predictions remain Appendix A's and do not change.
+  This arm's numeric results will be appended, dated, before Sept 11.
