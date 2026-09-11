@@ -1,0 +1,15 @@
+Registered second computation of the logger null floor: pairs involving Sept 8-10 (Appendix Q addendum 2, DIAGNOSTIC label, never governs).
+Run: 2026-09-11 03:22:18Z (Thu Sep 10 21:22:18 MDT 2026)
+Scorer: src/rosequarter_logger_floor.py at fe2c893 (registered fe2c893); working copy vs HEAD diff: '' (empty = untouched)
+Repo HEAD: d3fa4f5
+Logger clone: e15efdebecf1ee32708aca57b8762bbe11376eb7 2026-09-11 02:52:22 +0000
+CSV md5: 7044338f8fd70e5fdf8b3a1417d53b0b *C:/dev/portland-traveltime-log/data/traveltimes_2026-08.csv cc421c0809cf7df0521776bb823bfda8 *C:/dev/portland-traveltime-log/data/traveltimes_2026-09.csv 
+Coverage: Sept 8, 9, 10 each 14 of 14 daytime hours on all 12 pairs (12-of-14 rule cleared, no drops).
+Path: --score with whole Tue-Thu triples (the --floor path cannot enumerate Labor Day week by M.3 rule 3; see SEPT11 runbook). --floor-pct 6.864666476624853 on every draw.
+Draws: D1 week1 (Aug 18-20) vs Sept 8-10; D2 week3 (Sept 1-3) vs Sept 8-10; D3 week2 (Aug 25-27) vs Sept 8-10 (week 2 usable pool is Aug 25 alone: diagnostic of a diagnostic).
+
+Reading (runbook section 4 rules; every value DIAGNOSTIC, none governs; the governing floor stays 6.864666476624853, display 6.86):
+  D1 week1 x Sept 8-10: largest |change| 4.33% (ctrl_se); all 12 pairs inside the governing floor. Aug 18 dropped at 10/14 as before.
+  D2 week3 x Sept 8-10: largest |change| 5.46% (mlk_sb); all 12 pairs inside the governing floor. No drops.
+  D3 week2 x Sept 8-10: Aug 26 and 27 dropped (5/14, 6/14), so week 2 is Aug 25 alone; six pairs +9.2% to +12.6%, all positive (i205_sb, vanc_pdx, mlk_sb, i84wb_feeder, i5sb_detour, i5sb_span), six inside the floor. Above the governing floor: a reportable property of the null period, not a floor revision; a diagnostic of a diagnostic.
+  The tier wording printed beside each pair is meaningless for a null draw and is ignored; percent changes are the result. Sept 8-10 never enters October's before pool (Labor Day week, M.3 rule 3).

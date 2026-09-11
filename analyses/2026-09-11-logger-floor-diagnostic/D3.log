@@ -1,0 +1,41 @@
+before: [datetime.date(2026, 8, 25), datetime.date(2026, 8, 26), datetime.date(2026, 8, 27)]
+during: [datetime.date(2026, 9, 8), datetime.date(2026, 9, 9), datetime.date(2026, 9, 10)]
+
+  DROPPED ctrl_se 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_se 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-27: 6 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-26: 5 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-27: 6 of 14 daytime hours ok (< 12)
+         i205_sb  +12.56%  direction consistent, weak evidence
+        vanc_pdx  +11.47%  direction consistent, weak evidence
+          mlk_sb  +10.95%  direction consistent, weak evidence
+    i84wb_feeder  +10.39%  direction consistent, weak evidence
+     i5sb_detour   +9.59%  direction consistent, weak evidence
+       i5sb_span   +9.21%  direction consistent, weak evidence
+   interstate_sb   +6.64%  within the measured null floor, no evidence either way
+         ctrl_se   +5.25%  within the measured null floor, no evidence either way
+     williams_nb   +4.61%  within the measured null floor, no evidence either way
+        grand_nb   +4.37%  within the measured null floor, no evidence either way
+       powell_wb   +3.61%  within the measured null floor, no evidence either way
+       ctrl_west   +1.96%  within the measured null floor, no evidence either way
+
+rank of gains among pairs clear of the floor (others take no rank): NONE

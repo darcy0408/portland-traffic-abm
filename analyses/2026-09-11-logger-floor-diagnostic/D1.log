@@ -1,0 +1,29 @@
+before: [datetime.date(2026, 8, 18), datetime.date(2026, 8, 19), datetime.date(2026, 8, 20)]
+during: [datetime.date(2026, 9, 8), datetime.date(2026, 9, 9), datetime.date(2026, 9, 10)]
+
+  DROPPED ctrl_se 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED ctrl_west 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED grand_nb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i205_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_detour 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i5sb_span 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED i84wb_feeder 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED interstate_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED mlk_sb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED powell_wb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED vanc_pdx 2026-08-18: 10 of 14 daytime hours ok (< 12)
+  DROPPED williams_nb 2026-08-18: 10 of 14 daytime hours ok (< 12)
+         ctrl_se   +4.33%  within the measured null floor, no evidence either way
+        grand_nb   +1.91%  within the measured null floor, no evidence either way
+     williams_nb   +1.36%  within the measured null floor, no evidence either way
+       ctrl_west   +1.28%  within the measured null floor, no evidence either way
+    i84wb_feeder   +0.78%  within the measured null floor, no evidence either way
+     i5sb_detour   -0.01%  within the measured null floor, no evidence either way
+   interstate_sb   -0.18%  within the measured null floor, no evidence either way
+       i5sb_span   -1.01%  within the measured null floor, no evidence either way
+       powell_wb   -1.45%  within the measured null floor, no evidence either way
+          mlk_sb   -1.78%  within the measured null floor, no evidence either way
+        vanc_pdx   -2.83%  within the measured null floor, no evidence either way
+         i205_sb   -3.68%  within the measured null floor, no evidence either way
+
+rank of gains among pairs clear of the floor (others take no rank): NONE

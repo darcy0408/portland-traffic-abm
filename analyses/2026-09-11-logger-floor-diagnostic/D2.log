@@ -1,0 +1,17 @@
+before: [datetime.date(2026, 9, 1), datetime.date(2026, 9, 2), datetime.date(2026, 9, 3)]
+during: [datetime.date(2026, 9, 8), datetime.date(2026, 9, 9), datetime.date(2026, 9, 10)]
+
+          mlk_sb   +5.46%  within the measured null floor, no evidence either way
+    i84wb_feeder   +5.27%  within the measured null floor, no evidence either way
+        vanc_pdx   +3.67%  within the measured null floor, no evidence either way
+     i5sb_detour   +3.24%  within the measured null floor, no evidence either way
+   interstate_sb   +2.78%  within the measured null floor, no evidence either way
+       i5sb_span   +2.74%  within the measured null floor, no evidence either way
+        grand_nb   +1.76%  within the measured null floor, no evidence either way
+         ctrl_se   +1.04%  within the measured null floor, no evidence either way
+     williams_nb   +0.74%  within the measured null floor, no evidence either way
+       powell_wb   -0.07%  within the measured null floor, no evidence either way
+       ctrl_west   -0.29%  within the measured null floor, no evidence either way
+         i205_sb   -0.58%  within the measured null floor, no evidence either way
+
+rank of gains among pairs clear of the floor (others take no rank): NONE
