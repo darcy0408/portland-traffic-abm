@@ -399,6 +399,17 @@ Tableau rules learned this pass (in addition to the list above):
 Hosted revisions 1.5 (subline and two rows clipped), 1.6 (fifth row still cut, legend
 titles compact), 1.7 (clean, verified by headless-Chrome screenshot). Size 1300 x 1070.
 
+Later Sept 11 (revisions 1.8 and 1.9, commit ff7328c, size 1300 x 1240): categorical
+color legends under the station and route maps (zones 112 and 113, `type-v2='color'`
+on `[none:Registered Direction:nk]` and `[none:Registered Expectation:nk]`). At 118 px
+Tableau folded each legend into two columns and truncated the labels; 170 px holds 5
+and 6 items in one column at full width. Both workbooks were made PUBLIC Sept 11 at
+Christof's request (Settings popover on the viz page, "Show Viz on Profile"; the desktop
+Save dialog cannot set it; the switch ignores synthetic clicks, `input.click()` from the
+page's own JavaScript worked). `tableau_publish.py` is now mouse-free: it sets the title
+and presses Save and Yes through UI Automation patterns, because a coordinate click
+landed in the browser while the person was using the computer and the publish stalled.
+
 ## Provenance and caveats that travel with the numbers
 
 - NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
