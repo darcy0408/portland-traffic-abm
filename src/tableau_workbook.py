@@ -103,7 +103,7 @@ FOOTER = ("Generated from the saved simulation tables by src/tableau_workbook.py
           "Python (OSMnx, NetworkX, pandas), Tableau Public. The code was written with AI "
           "assistance (Claude Code) and checked by the author.")
 DASHBOARD = "Rose Quarter"
-HEIGHT, WIDTH = 1070, 1300   # fixed dashboard size in pixels
+HEIGHT, WIDTH = 1188, 1300   # fixed dashboard size in pixels
 
 # Colors keyed by the exact category strings the tables carry (tableau_rosequarter.py).
 VERDICT_COLORS = {"SUPPORTED": "#b2182b", "not at bar": "#b7bdc4"}
@@ -440,7 +440,7 @@ def rich_text_zone(zid, x, y, w, h, runs):
     return zone(zid, x, y, w, h, body, type_v2="text", forceUpdate="true")
 
 
-def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
+def dashboard_xml(paired_ds, param_name, param_col_xml, footer, stations_ds, routes_ds):
     """Fixed 1300 x 1004, four bands. The headline (the registered call, the closure, the
     no-observed-data line); row 1, the paired map (56%) beside a column holding the
     parameter control, the map's color legend, the corridor bars, and the October note;
@@ -452,7 +452,8 @@ def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
     top, left, W, H = 909, 615, 98770, 98182          # the outer margin Tableau uses
     px = lambda n: int(H * n / HEIGHT)                # pixel height to dashboard units
     head_h, row1_h, row2_h = px(92), px(580), px(352)   # 92: two bold lines plus the subline
-    foot_h = H - head_h - row1_h - row2_h
+    leg_h = px(118)   # color legends under the station and route maps (5 and 6 items)
+    foot_h = H - head_h - row1_h - row2_h - leg_h
     map_w = int(W * 0.56)
     right_x, right_w = left + map_w, W - map_w
     head = rich_text_zone(101, left, top, W, head_h, [(HEADLINE, 11, True), (SUBLINE, 10, False)])
@@ -482,10 +483,17 @@ def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
     y2 = y1 + row1_h
     w3 = [int(W * 0.27), int(W * 0.27)]   # the text panel takes the remaining 46%
     w3.append(W - sum(w3))
+    # The station and route maps each get their categorical color legend directly below
+    # (the captions name the colors in words, but a reader asked what the dots meant);
+    # the text panel spans the map and legend rows on the right.
     r2 = [zone(108, left, y2, w3[0], row2_h, name="Stations"),
+          zone(112, left, y2 + row2_h, w3[0], leg_h, name="Stations", pane_specification_id="0",
+               param=f"[{stations_ds}].[none:Registered Direction:nk]", type_v2="color"),
           zone(109, left + w3[0], y2, w3[1], row2_h, name="Routes"),
-          text_zone(110, left + w3[0] + w3[1], y2, w3[2], row2_h, TEXT_PANEL, 9)]
-    foot = text_zone(111, left, y2 + row2_h, W, foot_h, [footer], 8)
+          zone(113, left + w3[0], y2 + row2_h, w3[1], leg_h, name="Routes", pane_specification_id="0",
+               param=f"[{routes_ds}].[none:Registered Expectation:nk]", type_v2="color"),
+          text_zone(110, left + w3[0] + w3[1], y2, w3[2], row2_h + leg_h, TEXT_PANEL, 9)]
+    foot = text_zone(111, left, y2 + row2_h + leg_h, W, foot_h, [footer], 8)
     inner = zone(100, left, top, W, H, "\n".join([head] + r1 + parts + r2 + [foot]), type_v2="layout-basic")
     root = f"<zone h='{P}' id='99' type-v2='layout-basic' w='{P}' x='0' y='0'>\n{inner}\n{ZSTYLE.replace(chr(39)+'4'+chr(39), chr(39)+'8'+chr(39))}\n</zone>"
     return f"""  <dashboards>
@@ -647,7 +655,7 @@ def main():
     twb = insert_before(twb, "  </datasources>\n  <mapsources>", corridors.xml() + stations.xml() + routes.xml())
     twb = insert_before(twb, "  </worksheets>\n", sheets)
     twb = insert_before(twb, "  <windows>\n", dashboard_xml(paired_ds, f"[Parameters].{param_name}", param_col_xml,
-                                                            FOOTER.format(commit=commit)))
+                                                            FOOTER.format(commit=commit), stations.name, routes.name))
     twb = insert_before(twb, "  </windows>\n", window_xml("Corridors") + window_xml("Stations")
                         + window_xml("Routes")
                         + window_xml(DASHBOARD, "dashboard",
