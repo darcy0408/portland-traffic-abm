@@ -351,6 +351,54 @@ Commands (from this worktree):
   python src/tableau_workbook.py --template <stage1.twbx> --tables outputs/tableau/rosequarter_tables.xlsx --out outputs/tableau/rosequarter_workbook.twbx
   python src/tableau_publish.py --twbx outputs/tableau/rosequarter_workbook.twbx --title "<exact title>" --repo <RepoUrl>
 
+### Sept 11 afternoon review pass, both versions (workbook revision 1.7, commit 84d6c1c)
+
+A six-hats read of the two I-5 dashboards through Christof's eyes, after a ChatGPT
+review Darcy pasted (it never rendered the page; four of its seven points held, its
+proposed headline misstated the I-205 call). Changes, applied to BOTH the workbook
+generator and `rosequarter_page.py` so the versions stay comparable:
+
+- A headline band in registered words leads the page (I-405 up strongly, all 8 seeds;
+  I-205 up weakly, 4 of 8, not at the bar; locked on GitHub Aug 14; scored in October),
+  with the closure dates and the predictions-only line under it. The generator asserts
+  the headline's seed counts and verdicts against the corridors table before writing it.
+- Each corridor row shows the seeds agreeing and the change in grams on the open-hour
+  total next to the percent (Christof asked for absolute values in July; I-205's +450 g
+  is not small in grams, only against its 16,333 g base).
+- The corridor title says what "supported" means (the simulation bore out an
+  expectation written before it ran; the real-world test is October's), because the red
+  SUPPORTED reads as observational support at a glance.
+- The map title glosses seeds (independent runs, different random starts) and NO2
+  versus NOx (map colors NO2 = F_NO2 x NOx; bars NOx as registered).
+- The October note says observed data are "not shown here until scoring is complete, so
+  the predictions cannot be adjusted after seeing them" (not "withheld").
+- A provenance footer: generating script and commit, preregistration path, tools, and
+  the program's AI-assistance acknowledgment.
+- Web page only: OSM basemap muted with a CSS filter on the tile pane; the twelve
+  logger routes drawn as thin dashed chords with a legend line saying they join a
+  trip's two ends and are not the driven path; a numpy-int payload bug fixed.
+
+Tableau rules learned this pass (in addition to the list above):
+- Parameter-control and legend zones render in compact form (title beside the control,
+  truncated) below about 54 px; at 56 px the title sits on top in full.
+- A long sheet title steals row height silently: the bars zone needs about 336 px for a
+  six-line 10 pt title, a header row, five rows and the axis (322 px cut the fifth row).
+- Rename a physical column for display with a datasource-level
+  `<column caption='Seeds' ... name='[Seeds Agreeing]'>` (the `captions` map on
+  `Source`); header space in a nested-rows table is tight.
+- A string calc on Rows (`(Route / Seeds / Change (g))`) is the robust way to put text
+  beside bars; mark labels overflow at the long bar and get hidden.
+- `<run bold='true' fontsize='11'>` works in a text zone; a line break must sit inside
+  the preceding run, text outside a run is dropped.
+- `tableau_publish.py` now matches the app window on the workbook's file name (an
+  unloaded workbook opens as Book1 and must never be published over the live one) and
+  retries the title entry through UI Automation when typed keys are dropped.
+- CARTO's light basemap stamps "API KEY REQUIRED" on tiles served to an unregistered
+  page (Sept 11); OSM tiles plus a grayscale/opacity filter give the same muted look.
+
+Hosted revisions 1.5 (subline and two rows clipped), 1.6 (fifth row still cut, legend
+titles compact), 1.7 (clean, verified by headless-Chrome screenshot). Size 1300 x 1070.
+
 ## Provenance and caveats that travel with the numbers
 
 - NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
