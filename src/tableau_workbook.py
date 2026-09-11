@@ -103,7 +103,7 @@ FOOTER = ("Generated from the saved simulation tables by src/tableau_workbook.py
           "Python (OSMnx, NetworkX, pandas), Tableau Public. The code was written with AI "
           "assistance (Claude Code) and checked by the author.")
 DASHBOARD = "Rose Quarter"
-HEIGHT, WIDTH = 1188, 1300   # fixed dashboard size in pixels
+HEIGHT, WIDTH = 1240, 1300   # fixed dashboard size in pixels
 
 # Colors keyed by the exact category strings the tables carry (tableau_rosequarter.py).
 VERDICT_COLORS = {"SUPPORTED": "#b2182b", "not at bar": "#b7bdc4"}
@@ -452,7 +452,8 @@ def dashboard_xml(paired_ds, param_name, param_col_xml, footer, stations_ds, rou
     top, left, W, H = 909, 615, 98770, 98182          # the outer margin Tableau uses
     px = lambda n: int(H * n / HEIGHT)                # pixel height to dashboard units
     head_h, row1_h, row2_h = px(92), px(580), px(352)   # 92: two bold lines plus the subline
-    leg_h = px(118)   # color legends under the station and route maps (5 and 6 items)
+    leg_h = px(170)   # color legends under the station and route maps: 5 and 6 items in ONE
+                      # column (at 118 px Tableau folded them into two columns and truncated)
     foot_h = H - head_h - row1_h - row2_h - leg_h
     map_w = int(W * 0.56)
     right_x, right_w = left + map_w, W - map_w

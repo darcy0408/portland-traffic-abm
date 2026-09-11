@@ -92,23 +92,26 @@ def main():
         raise SystemExit("Tableau Public wants a sign-in; sign in (Remember me) and rerun")
     field = next(e for e in w.descendants(control_type="Edit")
                  if os.path.splitext(os.path.basename(a.twbx))[0] in (e.window_text() or ""))
-    field.click_input(); time.sleep(0.3)
-    for attempt in range(3):   # typed keys were once dropped while the dialog settled
+    # No mouse from here on. A coordinate click lands on whatever window is in front, and
+    # on Sept 11 the person was using the browser while a publish ran: the Save click hit
+    # the browser and the publish silently stalled. UI Automation patterns (set value,
+    # invoke) reach the control directly, in the background if need be.
+    for attempt in range(3):
         try:
-            field.set_edit_text(a.title)          # UI Automation value set, no keystrokes
+            field.set_focus()
         except Exception:
-            field.type_keys("^a", pause=0.1)
-            field.type_keys(a.title, with_spaces=True, pause=0.02)
+            pass
+        field.set_edit_text(a.title)
         time.sleep(0.8)
         if field.window_text() == a.title:
             break
-        field.click_input(); time.sleep(1.5)
+        time.sleep(1.5)
     assert field.window_text() == a.title, f"title field reads {field.window_text()!r}"
-    next(b for b in w.descendants(control_type="Button") if b.window_text().strip() == "Save").click_input()
+    next(b for b in w.descendants(control_type="Button") if b.window_text().strip() == "Save").invoke()
     time.sleep(4)
     yes = next((b for b in w.descendants(control_type="Button") if b.window_text().strip() == "Yes"), None)
     if yes:
-        yes.click_input(); print("  confirmed the overwrite prompt")
+        yes.invoke(); print("  confirmed the overwrite prompt")
     time.sleep(3)
     close_recovery(w)
 
