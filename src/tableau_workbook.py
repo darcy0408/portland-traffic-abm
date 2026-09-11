@@ -28,6 +28,7 @@ import random
 import re
 import shutil
 import string
+import subprocess
 import tempfile
 import time
 import uuid
@@ -41,12 +42,18 @@ TITLE_MAP = ("Where the model says the pollution moves when I-5 southbound close
              "over 8 paired seeds, inner Portland, segments changing by 1 g or more where at "
              "least 7 of 8 seeds agree on the direction (the menu sets 6, 7 or 8). Base model, "
              "mixed fleet, one steady-state hour. The map is the campaign's raw output; the "
-             "graded predictions are the corridor totals and the station directions.")
+             "graded predictions are the corridor totals and the station directions. Seeds are "
+             "independent simulation runs with different random starts. Map colors are NO2 "
+             "change in grams per segment over the hour (NO2 = {f_no2} x NOx, the project's "
+             "convention); the corridor bars are NOx, as registered.")
 TITLE_CORRIDORS = ("Registered corridor predictions: mean percent change in route NOx, 8 paired "
                    "seeds. I-405, the signed detour: up strongly, all 8 seeds agree, supported. "
                    "I-205, the regional detour: up weakly, 4 of 8 seeds, not at the bar. The "
                    "other routes sit inside seed noise. Verdict rule frozen before the run: "
-                   "unanimous sign and |t| > 3.")
+                   "unanimous sign and |t| > 3. Supported means the simulation bore out an "
+                   "expectation written before it ran; the real-world test is October's. Each "
+                   "row also shows the seeds agreeing and the change in grams on the open-hour "
+                   "baseline.")
 TITLE_STATIONS = ("The 13 PORTAL detector stations frozen for the October comparison, colored by "
                   "the registered direction of change. The two stations south of the I-84 merge "
                   "have no registered direction. The two upstream approach stations are expected "
@@ -78,10 +85,27 @@ TEXT_PANEL = [
 TEXT_OCTOBER = ("Scoring happens in October against ODOT PORTAL loop detectors and an hourly "
                 "travel-time log kept since August 18, under rules registered in advance: "
                 "direction and rank of the changes, not absolute volumes. Observed closure data "
-                "are intentionally withheld until that scoring is complete. This panel will then "
-                "hold the predicted-versus-observed comparison, graded by the registered "
-                "instruments, never by a calculation made here.")
+                "are not shown here until that scoring is complete, so the predictions cannot be "
+                "adjusted after seeing them. This panel will then hold the predicted-versus-"
+                "observed comparison, graded by the registered instruments, never by a "
+                "calculation made here.")
+# The headline band: the registered call in registered words, then the closure and the
+# no-observed-data statement. main() checks the seed counts against the corridors table
+# before writing them, so the headline cannot drift from the data.
+HEADLINE = ("The prediction, registered before the closure: I-405 southbound up strongly (all 8 "
+            "seeds agree). I-205 southbound up weakly (4 of 8 seeds, not at the bar). Locked on "
+            "GitHub August 14, 2026; scored against real traffic in October.")
+SUBLINE = ("I-5 southbound closed at the Rose Quarter from September 11, 2026, for up to five "
+           "weeks. Predictions only: no observed closure data appear on this page until the "
+           "October scoring.")
+# The provenance footer (the program's AI-assistance acknowledgment lives here).
+FOOTER = ("Generated from the saved simulation tables by src/tableau_workbook.py (commit {commit}) "
+          "and published through Tableau Public; no number is typed by hand. Preregistration: "
+          "github.com/darcy0408/portland-traffic-abm/blob/main/PREREG_I5_ROSEQUARTER.md. Tools: "
+          "Python (OSMnx, NetworkX, pandas), Tableau Public. The code was written with AI "
+          "assistance (Claude Code) and checked by the author.")
 DASHBOARD = "Rose Quarter"
+HEIGHT, WIDTH = 1004, 1300   # fixed dashboard size in pixels
 
 # Colors keyed by the exact category strings the tables carry (tableau_rosequarter.py).
 VERDICT_COLORS = {"SUPPORTED": "#b2182b", "not at bar": "#b7bdc4"}
@@ -275,13 +299,17 @@ def title_xml(text, size=None):
             f"            <run{fs}>{escape(text)}</run>\n          </formatted-text>\n        </title>\n      </layout-options>")
 
 
-def sheet_bar(src):
-    """Corridors: one bar per route, sorted by the mean change, colored by verdict, labeled."""
-    dims = ["Route", "Verdict", "Ledger ID", "Seeds Agreeing", "Registered Prediction", "Model"]
+def sheet_bar(src, grams_calc):
+    """Corridors: one bar per route, sorted by the mean change, colored by verdict, labeled.
+    The row header carries the seeds agreeing and the change in grams (a string calc) next
+    to the route name, so the percent never stands alone: the absolute size was the review
+    ask, and Christof asked for absolute values in July."""
+    detail = ["Ledger ID", "Registered Prediction", "Model"]
+    dims = ["Route", "Seeds Agreeing", "Verdict"] + detail
     measures = ["Mean Change (%)", "SD (%)", "t", "Mean Change (g NOx)", "Open Baseline (g NOx)"]
-    r, m = src.ref("[none:Route:nk]")[:-1] + "]", src.ref("sum:Mean Change (%):qk")
-    r = src.ref("none:Route:nk")
-    lods = "\n".join(f"              <lod column='{src.ref(f'none:{d}:nk')}' />" for d in dims[2:])
+    r, m = src.ref("none:Route:nk"), src.ref("sum:Mean Change (%):qk")
+    rows = f"({r} / {src.ref('none:Seeds Agreeing:nk')} / {src.ref(f'none:{grams_calc[0]}:nk')})"
+    lods = "\n".join(f"              <lod column='{src.ref(f'none:{d}:nk')}' />" for d in detail)
     lods += "\n" + "\n".join(f"              <lod column='{src.ref(f'sum:{x}:qk')}' />" for x in measures[1:])
     return f"""    <worksheet name='Corridors'>
 {title_xml(TITLE_CORRIDORS, 10)}
@@ -290,7 +318,7 @@ def sheet_bar(src):
           <datasources>
             <datasource caption='{src.sheet} (rosequarter_tables)' name='{src.name}' />
           </datasources>
-{dep(src, dims, measures)}
+{dep(src, dims, measures, (), (), [grams_calc])}
           <sort class='computed' column='{r}' direction='DESC' using='{m}' />
           <aggregation value='true' />
         </view>
@@ -314,7 +342,7 @@ def sheet_bar(src):
             </style>
           </pane>
         </panes>
-        <rows>{r}</rows>
+        <rows>{rows}</rows>
         <cols>{m}</cols>
       </table>
       <simple-id uuid='{{{str(uuid.uuid4()).upper()}}}' />
@@ -397,24 +425,44 @@ def text_zone(zid, x, y, w, h, paragraphs, size):
     return zone(zid, x, y, w, h, body, type_v2="text", forceUpdate="true")
 
 
-def dashboard_xml(paired_ds, param_name, param_col_xml):
-    """Fixed 1300 x 880, two rows. Row 1: the paired map (56%) beside a column holding
-    the parameter control, the map's color legend, the corridor bars, and the October
-    note. Row 2: stations, routes, and the text panel. The October note's zone is where
-    the predicted-versus-observed sheet will go, so the layout does not move later."""
+def rich_text_zone(zid, x, y, w, h, runs):
+    """Runs of (text, size, bold), one per line: the line break sits inside the run that
+    precedes it, because text outside a <run> is dropped."""
+    parts = []
+    for i, (text, size, bold) in enumerate(runs):
+        b = " bold='true'" if bold else ""
+        nl = "&#10;" if i < len(runs) - 1 else ""
+        parts.append(f"<run{b} fontsize='{size}'>{escape(text)}{nl}</run>")
+    body = "<formatted-text>\n" + "\n".join(parts) + "\n</formatted-text>"
+    return zone(zid, x, y, w, h, body, type_v2="text", forceUpdate="true")
+
+
+def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
+    """Fixed 1300 x 1004, four bands. The headline (the registered call, the closure, the
+    no-observed-data line); row 1, the paired map (56%) beside a column holding the
+    parameter control, the map's color legend, the corridor bars, and the October note;
+    row 2, stations, routes, and the text panel; the provenance footer. Heights are
+    planned in pixels and converted to Tableau's hundred-thousandths. The October note's
+    zone is where the predicted-versus-observed sheet will go, so the layout does not
+    move later."""
     P = 100000
     top, left, W, H = 909, 615, 98770, 98182          # the outer margin Tableau uses
-    row1_h, row2_h = int(H * 0.60), H - int(H * 0.60)
+    px = lambda n: int(H * n / HEIGHT)                # pixel height to dashboard units
+    head_h, row1_h, row2_h = px(66), px(540), px(352)
+    foot_h = H - head_h - row1_h - row2_h
     map_w = int(W * 0.56)
     right_x, right_w = left + map_w, W - map_w
-    r1 = [zone(103, left, top, map_w, row1_h, name="Paired Map")]
-    # right column: param 7%, legend 8%, bars 62%, October note 23% (the bars need the
-    # height: five rows plus a four-line title, checked on the hosted page Sept 11)
-    ys, parts = top, []
-    for frac, kind in ((0.07, "param"), (0.08, "legend"), (0.62, "bars"), (0.23, "note")):
-        h = int(row1_h * frac)
+    head = rich_text_zone(101, left, top, W, head_h, [(HEADLINE, 11, True), (SUBLINE, 10, False)])
+    y1 = top + head_h
+    r1 = [zone(103, left, y1, map_w, row1_h, name="Paired Map")]
+    # right column in pixels. The parameter control and the legend get their titles on
+    # top (the 37 px compact versions truncated "Min Seeds Agreeing" and "NO2 Change (g)"
+    # on the hosted page); the bars need the height for a six-line title plus five rows.
+    ys, parts = y1, []
+    for n, kind in ((54, "param"), (54, "legend"), (310, "bars"), (122, "note")):
+        h = px(n)
         if kind == "param":
-            parts.append(zone(104, right_x, ys, right_w, h, mode="compact", param=param_name, type_v2="paramctrl"))
+            parts.append(zone(104, right_x, ys, right_w, h, param=param_name, type_v2="paramctrl"))
         elif kind == "legend":
             parts.append(zone(105, right_x, ys, right_w, h, name="Paired Map", pane_specification_id="0",
                               param=f"[{paired_ds}].[sum:NO2 Change (g):qk]", type_v2="color"))
@@ -427,18 +475,19 @@ def dashboard_xml(paired_ds, param_name, param_col_xml):
     # re-flows its children into even shares and ignores these sizes (seen on the hosted
     # page Sept 11: the bars got 15% instead of 62%); layout-basic honors x/y/w/h, which
     # is how the Powell workbook stores its sheet grid.
-    y2 = top + row1_h
+    y2 = y1 + row1_h
     w3 = [int(W * 0.27), int(W * 0.27)]   # the text panel takes the remaining 46%
     w3.append(W - sum(w3))
     r2 = [zone(108, left, y2, w3[0], row2_h, name="Stations"),
           zone(109, left + w3[0], y2, w3[1], row2_h, name="Routes"),
           text_zone(110, left + w3[0] + w3[1], y2, w3[2], row2_h, TEXT_PANEL, 9)]
-    inner = zone(100, left, top, W, H, "\n".join(r1 + parts + r2), type_v2="layout-basic")
+    foot = text_zone(111, left, y2 + row2_h, W, foot_h, [footer], 8)
+    inner = zone(100, left, top, W, H, "\n".join([head] + r1 + parts + r2 + [foot]), type_v2="layout-basic")
     root = f"<zone h='{P}' id='99' type-v2='layout-basic' w='{P}' x='0' y='0'>\n{inner}\n{ZSTYLE.replace(chr(39)+'4'+chr(39), chr(39)+'8'+chr(39))}\n</zone>"
     return f"""  <dashboards>
     <dashboard name='{DASHBOARD}'>
       <style />
-      <size maxheight='880' maxwidth='1300' minheight='880' minwidth='1300' sizing-mode='fixed' />
+      <size maxheight='{HEIGHT}' maxwidth='{WIDTH}' minheight='{HEIGHT}' minwidth='{WIDTH}' sizing-mode='fixed' />
       <datasources>
         <datasource name='Parameters' />
       </datasources>
@@ -545,7 +594,21 @@ def main():
     shutil.copy(a.tables, os.path.join(xlsx_dir, "rosequarter_tables.xlsx"))
     xlsx_rel = "Data/rq/rosequarter_tables.xlsx"
     x = pd.ExcelFile(a.tables)
-    corridors = Source("corridors", x.parse("corridors"), xlsx_rel, palette=("Verdict", VERDICT_COLORS))
+    # The change in grams beside each bar, as text: "+813 g on 959 g open".
+    grams_calc = ("Calculation_rqgrams", "Change (g NOx, one hour)", "string", "dimension",
+                  'IF [Mean Change (g NOx)] >= 0 THEN "+" ELSE "" END + STR(INT([Mean Change (g NOx)]))'
+                  ' + " g on " + STR(INT([Open Baseline (g NOx)])) + " g open"')
+    corridors = Source("corridors", x.parse("corridors"), xlsx_rel, calcs=[grams_calc],
+                       palette=("Verdict", VERDICT_COLORS))
+    # The headline states seed counts and verdicts in words; check them against the table.
+    cdf = corridors.df.set_index("Route")
+    assert (cdf.loc["I-405", "Seeds Agreeing"], cdf.loc["I-405", "Verdict"]) == ("8/8", "SUPPORTED"), cdf.loc["I-405"]
+    assert (cdf.loc["I-205", "Seeds Agreeing"], cdf.loc["I-205", "Verdict"]) == ("4/8", "not at bar"), cdf.loc["I-205"]
+    # Provenance for the footer and the NO2 factor for the map title, both read, not typed.
+    here = os.path.dirname(os.path.abspath(__file__))
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=here,
+                            capture_output=True, text=True, check=True).stdout.strip()
+    f_no2 = re.search(r"^F_NO2\s*=\s*([0-9.]+)", open(os.path.join(here, "..", "config.py"), encoding="utf-8").read(), re.M).group(1)
     st_calc = ("Calculation_rqstation", "Station Point", "spatial", "measure", "MAKEPOINT([Lat],[Lon])")
     stations = Source("stations", x.parse("stations"), xlsx_rel, calcs=[st_calc],
                       geo=[("Lat", "Latitude"), ("Lon", "Longitude")],
@@ -563,7 +626,7 @@ def main():
         assert not any("—" in str(v) for v in s.df.values.ravel()), "em dash in data"
         s.write_extract(work)
 
-    sheets = (sheet_bar(corridors)
+    sheets = (sheet_bar(corridors, grams_calc)
               + sheet_map("Stations", TITLE_STATIONS, stations, st_calc, "Registered Direction",
                           DIRECTION_COLORS, ["Registered Direction", "Location", "Group", "Graded in October"],
                           ["Station ID", "Milepost"], mark="Circle")
@@ -574,9 +637,13 @@ def main():
     # The template's map title has no size and renders huge inside a dashboard zone.
     assert twb.count("<run>Where the model says") == 1
     twb = twb.replace("<run>Where the model says", "<run fontsize='10'>Where the model says")
+    # The stage-1 title, extended with the seeds gloss and the NO2-versus-NOx sentence.
+    old_title = re.search(r"<run fontsize='10'>Where the model says.*?</run>", twb, re.S).group(0)
+    twb = twb.replace(old_title, f"<run fontsize='10'>{escape(TITLE_MAP.format(f_no2=f_no2))}</run>")
     twb = insert_before(twb, "  </datasources>\n  <mapsources>", corridors.xml() + stations.xml() + routes.xml())
     twb = insert_before(twb, "  </worksheets>\n", sheets)
-    twb = insert_before(twb, "  <windows>\n", dashboard_xml(paired_ds, f"[Parameters].{param_name}", param_col_xml))
+    twb = insert_before(twb, "  <windows>\n", dashboard_xml(paired_ds, f"[Parameters].{param_name}", param_col_xml,
+                                                            FOOTER.format(commit=commit)))
     twb = insert_before(twb, "  </windows>\n", window_xml("Corridors") + window_xml("Stations")
                         + window_xml("Routes")
                         + window_xml(DASHBOARD, "dashboard",
@@ -609,7 +676,7 @@ def main():
                 z.write(p, os.path.relpath(p, work))
     shutil.rmtree(work)
     print(f"wrote {a.out} ({os.path.getsize(a.out) / 1e6:.1f} MB): sheets Paired Map, Corridors, "
-          f"Stations, Routes; dashboard '{DASHBOARD}' 1300x880; datasources +3 (live Excel, "
+          f"Stations, Routes; dashboard '{DASHBOARD}' {WIDTH}x{HEIGHT}; datasources +3 (live Excel, "
           f"extracted on publish)")
 
 

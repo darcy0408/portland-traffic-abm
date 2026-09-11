@@ -42,11 +42,13 @@ def app_windows():
     return [w for w in Desktop(backend="uia").windows() if w.process_id() in pids]
 
 
-def main_window(timeout=120):
-    """The app window once the workbook has loaded (its title carries the file name)."""
+def main_window(stem, timeout=120):
+    """The app window once THIS workbook has loaded: the title carries the file name. A
+    workbook the app refuses opens as "Book1", and matching the name keeps that empty
+    book from being published over the live one."""
     for _ in range(timeout // 5):
         for w in app_windows():
-            if w.window_text().startswith("Tableau Public -"):
+            if w.window_text().startswith(f"Tableau Public - {stem}"):
                 return w
         time.sleep(5)
     raise SystemExit("Tableau Public did not open the workbook in time")
@@ -80,7 +82,7 @@ def main():
             p.kill()
     time.sleep(3)
     subprocess.Popen([a.app, os.path.abspath(a.twbx)])
-    w = main_window()
+    w = main_window(os.path.splitext(os.path.basename(a.twbx))[0])
     w.set_focus(); time.sleep(1)
     close_recovery(w)
 
