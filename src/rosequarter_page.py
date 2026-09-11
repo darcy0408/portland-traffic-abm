@@ -29,6 +29,11 @@ from datetime import date
 import osmnx as ox
 import pandas as pd
 
+# Repo-root config.py holds F_NO2 (NO2 = F_NO2 * NOx), used in the map caption
+# below; read it from there instead of typing the fraction by hand.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
+
 # --- Fixed inputs (absolute paths from the build plan; override only for testing) ---
 DEFAULT_PAIRED = (r"C:\dev\portland-traffic-abm\.claude\worktrees\tableau"
                    r"\outputs\tableau\rosequarter_paired.xlsx")
@@ -73,8 +78,9 @@ TEXT_PANEL = [
     "free-flow times and never replan.",
     "Scoring happens in October against ODOT PORTAL loop detectors and an hourly "
     "travel-time log kept since August 18, under rules registered in advance: "
-    "direction and rank of the changes, not absolute volumes. Observed closure data "
-    "will appear here only after that scoring is banked.",
+    "direction and rank of the changes, not absolute volumes. Observed closure "
+    "data are not shown here until that scoring is complete, so the predictions "
+    "cannot be adjusted after seeing them.",
 ]
 
 MAP_CAPTION = ("Where the model says the pollution moves when I-5 southbound "
@@ -83,13 +89,18 @@ MAP_CAPTION = ("Where the model says the pollution moves when I-5 southbound "
                "direction (the control sets 6, 7 or 8). Base model, mixed fleet, "
                "one steady-state hour. The map is the campaign's raw output: the "
                "graded predictions are the corridor totals and the station "
-               "directions.")
+               "directions. Map colors are NO2 change in grams per segment over "
+               f"the hour (NO2 = {config.F_NO2:.2f} x NOx, the convention used "
+               "throughout the project); the corridor bars are NOx, as "
+               "registered.")
 CORRIDOR_CAPTION = ("Registered corridor predictions: mean percent change in route "
                      "NOx, 8 paired seeds. I-405, the signed detour: up strongly, "
                      "all 8 seeds agree, supported. I-205, the regional detour: up "
                      "weakly, 4 of 8 seeds, not at the bar. The other routes sit "
                      "inside seed noise. Verdict rule frozen before the run: "
-                     "unanimous sign and |t| > 3.")
+                     "unanimous sign and |t| > 3. Supported means the simulation "
+                     "bore out an expectation written before it ran; the "
+                     "real-world test is October's.")
 STATION_CAPTION = ("Stations: the 13 PORTAL detector stations frozen for the "
                     "October comparison, colored by the registered direction of "
                     "change. The two stations south of the I-84 merge have no "
@@ -205,22 +216,75 @@ def build_routes(tables_path):
 
 
 def build_corridors(tables_path):
+    """The corridor-bar rows. The two lines of bar text (change 3) are formatted
+    here, not in the page's JS, so the finished, comma-grouped numbers land in
+    the embedded JSON as plain text (e.g. "16,333 g") rather than only existing
+    after a browser runs toLocaleString() on the raw ints."""
     df = pd.read_excel(tables_path, sheet_name="corridors")
     df = df.sort_values("Mean Change (%)", ascending=False)
     out = []
     for _, row in df.iterrows():
+        pct = round(float(row["Mean Change (%)"]), 1)
+        # int(), not _num(): these columns are whole grams (numpy int64), and
+        # _num()'s isinstance(x, (int, float)) check misses numpy's own int
+        # type, which would otherwise silently stringify them for JSON.
+        grams = int(row["Mean Change (g NOx)"])
+        baseline = int(row["Open Baseline (g NOx)"])
+        verdict = row["Verdict"]
+        supported = str(verdict).strip().upper() == "SUPPORTED"
+        seeds_agreeing = row["Seeds Agreeing"]  # already "8/8" style text
+        verdict_text = "supported by the simulation" if supported else "not at the bar"
+        pct_sign = "+" if pct >= 0 else ""
+        gram_sign = "+" if grams >= 0 else ""
         out.append({
             "route": row["Route"], "ledger_id": row["Ledger ID"],
             "registered_prediction": row["Registered Prediction"],
-            "mean_change_pct": round(float(row["Mean Change (%)"]), 1),
+            "mean_change_pct": pct,
             "sd_pct": round(float(row["SD (%)"]), 1),
-            "seeds_agreeing": row["Seeds Agreeing"],  # already "8/8" style text
+            "seeds_agreeing": seeds_agreeing,
             "t": round(float(row["t"]), 1),
-            "verdict": row["Verdict"],
-            "mean_change_nox_g": _num(row["Mean Change (g NOx)"]),
-            "open_baseline_nox_g": _num(row["Open Baseline (g NOx)"]),
+            "verdict": verdict,
+            "mean_change_nox_g": grams,
+            "open_baseline_nox_g": baseline,
+            "bar_line1": (f"{pct_sign}{pct}%, {seeds_agreeing.replace('/', ' of ')}, "
+                           f"{verdict_text}"),
+            "bar_line2": (f"{gram_sign}{grams:,} g on {baseline:,} g open "
+                           "(NOx, one hour)"),
         })
     return out
+
+
+def build_headline(corridors):
+    """The one-line registered-prediction summary shown above the subtitle
+    (change 1). The seed counts are parsed from the corridors table's own
+    "Seeds Agreeing" text (e.g. "8/8", "4/8") instead of being typed by hand,
+    and a verdict or seed-count mismatch is a hard error rather than a
+    silently wrong headline."""
+    by_route = {c["route"]: c for c in corridors}
+    i405, i205 = by_route["I-405"], by_route["I-205"]
+    if i405["verdict"].strip().upper() != "SUPPORTED":
+        raise ValueError(
+            f"I-405 verdict is {i405['verdict']!r}, expected SUPPORTED; the "
+            "headline text assumes this corridor cleared the bar."
+        )
+    if i205["verdict"].strip().lower() != "not at bar":
+        raise ValueError(
+            f"I-205 verdict is {i205['verdict']!r}, expected 'not at bar'; the "
+            "headline text assumes this corridor did not clear the bar."
+        )
+    i405_agree, i405_total = i405["seeds_agreeing"].split("/")
+    i205_agree, i205_total = i205["seeds_agreeing"].split("/")
+    if i405_agree != i405_total:
+        raise ValueError(
+            f"I-405 Seeds Agreeing is {i405['seeds_agreeing']!r}, not "
+            "unanimous; the headline text says 'all N seeds agree'."
+        )
+    return (
+        "The prediction, registered before the closure: I-405 southbound up "
+        f"strongly (all {i405_total} seeds agree). I-205 southbound up weakly "
+        f"({i205_agree} of {i205_total} seeds, not at the bar). Locked on "
+        "GitHub August 14, 2026; scored against real traffic in October."
+    )
 
 
 def git_fact(worktree, args):
@@ -262,6 +326,7 @@ body {{
 }}
 .page {{ max-width: 1300px; margin: 0 auto; }}
 header h1 {{ font-size: 1.5rem; margin: 0 0 4px 0; }}
+header .headline {{ font-size: 1.05rem; font-weight: 500; margin: 0 0 6px 0; }}
 header .subtitle {{ color: var(--muted); margin: 0 0 18px 0; }}
 .layout {{ display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }}
 .mapcol {{ flex: 1 1 62%; min-width: 340px; }}
@@ -272,9 +337,10 @@ header .subtitle {{ color: var(--muted); margin: 0 0 18px 0; }}
   background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
   padding: 10px 14px; margin-bottom: 10px; font-size: 0.9rem;
 }}
-.controls fieldset {{ border: none; margin: 0; padding: 0; display: flex; gap: 10px; align-items: center; }}
+.controls fieldset {{ border: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }}
 .controls legend {{ font-weight: 600; padding: 0; float: left; margin-right: 8px; }}
 .controls label {{ white-space: nowrap; }}
+.seeds-note {{ flex-basis: 100%; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }}
 #map {{ height: 560px; width: 100%; border: 1px solid var(--line); border-radius: 8px; }}
 .caption {{ color: var(--muted); font-size: 0.85rem; margin: 8px 0; }}
 .legend {{
@@ -291,6 +357,10 @@ header .subtitle {{ color: var(--muted); margin: 0 0 18px 0; }}
   background: linear-gradient(to right, var(--blue), #f7f7f7, var(--red));
   border: 1px solid #999; margin: 0 6px;
 }}
+.legend .dashline {{
+  display: inline-block; width: 34px; height: 0; margin-right: 5px;
+  vertical-align: middle; border-top: 2px dashed var(--gray);
+}}
 section.panel {{
   background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
   padding: 14px 16px; margin-bottom: 16px;
@@ -300,7 +370,9 @@ section.panel h2 {{ font-size: 1.05rem; margin: 0 0 10px 0; }}
 .bar-label {{ width: 60px; font-weight: 600; }}
 .bar-track {{ flex: 1; background: #eee; border-radius: 3px; height: 16px; position: relative; }}
 .bar-fill {{ display: block; height: 100%; border-radius: 3px; }}  /* block, an inline span ignores width and height */
-.bar-text {{ width: 190px; color: var(--muted); }}
+.bar-text {{ width: 300px; color: var(--muted); }}
+.bar-text .bar-line1 {{ display: block; color: var(--ink); }}
+.bar-text .bar-line2 {{ display: block; font-size: 0.78rem; color: var(--muted); margin-top: 1px; }}
 .text-panel p {{ margin: 0 0 12px 0; font-size: 0.92rem; }}
 .text-panel p:last-child {{ margin-bottom: 0; }}
 footer {{ color: var(--muted); font-size: 0.82rem; margin-top: 18px; }}
@@ -311,6 +383,7 @@ footer a {{ color: inherit; }}
 <div class="page">
 <header>
   <h1>When I-5 Closes: Preregistered Predictions for the Rose Quarter Closure</h1>
+  <p class="headline">{headline}</p>
   <p class="subtitle">Predictions only. Scoring in October under rules registered in advance.</p>
 </header>
 <main>
@@ -322,6 +395,7 @@ footer a {{ color: inherit; }}
         <label><input type="radio" name="minagree" value="6"> at least 6</label>
         <label><input type="radio" name="minagree" value="7" checked> at least 7</label>
         <label><input type="radio" name="minagree" value="8"> at least 8</label>
+        <div class="seeds-note">Seeds are independent simulation runs with different random starts. A segment shows only when at least 6, 7 or 8 of the 8 runs agree on the direction of its change.</div>
       </fieldset>
       <span><strong id="seg-count"></strong> segments shown</span>
       <fieldset>
@@ -338,6 +412,7 @@ footer a {{ color: inherit; }}
       <span><span class="swatch" style="background:#8b0000;border-color:#8b0000"></span>up strongly</span>
       <span><span class="swatch" style="background:#e07b00;border-color:#e07b00"></span>up weakly</span>
       <span><span class="swatch" style="background:#fff;border-color:#8a94a0"></span>not graded or none registered</span>
+      <span><span class="dashline"></span>logged trip: straight line between its two ends, not the driven path</span>
     </div>
     <p class="caption">{map_caption}</p>
     <p class="caption">{station_caption}</p>
@@ -357,6 +432,7 @@ footer a {{ color: inherit; }}
 </main>
 <footer>
   <p>Built {build_date} from the saved simulation files by src/rosequarter_page.py at commit {commit}. No number on this page is typed by hand.</p>
+  <p>Tools: Python (OSMnx, NetworkX, pandas), Leaflet and OpenStreetMap data with CARTO tiles. The code was written with AI assistance (Claude Code) and checked by the author; every number is read from the saved simulation tables.</p>
   <p><a href="{prereg_url}">Preregistration (GitHub)</a></p>
 </footer>
 </div>
@@ -366,12 +442,11 @@ const DATA = {data_json};
 
 // --- map ---
 const map = L.map('map').setView([45.5355, -122.6690], 12);
-// CARTO's Positron basemap now requires an API key (returns "API key required"
-// tiles without one), so this uses standard OpenStreetMap tiles instead, the
-// plan's named fallback.
-L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-  attribution: '&copy; OpenStreetMap contributors',
-  maxZoom: 19
+// CARTO Positron: a muted, light basemap so the red/blue NO2 segments dominate.
+L.tileLayer('https://{{s}}.basemaps.cartocdn.com/light_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+  subdomains: 'abcd',
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
 }}).addTo(map);
 
 const segLayer = L.layerGroup().addTo(map);
@@ -460,7 +535,9 @@ function routeStyle(r) {{
 }}
 DATA.routes.forEach(r => {{
   const st = routeStyle(r);
-  L.polyline(r.coords, {{ color: st.color, weight: 3, dashArray: st.dashArray, opacity: 0.9 }})
+  // Thin and dashed on purpose: these are straight lines between two logged
+  // points, not the driven path, and the dashing says so at a glance (legend).
+  L.polyline(r.coords, {{ color: st.color, weight: 2, dashArray: '6,6', opacity: 0.8 }})
     .bindTooltip(
       `<b>${{r.name}}</b><br>${{r.why}}<br>` +
       `Registered expectation: ${{r.expectation}}<br>` +
@@ -500,15 +577,20 @@ DATA.corridors.forEach(c => {{
   const supported = c.verdict.toUpperCase() === 'SUPPORTED';
   const color = supported ? (pos ? '#b2182b' : '#2166ac') : '#b7bdc4';
   const pct = Math.abs(c.mean_change_pct) / maxAbs * 100;
-  const sign = pos ? '+' : '';
   const row = document.createElement('div');
   row.className = 'bar-row';
   row.title = `Ledger ID: ${{c.ledger_id}}\\nSD: ${{c.sd_pct}}%\\nt: ${{c.t}}\\n` +
     `Registered prediction: ${{c.registered_prediction}}\\n` +
     `Mean change: ${{c.mean_change_nox_g}} g NOx\\nOpen baseline: ${{c.open_baseline_nox_g}} g NOx`;
+  // bar_line1 / bar_line2 are pre-formatted in build_corridors (Python), so the
+  // comma-grouped numbers are plain text in the page, not only produced by
+  // running this script in a browser.
   row.innerHTML = `<span class="bar-label">${{c.route}}</span>` +
     `<span class="bar-track"><span class="bar-fill" style="width:${{pct}}%;background:${{color}}"></span></span>` +
-    `<span class="bar-text">${{sign}}${{c.mean_change_pct}}%  ${{c.seeds_agreeing}} seeds  ${{c.verdict}}</span>`;
+    `<span class="bar-text">` +
+      `<span class="bar-line1">${{c.bar_line1}}</span>` +
+      `<span class="bar-line2">${{c.bar_line2}}</span>` +
+    `</span>`;
   bars.appendChild(row);
 }});
 </script>
@@ -517,13 +599,14 @@ DATA.corridors.forEach(c => {{
 """
 
 
-def render(payload, commit, prereg_url):
+def render(payload, commit, prereg_url, headline):
     text_paragraphs = "\n      ".join(f"<p>{p}</p>" for p in TEXT_PANEL)
     # Guard only the embedded JSON against a street/route name that happens to
     # contain "</script": escaping the whole rendered page would also mangle the
     # real closing tags around the Leaflet <script> elements.
     data_json = json.dumps(payload, separators=(",", ":")).replace("</script", "<\\/script")
     return PAGE_TEMPLATE.format(
+        headline=headline,
         map_caption=MAP_CAPTION,
         station_caption=STATION_CAPTION,
         route_caption=ROUTE_CAPTION,
@@ -568,7 +651,8 @@ def main():
         "segments": segments, "closed": closed, "stations": stations,
         "routes": routes, "corridors": corridors,
     }
-    html = render(payload, commit, prereg_url)
+    headline = build_headline(corridors)
+    html = render(payload, commit, prereg_url, headline)
 
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:
