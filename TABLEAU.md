@@ -197,6 +197,110 @@ Fourth pass (Sept 8 afternoon, workbook revision 2.7 at 22:11 UTC, still hidden)
 
 Fifth pass (Sept 8 evening, workbook revision 2.8 at 00:37 UTC Sept 9, still hidden): the Min/Max street labels were removed from the metro map (Metro Overview, Label card, Show Mark Labels unchecked; the Street pill stays on Label but draws nothing, so tooltips are unchanged). Reason: for SE Powell the largest-drop label sat on Southeast Grand Avenue, single-seed noise on a high-volume segment, not a closure effect, and it was the first thing a reader's eye would land on. Nothing else changed. Verified two ways: the workbook metadata reports revision 2.8, and a fresh authoring session opened from the server shows the Label popup greyed out (Show Mark Labels off). Anonymous access re-checked with curl and no cookies: the viz URL resolves 200 and the workbook API returns revision 2.8 with showInProfile false. Quirks this pass: the find tool's "Metro Overview" match was a Sheets-list option, not the bottom tab strip; the real tabs are `.tabAuthTab` elements and respond to dispatched mousedown/mouseup/click; the Marks card Label button (`tabAuthEncodingButtonArea`, role=button) opens on the same dispatched sequence; the dashboard canvas and map render blank in screenshots and Page.captureScreenshot times out while the map draws, so state was read from the DOM.
 
+## Rose Quarter predictions workbook (Sept 10: data built and verified, workbook not started)
+
+Christof's Sept 10 ask: "a Tableau for the I-5 closure". Scope, as committed in the
+Sept 10 reply to him: a SEPARATE workbook that shows only the preregistered
+predictions, with observed closure data kept off until the October scoring is
+banked, then a predicted-versus-observed panel added from the registered
+instruments' output.
+
+Rules for this workbook:
+- Predictions only until the October scoring is banked. No PORTAL or logger data
+  from Sept 11 onward is uploaded, joined, or displayed before then. The prereg has
+  no rule about public display (checked Sept 10); this is the project's own rule.
+- Grades come from src/rosequarter_score.py and the logger instrument, never from a
+  Tableau calculation.
+- Every number traces to the ledger by ID or is recomputed from the campaign's saved
+  files behind a guard that refuses to write on any mismatch.
+
+Data (script-built, read-only, in outputs/tableau/, gitignored):
+
+1. `rosequarter_paired.xlsx`, sheet `rosequarter`, 64,331 rows, 7.2 MB (under the
+   10 MB upload bridge). Built by `tableau_export.py paired` over the fwrq campaign:
+   8 seeds (42 7 13 99 314 777 2024 8) x arms open / rosequarter, files in
+   C:/dev/pta-realism/data/processed, graph graph_metro20k_orca.graphml (159,425
+   edges). Columns are COLS plus Seeds, Seeds Agreeing (NO2), NO2 Change SD (g),
+   Seeds Agreeing (Traffic), Traffic Change SD (veh); Before and During are 8-seed
+   means, Change is the mean of the within-seed paired differences.
+   Command (from this worktree):
+   python src/tableau_export.py paired --data-dir C:/dev/pta-realism/data/processed
+     --graph C:/dev/pta-realism/data/network/graph_metro20k_orca.graphml
+     --prefix fwrq --open-arm open --closed-arm rosequarter
+     --seeds 42 7 13 99 314 777 2024 8 --scenario "I-5 SB, Rose Quarter"
+     --changed-only --sheet rosequarter --out outputs/tableau/rosequarter_paired.xlsx
+   Verified Sept 10: summing the mean change over the 31 I-405 route edges gives
+   +244.0 g NO2 = +813 g NOx, I-205 +450 g, I-5 -122 g, identical to ledger section
+   27/28. Sign agreement over the 64,331 changed segments: 724 at 8/8, 2,908 at 7/8.
+   Inner-Portland box, magnitude >= 1 g, >= 7/8: 207 segments (145 at 8/8). Gainers
+   there: I 405 +161 g (12 segments), I 5 +118 (11), Fremont Bridge +67; losers:
+   North Lombard -197 (26), "I 5;US 30" -107 (the closed span), North Interstate
+   -55, Banfield Freeway -42, Marquam Bridge -36. `_street` now falls back to the
+   OSM `ref` when `name` is empty, so freeway mainlines read "I 405" instead of
+   "(unnamed motorway)"; the published metro table predates this and is unchanged
+   until re-exported.
+   Display rule for the map: filter Seeds Agreeing (NO2) >= 7 (make it a parameter,
+   6 to 8) and magnitude >= 1 g, box to inner Portland, color by NO2 Change capped,
+   width by magnitude, the metro panel's conventions. The map is the campaign's
+   output, not a graded prediction; the graded predictions are the corridor totals
+   and the station directions, and the panel text says so.
+
+2. `rosequarter_tables.xlsx`, 11 KB, built by `tableau_rosequarter.py`:
+   python src/tableau_rosequarter.py --data-dir C:/dev/pta-realism/data/processed
+     --stationmeta C:/dev/portland-traffic-abm/data/portal_rq/stationmeta.json
+     --pairs C:/dev/portland-traveltime-log/pairs.json
+     --out outputs/tableau/rosequarter_tables.xlsx
+   Sheets: `corridors` (5 rows, RQ1 to RQ5 recomputed from the 16 summaries and
+   asserted within 0.05 points of the ledger; verdict by prereg section 3, unanimous
+   sign and |t| > 3: I-405 +84.9 sd 16.7 8/8 t 14.4 SUPPORTED, I-205 +3.1, I-5 -0.8,
+   OR-213 +2.9, US-26 -0.6 all not at bar; Model column "base stack, mixed fleet"
+   read from the summaries); `stations` (the 13 frozen PORTAL stations, lat/lon
+   converted from the stationmeta.json Web Mercator cache, group and grading from
+   rosequarter_score.GROUPS, direction wording from Appendix A.1; upstream = down but
+   not graded, downstream = none registered); `routes` (12 logger pairs from
+   pairs.json with the M.2 expectation and role, Frozen Rank = the improved-arm and
+   fwrqe ordering of N.4/U.6, Frozen Rank (base arm) swaps the last two);
+   `route_points` (24 rows, two per route, for line marks).
+
+Panel plan, v1 (predictions only): the paired map (largest), corridor bars (mean %
+with SD, labeled with seeds agreeing and verdict), the 13 stations colored by
+registered direction with ungraded groups grayed, the 12 routes as lines colored by
+expectation and labeled with rank, and a text panel: prereg pushed public Aug 14
+(f76d27c) before any campaign task, Appendix A appended (8c185c0) with the frozen
+sections byte-identical; base stack, mixed fleet, 16,500 vehicles, one steady-state
+hour; caveats (local-access lane unmodeled, LODES 2021 demand plus a fixed 15%
+through share with no evaporation or time shift, route once at free-flow and never
+replan); "scoring in October under the registered rules; observed data appears here
+only after it is banked". D1-D3 at most as a text line. The map and bars are the
+base arm; the route rank is the improved-arm ordering, with the base-arm ordering as
+its second column, and the panel says which is which.
+
+### Second build of the same dashboard: the scripted page (Sept 10, built and verified)
+
+Darcy asked for both builds so the two tools can be compared on the same data.
+`src/rosequarter_page.py` reads the two exports above, the metro graph (segment
+geometry, so segments draw as their real curves), and the s42 closure summary (the
+5 removed edges), and writes one self-contained `outputs/web/rosequarter/index.html`
+(163 KB, data inlined as JSON; Leaflet 1.9.4 from unpkg and OpenStreetMap tiles load
+when viewed). Same captions and text panel as the Tableau plan, verbatim, zero em
+dashes. Controls: seeds agreeing at least 6 / 7 / 8 (262 / 207 / 145 segments, the
+count shown live), layer toggles for segments, stations, routes. Corridor bars are
+plain HTML. Footer carries the build date, the generating commit, and the GitHub link
+to the preregistration. Command: `python src/rosequarter_page.py --out
+outputs/web/rosequarter/index.html` (about 25 s, the graph load). Verification the
+script prints: 262 segments, 5 closed edges, 13 stations, 12 routes, 5 corridors,
+corridor values 84.9 / 3.1 / 2.9 / -0.6 / -0.8, em dashes 0. Rendered check: headless
+Chrome with a throwaway profile (`chrome.exe --headless=new --user-data-dir=<tmp>
+--window-size=1300,1500 --screenshot=<png> file:///...`), never the interactive tab.
+Two bugs found and fixed during the build: a global `</script>` escape corrupted the
+Leaflet script tags (blank page), scoped to the JSON payload; the bar fill was an
+inline span, which ignores width and height, so no bar drew (display: block). CARTO
+Positron tiles now demand an API key, so the page uses OpenStreetMap tiles. Known
+simplification for v2: the 12 routes are straight endpoint-to-endpoint lines
+(pairs.json holds endpoints only), so the I-84 feeder reads as a line across NE
+Portland; snapping each to the graph's shortest path would draw the road.
+Build cost: one Sonnet agent, 11 minutes, about 150k tokens, plus the bar fix.
+
 ## Provenance and caveats that travel with the numbers
 
 - NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
@@ -215,3 +319,5 @@ Fifth pass (Sept 8 evening, workbook revision 2.8 at 00:37 UTC Sept 9, still hid
   across seeds and fleet; a bridge needs a paired multi-seed run before it is shown.
 - Rose Quarter predicted-vs-observed panel (after Sept 11): grades come from the
   registered instrument's output only, never a Tableau calculation.
+- Rose Quarter predictions workbook: both tables come from `tableau_export.py paired`
+  and `tableau_rosequarter.py` (section above); predictions only until October.
