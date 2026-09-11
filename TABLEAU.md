@@ -301,6 +301,56 @@ simplification for v2: the 12 routes are straight endpoint-to-endpoint lines
 Portland; snapping each to the graph's shortest path would draw the road.
 Build cost: one Sonnet agent, 11 minutes, about 150k tokens, plus the bar fix.
 
+### The I-5 workbook itself: generated in code, published through the desktop app (Sept 11, DONE)
+
+After the browser-driven stage 1 (one sheet, two hours), the rest of the workbook was
+written as XML by `src/tableau_workbook.py` and published with `src/tableau_publish.py`.
+Facts that made this possible and the rules learned, all verified Sept 11:
+
+- Any published workbook downloads as a .twbx with no login:
+  `https://public.tableau.com/workbooks/<RepoUrl>.twb`. A .twbx is a zip of one XML
+  .twb plus Data/ (the Excel file and a .hyper extract). The stage-1 file is the
+  template: its paired-map sheet, parameter, calculations, and extract are kept as is.
+- The generator adds three data sources from rosequarter_tables.xlsx, each shipped as
+  a .hyper extract written with pantab (`table=("Extract","Extract")`): Tableau Public
+  refuses live connections even at load time ("workbooks saved to Tableau Public must
+  use extracts"). It adds the Corridors bar sheet, the Stations map (MAKEPOINT on
+  Geometry and Detail), the Routes map (MAKELINE between endpoints, rank as a string
+  calc on Label so it reads "3" not "3.000"), the 1300 x 880 dashboard, and windows.
+- XML rules the desktop validator enforced: `shelf-sorts` is not accepted, use
+  `<sort class='computed' column=... direction='DESC' using=... />` after the
+  datasource-dependencies; the `enable-sort-zone-taborder` dashboard attribute is not
+  accepted; categorical colors live in the DATASOURCE `<style>` as
+  `<encoding attr='color' field='[none:Field:nk]' type='palette'><map to='#hex'>
+  <bucket>&quot;value&quot;</bucket></map>` AND that column-instance must be declared
+  at the datasource level, or the palette is silently ignored; sheet titles need an
+  explicit `<run fontsize='10'>` or they render huge inside dashboard zones; a
+  `layout-flow` container re-flows children into even shares and ignores h/w, so the
+  sheet grid sits in one `layout-basic` container with absolute x/y/w/h (hundred-
+  thousandths of the dashboard); the parameter control zone's param needs the
+  `[Parameters].` prefix or it shows Null; a text zone is one `<run>` with `&#10;`
+  paragraph breaks (separate runs join inline).
+- Publishing: Tableau Desktop Public Edition (free; the download server refuses
+  scripted clients, the browser fetches it) opens the .twbx, validates it against a
+  schema with every error listed at once, and File > Save to Tableau Public As with
+  the existing title overwrites in place (Yes to the prompt), keeping the URL and the
+  hidden flag. Sign-in happens once in the app with Remember me. A killed instance
+  leaves a File Recovery offer on the next start: dismiss it, never open the backup.
+- Result: revisions 1.1 to 1.4 on Sept 11, final 1.4 with the dashboard as the
+  default view, still hidden; the hosted page checked with headless Chrome at each
+  step (`chrome.exe --headless=new --screenshot=... "<viz URL>?:showVizHome=no&:embed=y"`).
+  Every number on it is the export's: 207 marks at 7 of 8, bars 84.9 / 3.1 / 2.9 /
+  -0.6 / -0.8, 13 stations, 12 routes.
+- Cost: the whole code route, including the desktop-app publish loop, was a fraction
+  of stage 1's browser bill; the loop is rebuild (seconds), open (60 s), publish (~1 min).
+- Mistake to avoid: the first desktop publish accepted the dialog's default name and
+  created a second, VISIBLE workbook "rosequarter_workbook" on the profile. Always set
+  the title in the dialog; a duplicate has to be deleted by hand on the site.
+
+Commands (from this worktree):
+  python src/tableau_workbook.py --template <stage1.twbx> --tables outputs/tableau/rosequarter_tables.xlsx --out outputs/tableau/rosequarter_workbook.twbx
+  python src/tableau_publish.py --twbx outputs/tableau/rosequarter_workbook.twbx --title "<exact title>" --repo <RepoUrl>
+
 ## Provenance and caveats that travel with the numbers
 
 - NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
