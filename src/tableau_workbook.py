@@ -51,8 +51,7 @@ TITLE_CORRIDORS = ("Registered corridor predictions: mean percent change in rout
                    "I-205, the regional detour: up weakly, 4 of 8 seeds, not at the bar. The "
                    "other routes sit inside seed noise. Verdict rule frozen before the run: "
                    "unanimous sign and |t| > 3. Supported means the simulation bore out an "
-                   "expectation written before it ran; the real-world test is October's. Rows "
-                   "show the seeds agreeing and the change in grams on the open-hour total.")
+                   "expectation written before it ran; the real-world test is October's.")
 TITLE_STATIONS = ("The 13 PORTAL detector stations frozen for the October comparison, colored by "
                   "the registered direction of change. The two stations south of the I-84 merge "
                   "have no registered direction. The two upstream approach stations are expected "
@@ -104,7 +103,7 @@ FOOTER = ("Generated from the saved simulation tables by src/tableau_workbook.py
           "Python (OSMnx, NetworkX, pandas), Tableau Public. The code was written with AI "
           "assistance (Claude Code) and checked by the author.")
 DASHBOARD = "Rose Quarter"
-HEIGHT, WIDTH = 1030, 1300   # fixed dashboard size in pixels
+HEIGHT, WIDTH = 1070, 1300   # fixed dashboard size in pixels
 
 # Colors keyed by the exact category strings the tables carry (tableau_rosequarter.py).
 VERDICT_COLORS = {"SUPPORTED": "#b2182b", "not at bar": "#b7bdc4"}
@@ -452,7 +451,7 @@ def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
     P = 100000
     top, left, W, H = 909, 615, 98770, 98182          # the outer margin Tableau uses
     px = lambda n: int(H * n / HEIGHT)                # pixel height to dashboard units
-    head_h, row1_h, row2_h = px(92), px(540), px(352)   # 92: two bold lines plus the subline
+    head_h, row1_h, row2_h = px(92), px(580), px(352)   # 92: two bold lines plus the subline
     foot_h = H - head_h - row1_h - row2_h
     map_w = int(W * 0.56)
     right_x, right_w = left + map_w, W - map_w
@@ -460,10 +459,11 @@ def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
     y1 = top + head_h
     r1 = [zone(103, left, y1, map_w, row1_h, name="Paired Map")]
     # right column in pixels. The parameter control and the legend get their titles on
-    # top (the 37 px compact versions truncated "Min Seeds Agreeing" and "NO2 Change (g)"
-    # on the hosted page); the bars need the height for a six-line title plus five rows.
+    # top only from about 54 px (at 37 and 50 px they render compact and truncate "Min
+    # Seeds Agreeing" and "NO2 Change (g)"); the bars need a six-line title plus five
+    # rows and an axis (322 px cut the fifth row on revision 1.6).
     ys, parts = y1, []
-    for n, kind in ((48, "param"), (50, "legend"), (322, "bars"), (120, "note")):
+    for n, kind in ((56, "param"), (56, "legend"), (336, "bars"), (132, "note")):
         h = px(n)
         if kind == "param":
             parts.append(zone(104, right_x, ys, right_w, h, param=param_name, type_v2="paramctrl"))

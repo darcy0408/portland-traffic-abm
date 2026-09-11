@@ -93,8 +93,16 @@ def main():
     field = next(e for e in w.descendants(control_type="Edit")
                  if os.path.splitext(os.path.basename(a.twbx))[0] in (e.window_text() or ""))
     field.click_input(); time.sleep(0.3)
-    field.type_keys("^a", pause=0.1)
-    field.type_keys(a.title, with_spaces=True, pause=0.02); time.sleep(0.5)
+    for attempt in range(3):   # typed keys were once dropped while the dialog settled
+        try:
+            field.set_edit_text(a.title)          # UI Automation value set, no keystrokes
+        except Exception:
+            field.type_keys("^a", pause=0.1)
+            field.type_keys(a.title, with_spaces=True, pause=0.02)
+        time.sleep(0.8)
+        if field.window_text() == a.title:
+            break
+        field.click_input(); time.sleep(1.5)
     assert field.window_text() == a.title, f"title field reads {field.window_text()!r}"
     next(b for b in w.descendants(control_type="Button") if b.window_text().strip() == "Save").click_input()
     time.sleep(4)

@@ -342,6 +342,8 @@ header .subtitle {{ color: var(--muted); margin: 0 0 18px 0; }}
 .controls label {{ white-space: nowrap; }}
 .seeds-note {{ flex-basis: 100%; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }}
 #map {{ height: 560px; width: 100%; border: 1px solid var(--line); border-radius: 8px; }}
+/* Mute the basemap only; overlays (segments, stations, routes) sit in other panes. */
+.leaflet-tile-pane {{ filter: grayscale(100%) opacity(0.45); }}
 .caption {{ color: var(--muted); font-size: 0.85rem; margin: 8px 0; }}
 .legend {{
   background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
@@ -432,7 +434,7 @@ footer a {{ color: inherit; }}
 </main>
 <footer>
   <p>Built {build_date} from the saved simulation files by src/rosequarter_page.py at commit {commit}. No number on this page is typed by hand.</p>
-  <p>Tools: Python (OSMnx, NetworkX, pandas), Leaflet and OpenStreetMap data with CARTO tiles. The code was written with AI assistance (Claude Code) and checked by the author; every number is read from the saved simulation tables.</p>
+  <p>Tools: Python (OSMnx, NetworkX, pandas), Leaflet with OpenStreetMap tiles (muted in CSS). The code was written with AI assistance (Claude Code) and checked by the author; every number is read from the saved simulation tables.</p>
   <p><a href="{prereg_url}">Preregistration (GitHub)</a></p>
 </footer>
 </div>
@@ -442,11 +444,12 @@ const DATA = {data_json};
 
 // --- map ---
 const map = L.map('map').setView([45.5355, -122.6690], 12);
-// CARTO Positron: a muted, light basemap so the red/blue NO2 segments dominate.
-L.tileLayer('https://{{s}}.basemaps.cartocdn.com/light_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
-  subdomains: 'abcd',
+// Standard OpenStreetMap tiles, muted by the CSS filter on the tile pane so the red and
+// blue NO2 segments dominate. (CARTO's light basemap now stamps "API KEY REQUIRED" over
+// tiles served to an unregistered page; seen Sept 11, 2026.)
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
   maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }}).addTo(map);
 
 const segLayer = L.layerGroup().addTo(map);
