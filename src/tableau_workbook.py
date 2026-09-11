@@ -51,9 +51,8 @@ TITLE_CORRIDORS = ("Registered corridor predictions: mean percent change in rout
                    "I-205, the regional detour: up weakly, 4 of 8 seeds, not at the bar. The "
                    "other routes sit inside seed noise. Verdict rule frozen before the run: "
                    "unanimous sign and |t| > 3. Supported means the simulation bore out an "
-                   "expectation written before it ran; the real-world test is October's. Each "
-                   "row also shows the seeds agreeing and the change in grams on the open-hour "
-                   "baseline.")
+                   "expectation written before it ran; the real-world test is October's. Rows "
+                   "show the seeds agreeing and the change in grams on the open-hour total.")
 TITLE_STATIONS = ("The 13 PORTAL detector stations frozen for the October comparison, colored by "
                   "the registered direction of change. The two stations south of the I-84 merge "
                   "have no registered direction. The two upstream approach stations are expected "
@@ -105,7 +104,7 @@ FOOTER = ("Generated from the saved simulation tables by src/tableau_workbook.py
           "Python (OSMnx, NetworkX, pandas), Tableau Public. The code was written with AI "
           "assistance (Claude Code) and checked by the author.")
 DASHBOARD = "Rose Quarter"
-HEIGHT, WIDTH = 1004, 1300   # fixed dashboard size in pixels
+HEIGHT, WIDTH = 1030, 1300   # fixed dashboard size in pixels
 
 # Colors keyed by the exact category strings the tables carry (tableau_rosequarter.py).
 VERDICT_COLORS = {"SUPPORTED": "#b2182b", "not at bar": "#b7bdc4"}
@@ -148,9 +147,10 @@ class Source:
     """One Excel sheet as a Tableau datasource. `calcs` are (name, caption, datatype,
     role, formula) tuples; `roles` maps column -> Tableau semantic role."""
 
-    def __init__(self, sheet, df, xlsx_rel, calcs=(), geo=(), palette=None):
+    def __init__(self, sheet, df, xlsx_rel, calcs=(), geo=(), palette=None, captions=None):
         self.sheet, self.df, self.xlsx_rel, self.calcs, self.geo = sheet, df, xlsx_rel, calcs, geo
         self.palette = palette   # (field, {member: color}); Tableau keeps categorical colors here
+        self.captions = captions or {}   # column -> short display name (header space is tight)
         self.name = "federated." + _id(28)
         self.conn = "excel-direct." + _id(28)
         self.obj = f"{sheet}_{uuid.uuid4().hex.upper()}"
@@ -184,6 +184,9 @@ class Source:
         for c, kind in self.geo:
             out.append(f"      <column aggregation='Avg' datatype='real' name='[{c}]' role='measure' "
                        f"semantic-role='[Geographical].[{kind}]' type='quantitative' />")
+        for c, cap in self.captions.items():   # a renamed physical column, Tableau's own pattern
+            out.append(f"      <column caption='{attr(cap)}' datatype='{col_type(self.df[c])}' name='[{c}]' "
+                       f"role='dimension' type='nominal' />")
         out.append(f"      <column caption='{self.sheet}' datatype='table' "
                    f"name='[__tableau_internal_object_id__].[{self.obj}]' role='measure' "
                    f"type='quantitative' />")
@@ -266,7 +269,8 @@ def dep(src, dims=(), measures=(), calcs=(), geo=(), dim_calcs=()):
         lines.append(f"<column caption='{attr(caption)}' datatype='{dtype}' name='[{name}]' role='{role}' type='nominal'>"
                      f"<calculation class='tableau' formula='{attr(formula)}' /></column>")
     for c in dims:
-        lines.append(f"<column datatype='{col_type(src.df[c])}' name='[{c}]' role='dimension' type='nominal' />")
+        cap = f" caption='{attr(src.captions[c])}'" if c in src.captions else ""
+        lines.append(f"<column{cap} datatype='{col_type(src.df[c])}' name='[{c}]' role='dimension' type='nominal' />")
     for c in measures:
         lines.append(f"<column datatype='{col_type(src.df[c])}' name='[{c}]' role='measure' type='quantitative' />")
     for c, kind in geo:
@@ -448,7 +452,7 @@ def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
     P = 100000
     top, left, W, H = 909, 615, 98770, 98182          # the outer margin Tableau uses
     px = lambda n: int(H * n / HEIGHT)                # pixel height to dashboard units
-    head_h, row1_h, row2_h = px(66), px(540), px(352)
+    head_h, row1_h, row2_h = px(92), px(540), px(352)   # 92: two bold lines plus the subline
     foot_h = H - head_h - row1_h - row2_h
     map_w = int(W * 0.56)
     right_x, right_w = left + map_w, W - map_w
@@ -459,7 +463,7 @@ def dashboard_xml(paired_ds, param_name, param_col_xml, footer):
     # top (the 37 px compact versions truncated "Min Seeds Agreeing" and "NO2 Change (g)"
     # on the hosted page); the bars need the height for a six-line title plus five rows.
     ys, parts = y1, []
-    for n, kind in ((54, "param"), (54, "legend"), (310, "bars"), (122, "note")):
+    for n, kind in ((48, "param"), (50, "legend"), (322, "bars"), (120, "note")):
         h = px(n)
         if kind == "param":
             parts.append(zone(104, right_x, ys, right_w, h, param=param_name, type_v2="paramctrl"))
@@ -595,11 +599,11 @@ def main():
     xlsx_rel = "Data/rq/rosequarter_tables.xlsx"
     x = pd.ExcelFile(a.tables)
     # The change in grams beside each bar, as text: "+813 g on 959 g open".
-    grams_calc = ("Calculation_rqgrams", "Change (g NOx, one hour)", "string", "dimension",
+    grams_calc = ("Calculation_rqgrams", "Change (g)", "string", "dimension",
                   'IF [Mean Change (g NOx)] >= 0 THEN "+" ELSE "" END + STR(INT([Mean Change (g NOx)]))'
                   ' + " g on " + STR(INT([Open Baseline (g NOx)])) + " g open"')
     corridors = Source("corridors", x.parse("corridors"), xlsx_rel, calcs=[grams_calc],
-                       palette=("Verdict", VERDICT_COLORS))
+                       palette=("Verdict", VERDICT_COLORS), captions={"Seeds Agreeing": "Seeds"})
     # The headline states seed counts and verdicts in words; check them against the table.
     cdf = corridors.df.set_index("Route")
     assert (cdf.loc["I-405", "Seeds Agreeing"], cdf.loc["I-405", "Verdict"]) == ("8/8", "SUPPORTED"), cdf.loc["I-405"]
