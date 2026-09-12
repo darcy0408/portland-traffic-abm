@@ -410,6 +410,13 @@ page's own JavaScript worked). `tableau_publish.py` is now mouse-free: it sets t
 and presses Save and Yes through UI Automation patterns, because a coordinate click
 landed in the browser while the person was using the computer and the publish stalled.
 
+The scripted page is HOSTED (Sept 11 evening, Darcy's call): orphan branch `gh-pages`
+holds only built pages (`rosequarter/index.html` built at 84d6c1c, a root redirect,
+`.nojekyll`, README); GitHub enabled Pages on the push (legacy build, branch gh-pages,
+path /). Live at https://darcy0408.github.io/portland-traffic-abm/rosequarter/ . To
+update: rebuild the page here, copy it into a gh-pages checkout, commit, push. That
+branch is the one place generated files are committed; `main` and `tableau` stay clean.
+
 ## Provenance and caveats that travel with the numbers
 
 - NO2 = `config.F_NO2` (0.30) x NOx, applied at export, the same place `visualize.py`
