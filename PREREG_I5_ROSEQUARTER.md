@@ -2296,3 +2296,137 @@ c3e3b79; instrument job 155496; output rqtt_fwrqe.json banked on Orca
 and locally. Summary JSONs for all four cells banked in data/processed.
 All tables in this appendix recomputed locally from those banked files
 and checked against the job logs.
+
+## Appendix Q addendum 4 (2026-09-12): the Sept 8-10 second computation, diagnostic
+
+Published 2026-09-12, after Sept 10 closed in the logger, the morning after
+the closure began (10 pm PT Sept 11), and before any closure-period data has
+been scored: the first pinned during-pool day is Sept 15, so no closure day
+was yet eligible for scoring. Addendum 2 ("Sept 8-10, and the second
+computation") required that pairs involving Sept 8-10 be computed and printed
+after Sept 10 as a second dated computation under the DIAGNOSTIC label, never
+governing, with both computations published and neither replacing the other.
+This is that publication. The governing floor stays 6.864666476624853%
+(display 6.86), the weak boundary 13.729332953249706%, the October pools as
+pinned in addendum 2.
+
+### 1. How it ran, and why not through --floor
+
+- The instrument, src/rosequarter_logger_floor.py, is unchanged since its
+  registration (commit fe2c893; the working copy was verified identical to HEAD
+  before the run; --selftest PASS, banked).
+- The --floor path cannot express this draw: it enumerates clean weeks under M.3
+  rule 3, and Sept 7-13 is Labor Day week, so a --floor run after Sept 10 re-prints
+  the Sept 4 draws unchanged (verified Sept 9, byte-identical to the Sept 4 bank).
+  The instrument was not edited to work around that, because the exclusion is a
+  registered rule doing its job. The computation therefore went through --score,
+  which shares the scoring function (score_pools) with --floor and which, run on
+  the governing pools on Sept 9, reproduced all twelve banked addendum-2 values
+  exactly. Whole Tue-Thu triples were passed on every draw and the 12-of-14 drop
+  rule was left to do its own work; no day was hand-picked.
+- Provenance, three dated events, each verifiable in this repository's history:
+  1. The computation ran 2026-09-11 03:22:18Z (Sept 10, 21:22 MT), after Sept
+     10's last daytime hour had landed in the logger (logger clone
+     e15efdebecf1ee32708aca57b8762bbe11376eb7, 2026-09-11 02:52Z).
+  2. The verbatim outputs (D1.log, D2.log, D3.log, selftest.log, record.txt)
+     were committed to main the next morning as f632a88 (2026-09-11 08:29 MT),
+     five files and nothing else, in analyses/2026-09-11-logger-floor-diagnostic/.
+  3. This addendum is published 2026-09-12 in the commit that appends it, one
+     day after the banked files; the same commit adds a back-reference line to
+     that folder's record.txt so the run and its publication travel together.
+  CSV md5 7044338f8fd70e5fdf8b3a1417d53b0b (August) and
+  cc421c0809cf7df0521776bb823bfda8 (September); coverage Sept 8, 9 and 10 each
+  14 of 14 daytime hours on all 12 pairs, so no Sept day dropped. Command on
+  every draw:
+  `python src/rosequarter_logger_floor.py --score --log-dir <logger clone>
+  --before <triple> --during 2026-09-08 2026-09-09 2026-09-10 --floor-pct 6.864666476624853`.
+
+### 2. The three draws (percent change in mean daytime travel time, during minus before; DIAGNOSTIC, none governs)
+
+Draw D1, week 1 (Aug 18-20; Aug 18 dropped at 10 of 14 on every pair, as in
+addendum 2, so the pool is Aug 19-20) x Sept 8-10:
+
+| pair | change |
+|---|---|
+| ctrl_se | +4.33% |
+| grand_nb | +1.91% |
+| williams_nb | +1.36% |
+| ctrl_west | +1.28% |
+| i84wb_feeder | +0.78% |
+| i5sb_detour | -0.01% |
+| interstate_sb | -0.18% |
+| i5sb_span | -1.01% |
+| powell_wb | -1.45% |
+| mlk_sb | -1.78% |
+| vanc_pdx | -2.83% |
+| i205_sb | -3.68% |
+
+Largest magnitude 4.33%, a control. All twelve pairs inside the governing floor.
+
+Draw D2, week 3 (Sept 1-3, no drops) x Sept 8-10:
+
+| pair | change |
+|---|---|
+| mlk_sb | +5.46% |
+| i84wb_feeder | +5.27% |
+| vanc_pdx | +3.67% |
+| i5sb_detour | +3.24% |
+| interstate_sb | +2.78% |
+| i5sb_span | +2.74% |
+| grand_nb | +1.76% |
+| ctrl_se | +1.04% |
+| williams_nb | +0.74% |
+| powell_wb | -0.07% |
+| ctrl_west | -0.29% |
+| i205_sb | -0.58% |
+
+Largest magnitude 5.46%. All twelve pairs inside the governing floor.
+
+Draw D3, week 2 (Aug 25-27; Aug 26 dropped at 5 of 14 and Aug 27 at 6 of 14 on
+every pair, the addendum-1 outage, so the pool is Aug 25 alone) x Sept 8-10:
+
+| pair | change |
+|---|---|
+| i205_sb | +12.56% |
+| vanc_pdx | +11.47% |
+| mlk_sb | +10.95% |
+| i84wb_feeder | +10.39% |
+| i5sb_detour | +9.59% |
+| i5sb_span | +9.21% |
+| interstate_sb | +6.64% |
+| ctrl_se | +5.25% |
+| williams_nb | +4.61% |
+| grand_nb | +4.37% |
+| powell_wb | +3.61% |
+| ctrl_west | +1.96% |
+
+All twelve positive; six above the governing floor. Week 2's pool is one day, so
+this draw is a diagnostic of a diagnostic, as addendum 2 already said of every
+week-2 draw.
+
+### 3. Reading, registered now
+
+- D1 and D2, the two three-day pools that flank Labor Day week, sit inside the
+  governing floor on every pair. The null period behaves the way the governing
+  draw said it does.
+- D3 reads uniformly positive and larger. It is one usable day against three, so
+  it carries Aug 25's own day effect in full; and Sept 8-10 is the first Tue-Thu
+  after Labor Day, so a seasonal shift is a second candidate. Neither explanation
+  is tested here and neither needs to be: under the Aug 28 rule the governing draw
+  was fixed before any of these numbers existed, so D3 is a reportable property of
+  the null period and not a floor revision. It is also one more reason Sept 8-10
+  never enters October's before pool, which stays Aug 19, 20, 25 and Sept 1, 2, 3.
+- The tier wording the scorer prints beside each pair ("within the measured null
+  floor", "direction consistent, weak evidence") is defined for closure scoring and
+  means nothing on a null draw; it is ignored here and the percent changes are the
+  result.
+- One honest implication for October, stated now: D3 shows that a single-day pool
+  can move about ten points on its own. October's before pool is six usable days
+  and each during pool is a Tue-Thu triple, per addendum 2, unchanged.
+
+### What does not change
+
+The governing floor and weak boundary (addendum 3's exact values), the single
+governing draw and its twelve values, the week-2 exclusion, the pinned October
+before and during pools, the control-pair results, the rank-eligibility rule, and
+the rule that the floor governs wording and rank eligibility only.

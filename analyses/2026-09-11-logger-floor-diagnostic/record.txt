@@ -13,3 +13,5 @@ Reading (runbook section 4 rules; every value DIAGNOSTIC, none governs; the gove
   D2 week3 x Sept 8-10: largest |change| 5.46% (mlk_sb); all 12 pairs inside the governing floor. No drops.
   D3 week2 x Sept 8-10: Aug 26 and 27 dropped (5/14, 6/14), so week 2 is Aug 25 alone; six pairs +9.2% to +12.6%, all positive (i205_sb, vanc_pdx, mlk_sb, i84wb_feeder, i5sb_detour, i5sb_span), six inside the floor. Above the governing floor: a reportable property of the null period, not a floor revision; a diagnostic of a diagnostic.
   The tier wording printed beside each pair is meaningless for a null draw and is ignored; percent changes are the result. Sept 8-10 never enters October's before pool (Labor Day week, M.3 rule 3).
+
+Publication: this run is published as PREREG_I5_ROSEQUARTER.md, Appendix Q addendum 4 (2026-09-12), appended in the same commit that adds this line. The five files above were committed earlier as f632a88 (2026-09-11 08:29 MT); the run itself was 2026-09-11 03:22:18Z (Sept 10, 21:22 MT). Every number in the addendum is copied from D1.log, D2.log and D3.log here.
