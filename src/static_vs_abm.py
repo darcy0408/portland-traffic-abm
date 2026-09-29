@@ -26,6 +26,12 @@ closure experiment already saved and draws. Single source of truth: the numbers
 come from those committed files, not a fresh run.
 
 Run:  python src/static_vs_abm.py
+      python src/static_vs_abm.py --poster --run powell_through   (SRC poster print)
+
+The --poster version is the same figure built for a 36 x 48 in print, where it
+spans one ~16 in column. It drops the suptitle and the bottom caption, because
+the poster panel carries that text in its own words, and saves a vector PDF (maps
+stay sharp at any size) plus a 300 dpi PNG fallback. Same data, same numbers.
 """
 import os
 import sys
@@ -41,12 +47,18 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
+# --run NAME reads a named run instead of config.RUN_NAME (the poster needs
+# powell_through while config points at the metro run). Set before landuse_model is
+# imported, because that module fixes its surface path from RUN_NAME at import time.
+if "--run" in sys.argv:
+    config.RUN_NAME = sys.argv[sys.argv.index("--run") + 1]
 import predictors                      # reuse the midpoint + projection helpers
 import landuse_model                   # the strong, well-fit static land-use baseline (#6)
 from generate import closed_edges_in_zone
 
 OUT_DIR = os.path.join(config.BASE_DIR, "outputs", "demo")
 UNCHANGED = (0.82, 0.82, 0.86, 1.0)    # light grey: this segment's NO2 did not move
+POSTER_DIR = os.path.join(config.BASE_DIR, "outputs", "poster")
 CLOSED_MARK = (0.10, 0.10, 0.12, 1.0)  # near-black: the closed block itself
 
 
@@ -72,8 +84,9 @@ def draw_change(ax, G, edges, change, norm, vmax, cmap, closed_set):
                   node_size=0, bgcolor="white", show=False, close=False)
 
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+def main(poster=False):
+    out_dir = POSTER_DIR if poster else OUT_DIR
+    os.makedirs(out_dir, exist_ok=True)
     G = predictors.load_network()
     base = config.RUN_NAME
     open_df = pd.read_parquet(
@@ -134,16 +147,45 @@ def main():
     draw_change(axes[0], G, edges, static_change, norm, vmax, cmap, closed_set)
     draw_change(axes[1], G, edges, abm_change, norm, vmax, cmap, closed_set)
 
-    axes[0].set_title(f"Static land-use model (Rao's method, fits at R²={static.oob_r2:.2f})\n"
-                      "change: ZERO on every segment",
-                      color="#1f4e79", fontsize=15, weight="bold", pad=10)
-    axes[1].set_title("Agent-based model (this work)\nNO2 redistributes across the network",
-                      color="#b3261e", fontsize=15, weight="bold", pad=10)
+    # Poster wording approved by Darcy Sept 28 2026: the forest description and the
+    # out-of-bag R^2 explanation live in the poster caption, not the title.
+    # poster print (16 in wide on a 36 x 48 in sheet) needs type near the panel body
+    # size, ~25 pt; the paper figure keeps its smaller sizes
+    t_pt = 22 if poster else 15
+    axes[0].set_title("Static land-use baseline\n"
+                      "change: zero on every segment",
+                      color="#1f4e79", fontsize=t_pt, weight="bold", pad=10)
+    axes[1].set_title("Agent-based model (this work)\nmodeled NO2 emissions proxy redistributes",
+                      color="#b3261e", fontsize=t_pt, weight="bold", pad=10)
 
     sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, shrink=0.7, pad=0.02, aspect=30)
-    cbar.set_label("NO2 change when SE Powell closes (g)   red = up, blue = down", fontsize=11)
+    if poster:
+        # two lines: at 15 pt the one-line label runs past the top of the print figure
+        cbar.set_label("Change in modeled NO2 emissions proxy\n"
+                       "g per segment per simulated hour\n"
+                       "red = up, blue = down", fontsize=15)
+    else:
+        cbar.set_label("Change in modeled NO2 emissions proxy, g per segment per simulated hour"
+                       "   red = up, blue = down", fontsize=11)
+
+    if poster:
+        # Poster print: no suptitle or caption (the panel text says it), vector PDF
+        # so the street lines stay crisp at ~16 in wide, PNG at 300 dpi as a fallback.
+        fig.subplots_adjust(left=0.01, right=0.89, top=0.90, bottom=0.03, wspace=0.04)
+        # subplots_adjust re-spreads the maps under the colorbar, so pin the bar in
+        # the right margin explicitly (otherwise it sits on top of the ABM map)
+        cbar.ax.set_position([0.905, 0.12, 0.013, 0.68])
+        cbar.ax.tick_params(labelsize=14)      # tick numbers readable at print size
+        stem = os.path.join(out_dir, "static_vs_abm_poster")
+        fig.savefig(stem + ".pdf", facecolor="white")
+        fig.savefig(stem + ".png", dpi=300, facecolor="white")
+        plt.close(fig)
+        print(f"Saved {stem}.pdf and {stem}.png")
+        print(f"caption numbers (all-diesel fleet): Powell {pk:+.1f}%, "
+              f"Division {dv:+.1f}%, Holgate {hl:+.1f}%")
+        return
 
     fig.suptitle("Close SE Powell: only the agent-based model responds",
                  color="#111111", fontsize=20, weight="bold", y=0.99)
@@ -155,11 +197,11 @@ def main():
              color="#222222", fontsize=12, ha="center", va="top")
 
     fig.subplots_adjust(left=0.02, right=0.90, top=0.88, bottom=0.16, wspace=0.04)
-    out = os.path.join(OUT_DIR, "5_static_vs_abm_closure.png")
+    out = os.path.join(out_dir, "5_static_vs_abm_closure.png")
     fig.savefig(out, dpi=200, facecolor="white")
     plt.close(fig)
     print(f"Saved {out}")
 
 
 if __name__ == "__main__":
-    main()
+    main(poster="--poster" in sys.argv[1:])
