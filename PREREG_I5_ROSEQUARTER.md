@@ -2430,3 +2430,195 @@ The governing floor and weak boundary (addendum 3's exact values), the single
 governing draw and its twelve values, the week-2 exclusion, the pinned October
 before and during pools, the control-pair results, the rank-eligibility rule, and
 the rule that the floor governs wording and rank eligibility only.
+
+## Appendix Q addendum 5 (2026-09-28): two logger trigger changes made during collection, disclosed after the fact
+
+Published 2026-09-28, Pacific and Mountain evening (the commit that appends
+it is stamped 2026-09-29 in UTC). This addendum discloses two
+changes to how the logger's workflow is started. Both were made during data
+collection, on Sept 14 and Sept 15-16, and no registered text describes them
+until now. Every earlier appendix and addendum stands as written; where earlier
+wording no longer describes the instrument, it is corrected here by addition,
+not by edit. All closure-period data in October's pinned during pool (Sept
+15-17 and Sept 22-24, addendum 2) was logged before this publication. No
+closure-period scoring output or record of scoring was found in the materials
+reviewed (section 4).
+
+### 1. The two changes
+
+1. Sept 14 (Pacific date): a second slot on the local task. The scheduled task
+   on the maintainer's PC that calls `gh workflow run` (the hourly task in the
+   Aug 28 addendum; log.yml's Sept 9 paragraph says it fires at :52, "last in
+   the hour") gained a second hourly trigger at :20, after PC idle-sleep lost
+   the Sept 14 10:00 PT hour. The task record dates the new trigger to
+   2026-09-14 14:20 MDT; the first :20 dispatch in GitHub's run records is
+   2026-09-15 00:20:00Z (Sept 14, 17:20 PDT). The task is set to start a missed
+   trigger as soon as the machine is available. The Sept 9 paragraph stays as
+   written; a dated log.yml comment published with this addendum corrects it.
+2. Sept 15-16: an additional, off-machine trigger. A Cloudflare Worker,
+   logger-watchdog, was first deployed 2026-09-16 01:11Z (Sept 15, 18:11 PDT).
+   Its code and configuration have not changed since 02:28:55Z (19:28 PDT)
+   that evening (final code version uploaded 02:28:51Z, per Cloudflare's
+   deployment history). GitHub's run records show no run created in the
+   01:50Z slot, the Worker's first configured fire after deployment; the first
+   dispatch run observed in its configured slot was created 02:50:39Z, with
+   the caller inferred as in section 2. On a cron at :50
+   UTC every hour it (a) requests a workflow_dispatch of log.yml on main, the
+   same API request the PC task makes, using a fine-grained GitHub token
+   configured for the logger repository only (Actions read and write, expiring
+   2026-10-31), and (b) sends a message to a private ntfy.sh topic if that
+   dispatch fails, or if the previous UTC hour falls in 06:00-19:59 Pacific and
+   has no rows in the public CSV. The Worker never writes to the repository.
+   Like every trigger, it can only start the workflow; the workflow writes the
+   rows, under the unchanged hour guard. Its source (two files, no secrets) is
+   backed up in the maintainer's private notes.
+
+### 2. How runs were attributed
+
+The minute printed on a CSV row is not used as evidence. Four records were
+used:
+
+- GitHub's run records for log.yml, retrieved in full by UTC creation date for
+  Sept 13-28 (1,099 runs): event type (`schedule` or `workflow_dispatch`),
+  creation time, and start and end times. Runs created at or after the cutoff
+  in section 3 were excluded from every count below.
+- The logger repository's commit history. The workflow commits each logged
+  hour inside the run that wrote it, and runs are serialized
+  (`concurrency: logger`), so a data commit's timestamp falls inside exactly
+  one run's start-to-end window. All 370 data commits from Sept 12 onward
+  matched exactly one run.
+- The job log of every dispatch run not created at :20-:21 or :52-:53 (310
+  runs). Each printed the hour guard's message ("this hour is already logged
+  ... exiting without querying").
+- The PC task's configuration (triggers at :20 and :52), and the Worker's cron
+  (:50) and deployment history.
+
+What the records establish directly: a run's event type (scheduled runs are
+unambiguous), its creation minute, whether it wrote rows, and whether it exited
+at the guard. What they do not establish: which caller made a
+`workflow_dispatch` request. The PC task and the Worker both dispatch under
+the same GitHub account, so GitHub's records do not name the caller. Attribution
+to the PC or the Worker below is therefore INFERRED, from each run's creation
+minute against the two callers' configured minutes (:20 and :52 for the PC
+task, :50 for the Worker). Over the 309 UTC hours from 02:00Z Sept 16 to the
+cutoff, every hour has exactly one dispatch run created at :20-:21 and exactly
+one at :52-:53, and every hour but one has exactly one created at :50-:51,
+which is the pattern the configurations predict. The exception is 2026-09-26
+07Z (00:00 PDT, outside the scored window): no :50 run, and one dispatch at
+07:54:33Z, inferred to be a delayed Worker fire. One further dispatch, at
+2026-09-16 02:28:09Z, was a manual test made while the Worker was being
+deployed. Both exited at the guard.
+
+Stated uncertainty: the PC keeps no history of the task's runs (Task Scheduler
+history logging is off), and Cloudflare's log retention does not reach back to
+Sept 16, so no caller-side log confirms any single run. A missed PC trigger can
+start late, and a delayed Worker fire could in principle land at any minute, so
+creation time cannot prove which caller made any one request; the inference
+rests on the one-run-per-slot pattern holding in every hour but one. What is
+not inferred is the first bullet of section 3: which runs wrote rows (18
+scheduled, 161 dispatch), and at what minute those runs were created, are
+facts of the record.
+
+### 3. Finding, at the stated cutoff
+
+Cutoff: 2026-09-28 23:00Z (16:00 PDT). Observations and runs at or after the
+cutoff are excluded. The repository snapshot read is logger commit db6c328,
+"log 2026-09-28T23:20Z", the first commit after the cutoff; its own rows (the
+23Z hour) are outside the window. Window: the 179 scored-window hours
+(06:00-19:59 Pacific) from 02:00Z Sept 16 (19:00 PDT Sept 15), the first full
+hour after deployment, to the cutoff. The preceding hour, 18:00 PDT Sept 15
+(01Z), contains the deployment: it was written by the :20 dispatch at
+01:20:02Z, nine minutes after deployment, and it is excluded from the window
+as a partial hour.
+
+- Established by the record: all 179 hours were first recorded either by a
+  dispatch run created at :20-:21 (161 hours) or by a scheduled run (18
+  hours). No other workflow_dispatch run wrote rows in the audited window,
+  scored or overnight: all 308 dispatch runs created at :50-:51, and the two
+  exceptions in section 2, exited at the hour guard before the travel-time
+  API is queried.
+- Inferred (section 2): the 161 :20-:21 runs were the PC task's and the 308
+  :50-:51 runs were the Worker's. On that inference, no scored-window hour was
+  first recorded by a Worker-triggered run through the cutoff. The records
+  cannot exclude a delayed Worker request having created one of the :20-:21
+  runs, so this is stated as an inference and not as a certainty.
+- Coverage. Complete Pacific days, Sept 16-27: 14 of 14 scored-window hours
+  each, all 12 pairs, one row set per hour, every row status ok. Partial days:
+  Sept 15 (06:00-17:59 PDT predates deployment; 18:00 is the deployment hour;
+  19:00 is the one full post-deployment hour, 1 of 1 logged) and Sept 28
+  (06:00-15:59 PDT before the cutoff; 10 of 10 logged). No scored-window hour
+  in the window is missing, so the missing-hour alert has had no real gap to
+  detect.
+
+### 4. What supports "no scored or floor number has moved"
+
+- Floor: every input predates both changes. The governing draw (Aug 18-20 x
+  Sept 1-3) was computed Sept 4, and the diagnostic second computation (Sept
+  8-10) on Sept 11 (addenda 2 and 4).
+- Before pool (Aug 19, 20, 25 and Sept 1, 2, 3): logged before both changes.
+- During pool (Sept 15-17 and 22-24): logged after the :20 slot existed. Sept
+  15's scored hours through 17:59 PDT predate the Worker's deployment, its
+  18:00 hour was written by the 01:20:02Z dispatch (no run exists in the
+  Worker's 01:50Z slot), and its 19:00
+  hour and all of Sept 16-17 and 22-24 fall inside section 3's window, where
+  every hour was written by a :20-:21 dispatch or a scheduled run.
+- Scoring: no closure-period scoring output or record of scoring was found in
+  the materials reviewed: this repository's analyses/ folder (where the floor
+  runs were banked), its commit history, the results ledger, and the private
+  session notes. The registered command (`--score`, addendum 2) is run by
+  hand, never automatically. The absence of saved output does not by itself
+  prove the command was never run, and this addendum makes no claim beyond
+  what was found. If any closure-period output that predates this addendum
+  turns up, it is reported as a dated correction.
+
+One consequence of the :20 slot is reported, not corrected, and it is the
+material point of this addendum: the change moved where in the hour most
+samples land, and it did so between the before and during pools. Taking each
+scored-window hour's sample time, the before pool (79 hours) has a median of
+48.7 minutes past the hour (44 hours at :45-:59, 23 at :30-:44, 12 before
+:30); the during pool (84 hours) has a median of 20.1 minutes (76 at :15-:29,
+8 before :15). The registered rules assign rows to hours (M.3 rule 1) and have
+always taken whichever trigger fires first, so both pools are eligible as
+defined. But unchanged rules do not establish that this shift has no effect on
+the eventual result: a sample taken at :20 and one taken at :49 measure
+different minutes of the same hour, and if travel time trends within the hour,
+the before-vs-during comparison carries that difference. No registered rule
+corrects for timing within the hour, and none is added now. Any estimate of
+its effect, if made, will be labeled diagnostic and will not govern, and the
+October results will report this shift beside them.
+
+### 5. Eligibility, and rule changes
+
+Worker-triggered observations fall under the existing rules, and nothing is
+added for them. The Aug 28 addendum fixed the data definition as at most one row
+set per UTC hour, whichever trigger fires first. M.3 and addendum 2 define
+eligibility by Pacific hour, status ok, and the 12-of-14 daytime rule per
+pair-day, and none of them refers to which trigger started a run. A future hour
+written by a Worker-triggered run would be an ordinary logged hour. GitHub's
+records would show the run that wrote it and its creation minute; which caller
+made the request would remain an inference, as in section 2.
+
+Rule changes: none. The frozen predictions (Appendix A, M.2, N.4 and the
+per-arm October ranks), the governing floor 6.864666476624853% and weak
+boundary 13.729332953249706%, the pinned pools, the drop rule, and every
+scoring rule are unchanged.
+
+### 6. Open limitations
+
+- The missing-hour alert is untested. It has never fired, because no
+  scored-window hour has been missing since the Worker went live, and whether
+  its messages reach the maintainer has not been confirmed. Cloudflare's own
+  run logs for the Worker were not retained back to Sept 16, so its behavior
+  before the retention window is known only from GitHub's side. A test is planned
+  against a known-missing hour (Sept 14 17Z), using a separate local copy of
+  the Worker, never the live one; it does not touch the data path. Its result
+  will be recorded here.
+- The GitHub token expires 2026-10-31. After that the Worker's dispatch fails
+  and it can no longer start runs; its alert would then report the failure
+  every hour. Renewal or retirement will be recorded here.
+- The token's repository scope and expiry are recorded as configured and have
+  not been independently verified.
+
+### What does not change
+
+Everything addendum 4 lists, plus the hour guard and the data definition.
