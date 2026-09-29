@@ -2622,3 +2622,19 @@ scoring rule are unchanged.
 ### What does not change
 
 Everything addendum 4 lists, plus the hour guard and the data definition.
+
+### Source clarification (added 2026-09-28, Pacific and Mountain evening, after publication; the commit is stamped 2026-09-29 in UTC)
+
+The first-deployment time given in section 1, 2026-09-16 01:11Z (Sept 15,
+18:11 PDT), comes from the maintainer's private session notes (the Sept 25
+entry). The Cloudflare deployment and version listings retrieved on Sept 28
+each return ten entries, the earliest a deployment at 01:29:08Z (a secret
+change on the already-existing Worker); no retained Cloudflare record shows
+the 01:11Z event. Consequently, the description in sections 3 and 4 of the
+01:20:02Z dispatch as made "nine minutes after deployment" depends on the
+session-note timestamp and is not independently confirmed by the retained
+deployment records. What those records establish is that the Worker existed
+by 01:29:08Z and that its code has not changed since 02:28:55Z. The audited
+window begins at 02:00Z, after both times, and the 01Z hour is excluded as a
+partial hour on either time, since both fall inside it. No count, the cutoff,
+the pools, and no scoring rule changes. The text above stands as written.
