@@ -147,16 +147,28 @@ def main(poster=False):
     draw_change(axes[0], G, edges, static_change, norm, vmax, cmap, closed_set)
     draw_change(axes[1], G, edges, abm_change, norm, vmax, cmap, closed_set)
 
-    axes[0].set_title(f"Static land-use model (Rao's method, fits at R²={static.oob_r2:.2f})\n"
-                      "change: ZERO on every segment",
-                      color="#1f4e79", fontsize=15, weight="bold", pad=10)
-    axes[1].set_title("Agent-based model (this work)\nNO2 redistributes across the network",
-                      color="#b3261e", fontsize=15, weight="bold", pad=10)
+    # Poster wording approved by Darcy Sept 28 2026: the forest description and the
+    # out-of-bag R^2 explanation live in the poster caption, not the title.
+    # poster print (16 in wide on a 36 x 48 in sheet) needs type near the panel body
+    # size, ~25 pt; the paper figure keeps its smaller sizes
+    t_pt = 22 if poster else 15
+    axes[0].set_title("Static land-use baseline\n"
+                      "change: zero on every segment",
+                      color="#1f4e79", fontsize=t_pt, weight="bold", pad=10)
+    axes[1].set_title("Agent-based model (this work)\nmodeled NO2 emissions proxy redistributes",
+                      color="#b3261e", fontsize=t_pt, weight="bold", pad=10)
 
     sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, shrink=0.7, pad=0.02, aspect=30)
-    cbar.set_label("NO2 change when SE Powell closes (g)   red = up, blue = down", fontsize=11)
+    if poster:
+        # two lines: at 15 pt the one-line label runs past the top of the print figure
+        cbar.set_label("Change in modeled NO2 emissions proxy\n"
+                       "g per segment per simulated hour\n"
+                       "red = up, blue = down", fontsize=15)
+    else:
+        cbar.set_label("Change in modeled NO2 emissions proxy, g per segment per simulated hour"
+                       "   red = up, blue = down", fontsize=11)
 
     if poster:
         # Poster print: no suptitle or caption (the panel text says it), vector PDF
@@ -165,6 +177,7 @@ def main(poster=False):
         # subplots_adjust re-spreads the maps under the colorbar, so pin the bar in
         # the right margin explicitly (otherwise it sits on top of the ABM map)
         cbar.ax.set_position([0.905, 0.12, 0.013, 0.68])
+        cbar.ax.tick_params(labelsize=14)      # tick numbers readable at print size
         stem = os.path.join(out_dir, "static_vs_abm_poster")
         fig.savefig(stem + ".pdf", facecolor="white")
         fig.savefig(stem + ".png", dpi=300, facecolor="white")
