@@ -2638,3 +2638,12 @@ by 01:29:08Z and that its code has not changed since 02:28:55Z. The audited
 window begins at 02:00Z, after both times, and the 01Z hour is excluded as a
 partial hour on either time, since both fall inside it. No count, the cutoff,
 the pools, and no scoring rule changes. The text above stands as written.
+
+### Wording correction to the source clarification (added 2026-09-28, Pacific and Mountain evening; the commit is stamped 2026-09-29 in UTC)
+
+The source clarification above says the audited window begins "after both
+times" immediately after naming three times. Precisely: the audit begins at
+02:00Z, after the reported 01:11Z deployment and the earliest retained
+deployment entry at 01:29:08Z, but before the final code/configuration
+timestamp of 02:28:55Z. The two deployment times fall within the excluded 01Z
+hour. Nothing else changes.
