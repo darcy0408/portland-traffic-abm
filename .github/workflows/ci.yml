@@ -5,10 +5,15 @@
 # which exits non-zero if any scenario fails, so a change that breaks the IDM
 # car-following or the signal/spillback logic turns the check red.
 #
-# Scope is deliberately small for a solo research prototype: just the test-bench.
-# The saturation scenario skips itself here because the cached Powell network is
-# gitignored (not on GitHub); the three controlled scenarios need no network and
-# fully exercise the kernel.
+# Scope is deliberately small for a solo research prototype: the test-bench plus an
+# import check. The saturation scenario skips itself here because the cached Powell
+# network is gitignored (not on GitHub); the three controlled scenarios need no
+# network and fully exercise the kernel.
+#
+# The import check (src/import_check.py) imports every src/*.py module and fails if
+# any needs a package requirements.txt does not install. Added after the Oct 2026
+# audit found the analysis scripts' dependencies (scikit-learn, scipy, shapely,
+# geopandas, Pillow) missing from the file while CI stayed green.
 name: CI
 
 on:
@@ -30,6 +35,9 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Check that every src module imports with the declared dependencies
+        run: python src/import_check.py
 
       - name: Run the validation test-bench
         run: python src/scenarios.py
