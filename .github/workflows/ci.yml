@@ -11,9 +11,11 @@
 # network and fully exercise the kernel.
 #
 # The import check (src/import_check.py) imports every src/*.py module and fails if
-# any needs a package requirements.txt does not install. Added after the Oct 2026
-# audit found the analysis scripts' dependencies (scikit-learn, scipy, shapely,
-# geopandas, Pillow) missing from the file while CI stayed green.
+# a module-level import names a package pip did not install. Added after the Oct
+# 2026 audit found the analysis scripts' dependencies (scikit-learn, scipy, shapely,
+# geopandas, Pillow) missing from the file while CI stayed green. It checks only
+# module-level imports: not call-time imports, not versions, and not whether any
+# analysis script runs end to end.
 name: CI
 
 on:

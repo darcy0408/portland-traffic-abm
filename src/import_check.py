@@ -12,6 +12,14 @@ data/ directory is absent, so a module that opens a cached file at import time
 raises FileNotFoundError there even though its dependencies are complete. That is
 a different problem (import-time side effects) from the one this script guards.
 
+What this check does NOT cover, so nobody reads a green run as more than it is:
+  - imports inside functions (e.g. pandas.read_excel pulling in openpyxl only when
+    rao_data.load() runs); only module-level imports are exercised
+  - whether a package is the right VERSION; a wrong-but-installed version imports fine
+  - packages that arrive only transitively (shapely and geopandas via osmnx, Pillow
+    via matplotlib); the check passes whether or not requirements.txt names them
+  - whether any script actually runs; scenarios.py is the only execution test in CI
+
 Each module runs in a subprocess so one module's import-time state cannot leak
 into the next, and so a hang in one module is caught by the timeout rather than
 stalling the whole sweep.
