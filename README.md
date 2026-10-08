@@ -30,12 +30,21 @@ portland-traffic-abm/
     generate.py          STAGE 1: runs the ABM, checkpoints, saves data. No plotting.
     visualize.py         STAGE 2: reads saved data, writes figures. No simulation.
     checkpoint.py        save and restore simulation state safely
-  data/                  created automatically on first run
+    scenarios.py         the validation test-bench that CI runs on every push
+    ...                  the experiments, validation, and figure scripts that grew
+                         around those (closure, freeway, noise, forest comparison,
+                         Rose Quarter scoring); DEMO.md lists the ones that matter
+  demos/                 animated and poster figures
+  analyses/              dated analysis folders (the travel-time logger null floor)
+  orca/                  job scripts for running campaigns on PSU's cluster
+  PREREG_I5_ROSEQUARTER.md   pre-registration of the Sept 2026 I-5 closure campaign,
+                             with every prediction and result appended as dated appendices
+  data/                  created automatically on first run (gitignored)
     network/             the OSMnx street graph, downloaded once and reused
     raw/                 checkpoints and any intermediate state
     processed/           tidy per-segment result tables, ready to plot
   outputs/
-    figures/             every generated figure lands here
+    figures/             every generated figure lands here (gitignored)
 ```
 
 ## Workflow
