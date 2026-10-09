@@ -1456,35 +1456,45 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
         veh["v"] = v_new
 
         edge_key = veh["route"][veh["idx"]][:3]
-        # credit this segment with one vehicle-second of activity (a raw exposure
-        # measure, kept alongside the emission total)
-        segment_totals[edge_key] += dt
-        # opt-in speed moments (realism readout): time-weighted sums so that at
-        # analysis time v_sum/value is the segment's mean speed over the run and
-        # v2_sum/value - mean^2 its variance. CNOSSOS noise is nonlinear in
-        # speed, so the VARIANCE (not just the mean) moves the noise surface --
-        # the Phase 2 heterogeneity payoff. Pure measurement: nothing here feeds
-        # back into the dynamics, so passing speed_stats cannot change any
-        # trajectory (the kernel-regression gate still proves it bit-identical).
-        if speed_stats is not None:
-            speed_stats["v_sum"][edge_key] += v_avg * dt
-            speed_stats["v2_sum"][edge_key] += v_avg * v_avg * dt
-        # opt-in stuck time (calibrated-demand Phase 3): a vehicle-second below
-        # config.STUCK_SPEED_KMH counts as stuck, so "vehicle-hours stuck" is
-        # MEASURED per car per step, not inferred from the segment's mean speed
-        # at analysis time. Same pure-measurement contract as speed_stats above:
-        # nothing feeds back into the dynamics.
-        if stuck_stats is not None and v_avg < stuck_v:
-            stuck_stats["stuck_sum"][edge_key] += dt
-        # and with this vehicle's NOx for the step: the HBEFA3 rate at the step's
-        # average speed and its realized acceleration, integrated over dt. NOx is
-        # turned into NO2 downstream (NO2 = F_NO2 * NOx), so the fraction stays a
-        # tunable knob that does not require rerunning the sim.
-        a_real = (v_new - v_old) / dt
-        # mixed fleet: a vehicle carries its own class coefficients from spawn;
-        # otherwise every vehicle emits as the single configured class.
-        segment_nox[edge_key] += emissions.nox_g_per_s(
-            v_avg, a_real, veh.get("coeffs", nox_coeffs)) * dt
+        if veh.get("stranded"):
+            # no fresh trip could be routed when this car finished its last one
+            # (see the respawn below), so it sits parked at the segment end and
+            # retries each step. While parked it earns no vehicle-seconds and
+            # emits nothing: a car that cannot leave is an artifact, not traffic,
+            # and crediting its idle NOx would make it a permanent emitter.
+            # Counted per step so run_simulation can report how much was lost.
+            veh["stranded_steps"] = veh.get("stranded_steps", 0) + 1
+        else:
+            # credit this segment with one vehicle-second of activity (a raw
+            # exposure measure, kept alongside the emission total)
+            segment_totals[edge_key] += dt
+            # opt-in speed moments (realism readout): time-weighted sums so that
+            # at analysis time v_sum/value is the segment's mean speed over the
+            # run and v2_sum/value - mean^2 its variance. CNOSSOS noise is
+            # nonlinear in speed, so the VARIANCE (not just the mean) moves the
+            # noise surface -- the Phase 2 heterogeneity payoff. Pure measurement:
+            # nothing here feeds back into the dynamics, so passing speed_stats
+            # cannot change any trajectory (the kernel-regression gate still
+            # proves it bit-identical).
+            if speed_stats is not None:
+                speed_stats["v_sum"][edge_key] += v_avg * dt
+                speed_stats["v2_sum"][edge_key] += v_avg * v_avg * dt
+            # opt-in stuck time (calibrated-demand Phase 3): a vehicle-second
+            # below config.STUCK_SPEED_KMH counts as stuck, so "vehicle-hours
+            # stuck" is MEASURED per car per step, not inferred from the
+            # segment's mean speed at analysis time. Same pure-measurement
+            # contract as speed_stats above: nothing feeds back into the dynamics.
+            if stuck_stats is not None and v_avg < stuck_v:
+                stuck_stats["stuck_sum"][edge_key] += dt
+            # and with this vehicle's NOx for the step: the HBEFA3 rate at the
+            # step's average speed and its realized acceleration, integrated over
+            # dt. NOx is turned into NO2 downstream (NO2 = F_NO2 * NOx), so the
+            # fraction stays a tunable knob that does not require rerunning.
+            a_real = (v_new - v_old) / dt
+            # mixed fleet: a vehicle carries its own class coefficients from
+            # spawn; otherwise every vehicle emits as the single configured class.
+            segment_nox[edge_key] += emissions.nox_g_per_s(
+                v_avg, a_real, veh.get("coeffs", nox_coeffs)) * dt
 
         # cross into the next segment(s) if we ran past the end of this one
         while veh["pos"] > veh["route"][veh["idx"]][3]:
@@ -1538,12 +1548,20 @@ def step_vehicles(vehicles, dt, t, segment_totals, segment_nox, segment_throughp
                                      fleet_ctx, driver_ctx)
                 if fresh is not None:
                     veh.update(fresh)
+                    # back in traffic; stranded_steps stays for the run's tally
+                    veh.pop("stranded", None)
                     if explicit:
                         # fresh carries no lane key, so without this the car would
                         # keep a stale index from the route it just finished
                         veh["lane"] = 0
                 else:
+                    # every routing try failed (rare: an origin or destination
+                    # with no path, e.g. inside a closure). Park at the segment
+                    # end and try again next step. Flagged so the accounting pass
+                    # above skips it instead of crediting an idling car that
+                    # cannot leave, and so run_simulation can report it.
                     veh["pos"], veh["v"] = edge[3], 0.0
+                    veh["stranded"] = True
                 break
 
 
@@ -1607,7 +1625,7 @@ def _measure_approach_flows(G, n_vehicles, warmup_steps, verbose=True):
 
 
 def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbose=True,
-                   speed_stats=None, stuck_stats=None):
+                   speed_stats=None, stuck_stats=None, run_info=None):
     """Drive n_vehicles for n_steps. Return (segment_totals, segment_nox):
     per-segment vehicle-seconds of activity, and per-segment NOx grams.
 
@@ -1619,7 +1637,15 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
     stuck_stats (opt-in, calibrated-demand Phase 3): pass an empty dict and it
     is filled in place with per-segment stuck vehicle-seconds under key
     "stuck_sum" -- time spent below config.STUCK_SPEED_KMH (see step_vehicles).
-    Same contract as speed_stats: pure measurement, off by default."""
+    Same contract as speed_stats: pure measurement, off by default.
+
+    run_info (opt-in, provenance): pass an empty dict and it is filled in place
+    with how the result was produced: "resumed" (bool), "resume_count" (how many
+    times this run was resumed from a checkpoint, across all invocations),
+    "resumed_from_step" (the step the latest resume started at, else None),
+    "stranded_vehicle_steps" and "stranded_at_end" (cars parked because no fresh
+    trip could be routed, see step_vehicles). Write it next to the result so a
+    cited number can say whether it came from a resumed trajectory."""
     n_vehicles = config.N_VEHICLES if n_vehicles is None else n_vehicles
     n_steps = config.N_STEPS if n_steps is None else n_steps
 
@@ -1674,7 +1700,8 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                 vehicles.append(veh)
         state = {"step": 0, "segment_totals": segment_totals,
                  "segment_nox": segment_nox,
-                 "segment_throughput": segment_throughput, "vehicles": vehicles}
+                 "segment_throughput": segment_throughput, "vehicles": vehicles,
+                 "resume_count": 0}    # provenance: how often this run was resumed
         if speed_stats is not None:
             # the caller's dict gets the per-edge accumulators; stored in state
             # so a checkpoint resume keeps the partial sums
@@ -1687,6 +1714,27 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
             state["stuck_stats"] = stuck_stats
     else:
         print(f"Resuming from step {state['step']}")
+        # restore every RNG stream the loop consumes, so the resumed trajectory
+        # is step-identical to an uninterrupted one. A checkpoint from before the
+        # streams were saved (Oct 2026) cannot be resumed faithfully: refuse
+        # rather than silently rebuild the streams from the seed, which made a
+        # resumed run unrepeatable past its first respawn.
+        rng_saved = state.get("rng_state")
+        if rng_saved is None:
+            raise SystemExit(
+                "checkpoint for this run predates RNG-state saving, so resuming "
+                "would not reproduce an uninterrupted run; delete the checkpoint "
+                "(or start a fresh RUN_NAME) to proceed")
+        rng.setstate(rng_saved["trip"])
+        for ctx, key in ((fleet_ctx, "fleet"), (driver_ctx, "driver")):
+            if ctx is not None:
+                if rng_saved.get(key) is None:
+                    raise SystemExit(
+                        f"checkpoint for this run has no {key} RNG state: it was "
+                        f"written with that flag off. Do not resume across a flag "
+                        f"change -- start a fresh RUN_NAME")
+                ctx["rng"].setstate(rng_saved[key])
+        state["resume_count"] = state.get("resume_count", 0) + 1
         segment_totals = state["segment_totals"]
         # older checkpoints predate these accumulators; start them fresh if absent
         segment_nox = state.get("segment_nox") or {edge: 0.0 for edge in G.edges(keys=True)}
@@ -1722,8 +1770,9 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                     "checkpoint (or run without stuck_stats) to proceed")
             state["stuck_stats"] = stuck_stats
 
+    start_step = state["step"]    # 0 for a fresh run, the checkpoint's step on resume
     t0 = time.perf_counter()
-    for step in range(state["step"], n_steps):
+    for step in range(start_step, n_steps):
         # the optional context/lane arguments go by KEYWORD at every call site:
         # they are appended over time (fleet_ctx, then driver_ctx, then lanes), so
         # positional passing would silently mis-bind the next time one is inserted.
@@ -1734,15 +1783,39 @@ def run_simulation(G, n_vehicles=None, n_steps=None, use_checkpoint=True, verbos
                       speed_stats=speed_stats, stuck_stats=stuck_stats)
         state["step"] = step + 1
         if use_checkpoint and state["step"] % config.CHECKPOINT_EVERY == 0:
+            # the RNG streams go into the checkpoint beside the vehicles, so a
+            # resume continues the exact draw sequence (see checkpoint.py)
+            state["rng_state"] = {
+                "trip": rng.getstate(),
+                "fleet": fleet_ctx["rng"].getstate() if fleet_ctx is not None else None,
+                "driver": driver_ctx["rng"].getstate() if driver_ctx is not None else None,
+            }
             save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
             print(f"Checkpoint saved at step {state['step']}")
     elapsed = time.perf_counter() - t0
 
+    # stranded cars (see step_vehicles): parked because no fresh trip could be
+    # routed, retrying each step; their parked steps earned nothing. Reported so
+    # a cited run can say how much of its fixed population was really driving.
+    stranded_steps = sum(v.get("stranded_steps", 0) for v in vehicles)
+    stranded_now = sum(1 for v in vehicles if v.get("stranded"))
+    if stranded_steps:
+        print(f"  WARNING: {stranded_steps} stranded vehicle-steps "
+              f"({stranded_now} vehicle(s) still parked at the end)")
+    if run_info is not None:
+        run_info.update(
+            resumed=state["resume_count"] > 0,
+            resume_count=state["resume_count"],
+            resumed_from_step=start_step if state["resume_count"] > 0 else None,
+            stranded_vehicle_steps=stranded_steps,
+            stranded_at_end=stranded_now)
+
     if verbose:
-        done = n_steps - 0
+        done = n_steps - start_step    # steps THIS call ran; a resume runs fewer
         rate = (max(len(vehicles), 1) * done) / elapsed if elapsed > 0 else float("inf")
-        print(f"{len(vehicles):>5} vehicles x {n_steps} steps "
-              f"in {elapsed:6.2f}s  ({rate:>10,.0f} vehicle-steps/s)")
+        print(f"{len(vehicles):>5} vehicles x {done} steps "
+              f"in {elapsed:6.2f}s  ({rate:>10,.0f} vehicle-steps/s)"
+              + (f"  [resumed from step {start_step}]" if start_step else ""))
     return segment_totals, segment_nox, segment_throughput
 
 
@@ -1796,10 +1869,17 @@ def save_results(segment_totals, segment_nox, segment_throughput, speed_stats=No
 def run_closure_experiment(G):
     """Before/after closure experiment (mentor request, Jun 23).
 
-    Runs the SAME demand on the network twice: once open, once with config.CLOSURE
-    applied, and saves both result files (RUN_NAME + '_open' and '_closed'). The
-    same random seed drives both, so the origin/destination draws match and any
-    difference in the surfaces comes from the closure forcing reroutes, not noise.
+    Runs the SAME demand model on the network twice: once open, once with
+    config.CLOSURE applied, and saves both result files (RUN_NAME + '_open' and
+    '_closed'). The same random seed drives both, so the two runs are paired by
+    seed, NOT trip for trip: they begin with the same draws, but the streams part
+    as soon as the closure changes which draws succeed (make_vehicle consumes a
+    draw on every unroutable origin/destination retry, and through-traffic entry
+    weights depend on the edges incident to each boundary node, which a closure
+    removes), and finished vehicles respawn from the drifted stream. So the
+    surface difference is the closure's rerouting plus that drift, which is why
+    the pre-registered primary metrics pair origin/destination explicitly and
+    corridor totals are reported as unpaired (audit Oct 2026, MT-007).
     visualize.py then differences the two to show where NO2 moved.
 
     Checkpointing is off here: each run is short (~10 s) and the two phases would

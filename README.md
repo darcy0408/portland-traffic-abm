@@ -61,7 +61,12 @@ so old runs are never overwritten and you can compare them later.
 ## Reproducibility notes
 
 - The random seed is set once in `config.py` and applied at the top of `generate.py`,
-  so a run with the same config reproduces the same numbers.
+  so a run with the same config reproduces the same numbers. That holds across a
+  checkpoint resume too: each checkpoint carries the state of every random stream
+  the run consumes, so a run resumed after a crash is step-identical to one that
+  never stopped (checked by the resume scenario in `src/scenarios.py`). Checkpoints
+  written before October 2026 did not carry the streams and are refused on resume.
+  Scripts that write a `_summary.json` record whether the run was resumed.
 - Put this folder on GitHub now, not later. Add comments as you write code, not in a
   cleanup pass that never comes. Every journal and conference will expect public code
   and data, and the habit is far cheaper to keep than to retrofit.

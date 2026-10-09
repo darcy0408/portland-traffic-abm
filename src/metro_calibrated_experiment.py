@@ -165,10 +165,10 @@ def run_one(job, graph_file, checkpoint=False, min_edges=MIN_METRO_EDGES):
             f"corridor-sized, not metro. Cache the metro graph first "
             f"(--cache-graph on Orca); refusing to mislabel a corridor run.")
     generate.set_seeds(config.RANDOM_SEED)
-    speed_stats, stuck_stats = {}, {}
+    speed_stats, stuck_stats, run_info = {}, {}, {}
     totals, nox, thru = generate.run_simulation(
         G, verbose=False, use_checkpoint=checkpoint,
-        speed_stats=speed_stats, stuck_stats=stuck_stats)
+        speed_stats=speed_stats, stuck_stats=stuck_stats, run_info=run_info)
     generate.save_results(totals, nox, thru, speed_stats, stuck_stats)
 
     powell = _powell_edges(G)
@@ -190,12 +190,15 @@ def run_one(job, graph_file, checkpoint=False, min_edges=MIN_METRO_EDGES):
     # per-run summary JSON: the headline numbers computed HERE, from the graph
     # this run actually used. The readout aggregates these, so it needs neither
     # the (Orca-side) metro graph nor a Powell matcher of its own.
+    # run_info adds provenance (resumed, resume_count, resumed_from_step,
+    # stranded_vehicle_steps, stranded_at_end), so a number cited from this file
+    # can say whether it came from a checkpoint-resumed trajectory.
     summary = dict(job, n_powell_edges=len(powell), sim_hours=hours,
                    busiest_powell_veh_hr=busiest_powell,
                    powell_veh_h=powell_veh_h, powell_stuck_veh_h=powell_stuck_h,
                    network_stuck_veh_h=net_stuck_h,
                    powell_nox_g=powell_nox, total_nox_g=total_nox,
-                   graph_edges=G.number_of_edges())
+                   graph_edges=G.number_of_edges(), **run_info)
     with open(os.path.join(config.PROCESSED_DIR,
                            f"{job['name']}_summary.json"), "w") as f:
         json.dump(summary, f, indent=2)

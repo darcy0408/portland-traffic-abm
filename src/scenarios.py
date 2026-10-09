@@ -11,16 +11,22 @@ The scenarios are exactly the ones the mentor named:
   2. two cars, one behind the other -> the follower keeps a safe gap, no overlap
   3. one car at a red light         -> stops at the line, goes on green
   4. a saturated road (1,500 cars)  -> mean speed collapses, cars stop (congestion)
+plus one reproducibility gate (audit Oct 2026, MT-004):
+  5. checkpoint resume             -> a run resumed from a checkpoint is
+                                      step-identical to one that never stopped
 
 Run it with:  python src/scenarios.py
 Each scenario prints PASS/FAIL checks you can verify by eye, and the controlled
 ones (1-3) save a per-second trace to data/processed for the demo plots.
 """
+import copy
 import os
 import sys
 import random
+import tempfile
 from collections import defaultdict
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 
@@ -29,8 +35,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 import emissions
+from checkpoint import checkpoint_path, load_checkpoint, save_checkpoint
 from generate import (idm_acceleration, step_vehicles, make_vehicle,
-                      prepare_network, prepare_signals, get_network)
+                      prepare_network, prepare_signals, get_network,
+                      run_simulation, set_seeds)
 
 KPH = 1.0 / 3.6
 PASS, FAIL = "PASS", "FAIL"
@@ -222,6 +230,107 @@ def scenario_saturation(G):
     return all(ok)
 
 
+# --- scenario 5: checkpoint resume is step-identical -------------------------
+
+def _grid_network(n=5, spacing_m=150.0):
+    """A small synthetic street grid in the graph format run_simulation expects
+    (nodes with x/y in degrees, edges with length and an OSM highway class, both
+    directions). Small enough to run in CI, where the cached Powell graph is
+    absent, and busy enough that cars finish trips and respawn within a couple
+    of minutes, which is what exercises the RNG streams a resume must restore."""
+    G = nx.MultiDiGraph()
+    lat0, lon0 = config.STUDY_CENTER
+    deg_per_m = 1.0 / 111_320.0
+    for i in range(n):
+        for j in range(n):
+            G.add_node(i * n + j, x=lon0 + j * spacing_m * deg_per_m,
+                       y=lat0 + i * spacing_m * deg_per_m)
+    for i in range(n):
+        for j in range(n):
+            a = i * n + j
+            for b in ((a + 1) if j + 1 < n else None, (a + n) if i + 1 < n else None):
+                if b is not None:
+                    G.add_edge(a, b, length=spacing_m, highway="residential")
+                    G.add_edge(b, a, length=spacing_m, highway="residential")
+    return G
+
+
+def scenario_resume():
+    print("\n5) CHECKPOINT RESUME (reproducibility gate, audit Oct 2026)")
+    print("   The same seeded run twice: once straight through, once stopped after")
+    print("   a checkpoint and resumed from it. Expect: every per-segment total,")
+    print("   NOx gram and throughput count identical, since the checkpoint carries")
+    print("   the state of every random stream the loop draws from. A checkpoint")
+    print("   written WITHOUT those streams (pre-fix) must be refused, not resumed.")
+    # run_simulation reads these from config at call time; isolate the scenario
+    # from whatever experiment config.py currently describes, then restore.
+    overrides = {
+        "DEMAND_GRAVITY": False, "DEMAND_LODES_OD": False,   # no land-use files in CI
+        "DEMAND_NONWORK_ENABLED": False, "THROUGH_TRAFFIC_FRACTION": 0.0,
+        "WEBSTER_ENABLED": False, "LANES_ENABLED": False, "MOBIL_ENABLED": False,
+        "FLEET_MIXED": True,              # exercises the fleet stream (+2)
+        "DRIVER_HETEROGENEITY": True,     # exercises the driver stream (+3)
+        "CHECKPOINT_EVERY": 50, "RUN_NAME": "scenario_resume",
+    }
+    saved = {k: getattr(config, k) for k in overrides}
+    saved["RAW_DIR"] = config.RAW_DIR
+    tmp = tempfile.mkdtemp(prefix="abm_resume_")
+    n_veh, n_steps, stop_at = 40, 120, 60      # checkpoint lands at step 50
+    ok = []
+    try:
+        for k, v in overrides.items():
+            setattr(config, k, v)
+        config.RAW_DIR = tmp
+        G = prepare_network(_grid_network())
+
+        def run(n, use_checkpoint, info=None):
+            set_seeds(config.RANDOM_SEED)
+            return run_simulation(copy.deepcopy(G), n_vehicles=n_veh, n_steps=n,
+                                  use_checkpoint=use_checkpoint, verbose=False,
+                                  run_info=info)
+
+        straight = run(n_steps, use_checkpoint=False)
+        run(stop_at, use_checkpoint=True)          # writes the step-50 checkpoint
+        info = {}
+        resumed = run(n_steps, use_checkpoint=True, info=info)
+
+        ok.append(_check("resume started from the checkpoint",
+                         info.get("resumed") and info.get("resumed_from_step") == 50,
+                         f"run_info {info}"))
+        for name, a, b in zip(("vehicle-seconds", "NOx grams", "throughput"),
+                              straight, resumed):
+            same = a == b
+            worst = max((abs(a[e] - b[e]) for e in a), default=0.0)
+            ok.append(_check(f"{name} identical on every segment", same,
+                             f"{len(a)} segments, largest difference {worst:g}"))
+        n_active = sum(1 for v in straight[0].values() if v > 0)
+        ok.append(_check("the grid actually carried traffic (test is not vacuous)",
+                         n_active > 10 and sum(straight[2].values()) > n_veh,
+                         f"{n_active} active segments, "
+                         f"{sum(straight[2].values()):.0f} traversals by {n_veh} cars"))
+
+        # a pre-fix checkpoint has no rng_state: resuming it must be refused
+        state = load_checkpoint(config.RAW_DIR, config.RUN_NAME)
+        del state["rng_state"]
+        save_checkpoint(state, config.RAW_DIR, config.RUN_NAME)
+        try:
+            run(n_steps, use_checkpoint=True)
+            refused = False
+        except SystemExit:
+            refused = True
+        ok.append(_check("a checkpoint without RNG state is refused", refused,
+                         "SystemExit raised" if refused else "resumed silently"))
+    finally:
+        for k, v in saved.items():
+            setattr(config, k, v)
+        try:
+            os.remove(checkpoint_path(tmp, overrides["RUN_NAME"]))
+            os.rmdir(tmp)
+        except OSError:
+            pass
+    return all(ok)
+
+
 if __name__ == "__main__":
     print("ABM validation test-bench  (real kernel, hand-checkable scenarios)")
     print("=" * 66)
@@ -229,6 +338,7 @@ if __name__ == "__main__":
         "one car": scenario_one_car(),
         "two cars": scenario_two_cars(),
         "red light": scenario_red_light(),
+        "resume": scenario_resume(),
     }
     # The saturation scenario needs the cached Powell network, which is gitignored
     # and so absent in CI. If it is missing, skip saturation rather than triggering

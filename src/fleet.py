@@ -2,18 +2,20 @@
 
 WHY THIS EXISTS
 ---------------
-Right now every vehicle in the sim emits as a single class (config.EMISSION_CLASS,
-currently PC_D_EU4, diesel Euro 4). That is the worst case for NOx: diesels are the
-NOx problem, so an all-diesel fleet OVERSTATES the NO2 surface. A real Portland fleet
-is mostly gasoline passenger cars with a diesel minority and some heavier vehicles.
-Replacing the single class with a weighted mix sharpens the NO2 surface (the project's
-headline output). It does NOT change traffic volumes, so it does not move the 0.33
-traffic-count match: that is a separate, signal-timing question (DATASETS.md section 7).
+With config.FLEET_MIXED off, every vehicle in the sim emits as a single class
+(config.EMISSION_CLASS, PC_D_EU4, diesel Euro 4). That is the worst case for NOx:
+diesels are the NOx problem, so an all-diesel fleet OVERSTATES the NO2 surface. A real
+Portland fleet is mostly gasoline passenger cars with a diesel minority and some heavier
+vehicles. Replacing the single class with a weighted mix sharpens the NO2 surface (the
+project's headline output). It does NOT change traffic volumes, so it does not move the
+traffic-count match: that is a separate demand-structure question.
 
-This module is STANDALONE on purpose (scouted Jun 26, scaffolded before it is wired in):
-it reuses emissions.nox_g_per_s and emissions.HBEFA3_NOX_COEFFS unchanged, so it adds no
-risk to the existing single-class path and changes no committed numbers. It is ready to
-wire into generate.py after the Monday demo, see "INTEGRATION" at the bottom.
+This module reuses emissions.nox_g_per_s and emissions.HBEFA3_NOX_COEFFS unchanged, so
+every coefficient it composes was already verified against SUMO. It was scaffolded
+standalone on Jun 26 and has been WIRED IN since (config.FLEET_MIXED, on by default;
+generate.build_fleet_context draws each vehicle's class at spawn from its own seeded
+stream, the "stochastic path" of the INTEGRATION note at the bottom). The _demo below
+is the offline preview that predates the wiring and still runs standalone.
 
 WHAT A FLEET IS
 ---------------
@@ -245,14 +247,13 @@ if __name__ == "__main__":
     _demo()
 
 
-# INTEGRATION (after the Monday demo; do not wire in before, it moves cited numbers)
-# ----------------------------------------------------------------------------------
-# Expected-value path (simplest, recommended for the surface):
-#   in generate.py, once before the step loop:   mix = fleet.resolved(fleet.PORTLAND_FLEET)
-#   replace   nox = emissions.nox_g_per_s(v, a, coeffs)
-#   with      nox = fleet.fleet_nox_g_per_s(v, a, mix)
-# Stochastic path (heterogeneous agents):
-#   at vehicle spawn:   veh.emission_class = fleet.sample_class(fleet.PORTLAND_FLEET, rng)
-#   per step:           nox = emissions.nox_g_per_s(v, a, fleet.HBEFA3_NOX[veh.emission_class])
-# Either way: add a config.FLEET_MIX knob (default = single-class for back-compat), pin the
-# seed, and rerun generate.py once so the new NO2 numbers are authoritative before citing.
+# INTEGRATION (historical note, kept for the record; the stochastic path is what shipped)
+# ----------------------------------------------------------------------------------------
+# Two ways to wire a mix into generate.py were considered in June 2026:
+# Expected-value path (one blended coefficient row for every car):
+#   mix = fleet.resolved(fleet.PORTLAND_FLEET); nox = fleet.fleet_nox_g_per_s(v, a, mix)
+# Stochastic path (heterogeneous agents), the one in use since config.FLEET_MIXED landed:
+#   at vehicle spawn:   veh["eclass"] = fleet.sample_class(fleet.PORTLAND_FLEET, fleet_rng)
+#   per step:           nox = emissions.nox_g_per_s(v, a, fleet.HBEFA3_NOX[veh["eclass"]])
+# See generate.build_fleet_context (the dedicated RANDOM_SEED + 2 stream) and make_vehicle
+# (the class is drawn after the route succeeds, so retries do not consume fleet draws).

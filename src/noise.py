@@ -32,11 +32,13 @@ propulsion-noise term:
 
 with v_ref = 70 km/h. Rolling noise dominates at higher speed (the log term grows
 with v), propulsion noise dominates at low speed and under acceleration. We
-implement ONLY category 1 (light motor vehicles, i.e. passenger cars). That
-matches the rest of this project, which already uses a single passenger-car class
-for emissions (PC_D_EU4). Heavy vehicles (CNOSSOS categories 2 and 3, with much
-higher sound power) are deliberately left as future work and are noted as a known
-limitation: a real arterial's noise is raised by trucks and buses we do not model.
+implement ONLY category 1 (light motor vehicles, i.e. passenger cars), even
+though the emissions path has since moved to a mixed fleet (config.FLEET_MIXED,
+src/fleet.py): the per-segment parquet this module reads carries no class split,
+so every vehicle is treated as a car here. Heavy vehicles (CNOSSOS categories 2
+and 3, with much higher sound power) are deliberately left as future work and are
+noted as a known limitation: a real arterial's noise is raised by trucks and
+buses this surface does not model.
 
 The per-vehicle band powers are combined with the traffic flow into a line-source
 sound power per metre of road. For a flow of Q vehicles per hour at mean speed v
@@ -98,6 +100,7 @@ m/s, which both raises the per-metre source power (cars linger) and lowers the
 rolling-noise term, the physical trade-off CNOSSOS captures. Segments with zero
 throughput or zero activity carry no flow and emit no noise (silent).
 """
+import json
 import os
 import sys
 
@@ -197,6 +200,30 @@ def load_run_segments(run_name=None):
     return pd.read_parquet(path)
 
 
+def run_sim_hours(run_name):
+    """Simulated hours behind one saved run, so its throughput (a count of full
+    traversals over the WHOLE run) can be turned into the hourly flow Q that
+    CNOSSOS wants. Read from the run's `_summary.json` when the harness wrote one
+    with `sim_hours` (metro_calibrated_experiment does, and its day jobs are the
+    only non-one-hour runs). Otherwise fall back to config.N_STEPS * DT, which is
+    right only if config still says what the run used; refuse that fallback for
+    a non-one-hour config rather than guess, since a 24 h run read as one hour
+    would come out 24x too loud in the flow term (audit Oct 2026, MT-006)."""
+    path = os.path.join(config.PROCESSED_DIR, f"{run_name}_summary.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            rec = json.load(f)
+        if "sim_hours" in rec:
+            return float(rec["sim_hours"])
+    hours = config.N_STEPS * config.DT / 3600.0
+    if abs(hours - 1.0) > 1e-9:
+        raise SystemExit(
+            f"{run_name}: no sim_hours in a summary file and config.N_STEPS*DT is "
+            f"{hours:g} h, not 1 h, so throughput cannot be read as veh/hour; write "
+            f"the run's simulated hours into {path} (key sim_hours) and rerun")
+    return hours
+
+
 def load_network():
     """Load the cached OSMnx graph (segment length and street name live here)."""
     return ox.load_graphml(os.path.join(config.NETWORK_DIR, "graph.graphml"))
@@ -223,7 +250,7 @@ def build_noise_surface(run_name=None, dist_m=RECEIVER_DIST_M):
     level propagated to a near receiver. Returns a DataFrame with columns:
         u, v, key            segment identity (matches the parquet / graph edges)
         length_m             segment length from the graph
-        q_vph                flow in vehicles/hour (= throughput)
+        q_vph                flow in vehicles/hour (throughput / simulated hours)
         v_mean_mps           realized mean speed (m/s), NaN where there is no flow
         noise_db             dB(A) at dist_m, NaN where there is no flow
     Segments with no throughput or no activity get noise_db = NaN (silent street).
@@ -233,7 +260,9 @@ def build_noise_surface(run_name=None, dist_m=RECEIVER_DIST_M):
     length, _name = _edge_length_and_name(G)
 
     df["length_m"] = [length.get((r.u, r.v, r.key), np.nan) for r in df.itertuples()]
-    df["q_vph"] = df["throughput"].astype(float)        # throughput = veh/hour directly
+    # throughput counts traversals over the whole run; per hour for CNOSSOS's Q
+    # (identical to the old "throughput = veh/hour" for every one-hour run)
+    df["q_vph"] = df["throughput"].astype(float) / run_sim_hours(run_name)
 
     # congestion-aware realized mean speed; guard the divide-by-zero (no flow ->
     # no speed -> no noise). value is vehicle-seconds, throughput is vehicle count.
